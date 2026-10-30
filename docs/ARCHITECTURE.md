@@ -15,7 +15,7 @@ workspace splits the concerns instead:
 | `src-tauri` (`opencolorhub`) | core + `tauri` + `ureq` | IPC commands, telemetry thread, self-updater, window |
 | `src/` (TypeScript) | `@tauri-apps/api` | UI, browser demo backend |
 
-`colorctl-core` compiles and its tests pass on Windows, macOS and Linux. That
+`colorctl-core` compiles and its tests pass on Windows and Linux. That
 is what "multi-platform ready" means here: the platform boundary is one trait
 pair (`FanBackend`, `LedBackend`), not `#[cfg]` scattered through the UI.
 
@@ -190,7 +190,6 @@ construction:
 * Linux — eight files under `/sys/class/dmi/id` (no privileges needed);
 * Windows — the `HKLM\HARDWARE\DESCRIPTION\System\BIOS` registry mirror,
   parsed from `reg query` output so no extra crate is required;
-* macOS — `ioreg -rd1 -c IOPlatformExpertDevice` (best effort).
 
 `board::classify()` is pure and carries all the policy, which is why the tests
 can cover it exhaustively without hardware:

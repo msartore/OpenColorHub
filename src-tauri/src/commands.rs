@@ -272,14 +272,7 @@ pub fn open_external(url: String) -> Result<(), String> {
         c
     };
 
-    #[cfg(target_os = "macos")]
-    let mut command = {
-        let mut c = Command::new("open");
-        c.arg(trimmed);
-        c
-    };
-
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(unix)]
     let mut command = {
         let mut c = Command::new("xdg-open");
         c.arg(trimmed);

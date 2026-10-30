@@ -13,7 +13,7 @@
 //!   frontend drive.
 //!
 //! Nothing here opens a window, and nothing here assumes Linux at compile time:
-//! `cargo test -p colorctl-core` passes on Windows, macOS and Linux.
+//! `cargo test -p colorctl-core` passes on Windows and Linux.
 
 pub mod about;
 pub mod autostart;

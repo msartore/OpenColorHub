@@ -557,13 +557,6 @@ pub fn default_data_dir() -> PathBuf {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join("Library/Application Support/opencolorhub");
-        }
-    }
-
     std::env::temp_dir().join("opencolorhub")
 }
 

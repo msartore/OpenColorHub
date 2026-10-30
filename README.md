@@ -45,8 +45,8 @@ Every screen shows which board it thinks it is talking to, and how sure it is:
 | **unknown** | identity unreadable, or a Colorful chipset outside the catalogue (X570, B550, …) | allowed — the chip-ID check decides |
 | **unsupported** | another vendor (ASUS, MSI, ASRock, …) | **blocked** in `auto` mode |
 
-Sources: `/sys/class/dmi/id/*` on Linux, `HKLM\HARDWARE\DESCRIPTION\System\BIOS`
-on Windows, `ioreg` on macOS. The verdict is in every telemetry snapshot
+Sources: `/sys/class/dmi/id/*` on Linux and `HKLM\HARDWARE\DESCRIPTION\System\BIOS`
+on Windows. Other platforms report `none`. The verdict is in every telemetry snapshot
 (`snapshot.board`), on the Dashboard header, in Settings, on the About screen,
 and in `colorctl board`:
 
@@ -130,7 +130,9 @@ Nothing updates without the dialog being accepted.
 | --- | --- | --- | --- |
 | Linux | ✅ `/dev/port` (root or `CAP_SYS_RAWIO`) | ✅ `/dev/hidraw` for `2F4C:1000` | full functionality |
 | Windows | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO when PawnIO is absent | ✅ SetupAPI + `hid.dll`, no driver | `IN`/`OUT` are ring-0; PawnIO brokers them through a signed, allow-listed module |
-| macOS | ⛔ | ⛔ | runs the simulator |
+
+macOS is not supported and not shipped. Board detection reads SMBIOS or the
+Windows registry only; there is no hardware path for it.
 
 `IN`/`OUT` are ring-0 instructions — Windows ships no `/dev/port` equivalent, so
 user-mode code cannot touch a Super I/O directly. The alternatives are a kernel
@@ -228,7 +230,6 @@ the simulator.
   prompt at every sign-in anyway.
 * **Linux** — an XDG autostart entry at
   `${XDG_CONFIG_HOME:-~/.config}/autostart/opencolorhub.desktop`.
-* **macOS** — not implemented; the panel says so rather than pretending.
 
 Turning the switch off deletes the entry. It is created only when you ask for
 it, named plainly in Task Scheduler, and removed by the same switch — unlike the

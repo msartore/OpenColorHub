@@ -12,7 +12,7 @@
 //! toggle off deletes it.
 //!
 //! Linux: an XDG autostart entry under `$XDG_CONFIG_HOME/autostart`.
-//! macOS: not implemented; the state reports unsupported instead of pretending.
+//! Anything else: not implemented; the state reports unsupported instead of pretending.
 
 use std::path::PathBuf;
 

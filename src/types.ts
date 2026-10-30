@@ -14,7 +14,7 @@ export type ScreenId = "dashboard" | "fans" | "leds" | "settings" | "about";
 
 /** Privilege state, as reported by `get_elevation`. */
 export interface AutostartState {
-  /** False on platforms with no implementation (macOS). */
+  /** False on platforms with no implementation. */
   supported: boolean;
   /** Whether the OS currently has a logon entry for this user. */
   enabled: boolean;
@@ -96,7 +96,7 @@ export interface BoardInfo {
   series: string | null;
   matched: string | null;
   catalog_size: number;
-  /** "dmi", "registry", "ioreg", "demo" or "none". */
+  /** "dmi", "registry", "demo" or "none". */
   source: string;
   notes: string[];
 }

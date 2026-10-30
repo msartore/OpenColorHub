@@ -2,7 +2,7 @@
 //!
 //! Thin layer over [`colorctl_core::Service`]: parse args, call the service,
 //! print the result. All hardware knowledge lives in the core crate, so this
-//! binary builds and runs on Windows/macOS too (against the simulator).
+//! binary builds and runs on Windows too (against the simulator).
 
 mod cli;
 

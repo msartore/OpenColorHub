@@ -10,11 +10,11 @@
 //!
 //! * Linux — `/sys/class/dmi/id/*` (world-readable, no root needed).
 //! * Windows — `HKLM\HARDWARE\DESCRIPTION\System\BIOS` via `reg query`.
-//! * macOS — `ioreg` on `IOPlatformExpertDevice` (best effort: reports model).
 //!
 //! Every source funnels into [`classify`], which is pure and unit-tested.
 
 use std::path::Path;
+#[cfg(target_os = "windows")]
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
@@ -320,7 +320,7 @@ pub struct BoardInfo {
     /// Catalogue entry that matched exactly.
     pub matched: Option<String>,
     pub catalog_size: usize,
-    /// `dmi`, `registry`, `ioreg`, `demo` or `none`.
+    /// `dmi`, `registry`, `demo` or `none`.
     pub source: String,
     pub notes: Vec<String>,
 }
@@ -521,12 +521,7 @@ pub fn detect() -> BoardInfo {
         detect_from_registry()
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        detect_from_ioreg()
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         BoardInfo::unknown("none", "no board detection for this platform")
     }
@@ -626,41 +621,6 @@ pub fn parse_reg_query(text: &str) -> Vec<(String, String)> {
         pairs.push((name.to_string(), value.to_string()));
     }
     pairs
-}
-
-/// macOS: best effort through `ioreg`; these boards are not sold for macOS so
-/// this mostly exists to report *something* honest.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub fn detect_from_ioreg() -> BoardInfo {
-    let output = Command::new("ioreg")
-        .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-        .output();
-    let Ok(output) = output else {
-        return BoardInfo::unknown("ioreg", "could not run `ioreg`");
-    };
-    let text = String::from_utf8_lossy(&output.stdout);
-    let extract = |key: &str| {
-        text.lines()
-            .find(|line| line.contains(key))
-            .and_then(|line| line.split('"').nth(3))
-            .map(str::to_string)
-            .unwrap_or_default()
-    };
-
-    let identity = BoardIdentity {
-        vendor: "Apple".to_string(),
-        name: extract("board-id"),
-        version: String::new(),
-        bios_vendor: "Apple".to_string(),
-        bios_version: extract("IOPlatformSystemSerialNumber"),
-        system_vendor: "Apple".to_string(),
-        system_product: extract("\"model\""),
-    };
-
-    if identity.name.is_empty() {
-        return BoardInfo::unknown("ioreg", "ioreg did not expose a board id");
-    }
-    classify(Some(identity), "ioreg")
 }
 
 /// Demo identities used by the browser mock and the CLI `--backend simulated`
