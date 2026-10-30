@@ -1,7 +1,7 @@
 {
   "name": "opencolorhub",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Fan and ARGB control for Colorful motherboards — Tauri desktop UI",
   "license": "GPL-3.0-only",

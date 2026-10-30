@@ -35,12 +35,25 @@ binaries and add the check to `update_ipc.rs`.
 
 ## Publishing a release
 
-Push a tag matching the workspace version — the guard in `.github/workflows/release.yml`
-rejects a mismatch:
+**The tag is the version.** Nothing needs bumping by hand: the build job runs
+`scripts/set-version.mjs` with the tag and rewrites `Cargo.toml`,
+`tauri.conf.json`, `package.json` and the lock before compiling, so the installer
+metadata, the runtime version and the updater's idea of "current" all agree.
 
 ```bash
-git tag -a v0.2.1 -m "OpenColorHub 0.2.1"
-git push origin v0.2.1
+git tag -a v0.3.0 -m "OpenColorHub 0.3.0"
+git push origin v0.3.0
+```
+
+Keeping four manifests in sync manually is the step that gets forgotten, and the
+failure is nasty rather than loud: a build tagged `v0.3.0` that still reports
+`0.2.0` makes the self-updater offer the same release on every launch, forever.
+
+Locally the same script is available:
+
+```bash
+node scripts/set-version.mjs v0.3.0
+pwsh scripts/build-release.ps1 -Tag v0.3.0 -Portable
 ```
 
 Both platforms build, `dist/` is staged flat, and the release carries the NSIS

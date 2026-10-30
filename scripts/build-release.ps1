@@ -19,7 +19,10 @@
 [CmdletBinding()]
 param(
     [string]$Bundles = "all",
-    [switch]$Portable
+    [switch]$Portable,
+    # Release version for a local build, e.g. `-Tag v0.3.0`. The release
+    # workflow derives this from the git tag; locally it is opt-in.
+    [string]$Tag = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +30,11 @@ $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 Push-Location $repo
 try {
+    if ($Tag) {
+        node scripts/set-version.mjs $Tag
+        if ($LASTEXITCODE -ne 0) { throw "set-version rejected '$Tag'" }
+    }
+
     $remaps = @(
         "--remap-path-prefix=$env:USERPROFILE=~"
         "--remap-path-prefix=$repo=."
