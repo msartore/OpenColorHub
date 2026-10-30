@@ -65,17 +65,32 @@ function edit(path, re, label) {
 edit("src-tauri/tauri.conf.json", /"version":\s*"([^"]+)"/, "version");
 edit("package.json", /"version":\s*"([^"]+)"/, "version");
 
-// package-lock carries the version twice: once at the root, once for the root
-// package entry. Both are rewritten, nothing else in the lock has this shape.
+// package-lock.json is parsed rather than pattern-matched. Rewriting it with a
+// global "version" regex once set 79 dependency entries to the project version,
+// and the only symptom was `npm ci` refusing the lock outright. Exactly two
+// fields describe this package: the top-level version and packages[""].
 {
   const path = "package-lock.json";
-  const text = readFileSync(path, "utf8");
-  const updated = text.replace(/"version":\s*"(\d+\.\d+\.\d+)"/g, (match, current) =>
-    current === version ? match : match.replace(current, version),
-  );
-  if (updated !== text) {
-    writeFileSync(path, updated);
-    changes.push(`${path}`);
+  const lock = JSON.parse(readFileSync(path, "utf8"));
+  const root = lock.packages?.[""];
+  if (!root) {
+    console.error('set-version: package-lock.json has no packages[""] entry');
+    process.exit(1);
+  }
+
+  let touched = false;
+  if (lock.version !== version) {
+    lock.version = version;
+    touched = true;
+  }
+  if (root.version !== version) {
+    root.version = version;
+    touched = true;
+  }
+
+  if (touched) {
+    writeFileSync(path, `${JSON.stringify(lock, null, 2)}\n`);
+    changes.push(`${path} (root version only)`);
   }
 }
 
