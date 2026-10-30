@@ -12,6 +12,16 @@ rust-version.workspace = true
 name = "opencolorhub_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# `main.rs` is a two-line launcher with no tests of its own, but cargo still
+# builds a test harness from it — and that harness cannot be executed, because
+# the binary carries the requireAdministrator manifest (spawn fails with
+# ERROR_ELEVATION_REQUIRED, reported as "never executed"). Every unit test lives
+# in the lib, so the harness is pure overhead.
+[[bin]]
+name = "opencolorhub"
+path = "src/main.rs"
+test = false
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
