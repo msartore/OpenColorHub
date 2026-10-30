@@ -21,4 +21,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 ureq = { workspace = true }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }

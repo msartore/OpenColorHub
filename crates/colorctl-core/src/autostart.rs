@@ -108,7 +108,9 @@ mod imp {
     pub fn set_enabled(enabled: bool) -> Result<()> {
         if enabled {
             let exe = exe()?;
-            let quoted = format!("\"{}\"", exe.display());
+            // `--minimized` makes the app start in the tray instead of
+            // throwing a window at whoever just logged in.
+            let quoted = format!("\"{}\" --minimized", exe.display());
             let out = schtasks(&[
                 "/Create", "/F", "/SC", "ONLOGON", "/TN", ID, "/TR", &quoted, "/RL", "HIGHEST",
             ])
@@ -175,7 +177,7 @@ mod imp {
                  Type=Application\n\
                  Name={ID}\n\
                  Comment=Fan and ARGB control for Colorful motherboards\n\
-                 Exec=\"{}\"\n\
+                 Exec=\"{}\" --minimized\n\
                  Terminal=false\n\
                  X-GNOME-Autostart-enabled=true\n",
                 exe.display()

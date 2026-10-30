@@ -14,6 +14,7 @@
       {
         "label": "main",
         "title": "OpenColorHub",
+        "visible": false,
         "width": 1240,
         "height": 830,
         "minWidth": 900,

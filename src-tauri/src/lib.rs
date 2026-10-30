@@ -2,6 +2,7 @@
 
 mod commands;
 mod state;
+mod tray;
 mod update;
 mod update_ipc;
 
@@ -79,6 +80,9 @@ pub fn run() {
                 settings_warning,
                 data_dir,
             }));
+
+            tray::install(&handle)?;
+            tray::show_unless_hidden(&handle);
 
             spawn_ticker(handle);
             Ok(())

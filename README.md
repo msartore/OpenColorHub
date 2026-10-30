@@ -240,8 +240,16 @@ Enabling it also turns on **Re-apply lighting at launch**, so the saved `CCTL`
 state is pushed to the controller at sign-in. Without that the app would start
 and leave the lighting dark, which is not what "start with the OS" should mean.
 
-The window still opens at sign-in; there is no tray icon yet, so hiding it would
-leave no way to bring it back.
+### Tray
+
+OpenColorHub installs a tray icon at startup. Closing the window **hides** it
+rather than quitting — the app keeps polling and keeps the lighting as you set
+it — and the window comes back from the tray icon (left click) or its
+**Open OpenColorHub** menu entry. **Quit** is the only thing that really exits.
+
+A launch from the autostart entry passes `--minimized`, so signing in drops the
+icon into the tray and shows no window at all. Opening the app yourself still
+brings the window up normally.
 
 ## Run it
 

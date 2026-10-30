@@ -148,6 +148,21 @@ installer re-run:
 `restart()` rather than a manual spawn matters: the old process still holds the
 WebView2 profile lock, and racing it produces a window that never appears.
 
+## Tray and window lifecycle
+
+`src-tauri/src/tray.rs` owns the shell behaviour: a tray icon with
+**Open** / **Quit**, left click toggling the window, and `CloseRequested`
+prevented so the title-bar X hides the window instead of ending the process.
+
+The window is declared `visible: false` in `tauri.conf.json` and only shown when
+the process was *not* started with `--minimized` — the flag the autostart entry
+passes. Declaring it hidden avoids the flash of an empty frame at sign-in that
+`show()`-then-`hide()` would produce.
+
+This uses Tauri's built-in tray rather than the `tray-icon` + `winit` recipe
+found in guides: Tauri already runs an event loop, and a second one competes with
+the webview for the message pump.
+
 ## Threading and IPC
 
 One `Mutex<Inner>` guards the service, because port I/O and the HID frame are
