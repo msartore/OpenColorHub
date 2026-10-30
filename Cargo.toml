@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = ["crates/colorctl-core", "crates/colorctl-cli", "src-tauri"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+license = "GPL-3.0-only"
+authors = ["Massimiliano Sartore <me@msartore.dev>", "Curstantine (colorctl upstream)"]
+repository = "https://github.com/msartore/OpenColorHub"
+rust-version = "1.88"
+
+[workspace.dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+ureq = { version = "2", features = ["tls", "json"] }
+thiserror = "2"
+colorctl-core = { path = "crates/colorctl-core" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

@@ -1,0 +1,44 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# Tauri
+src-tauri/gen/
+src-tauri/target/
+
+# Tooling / OS
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local demo state
+*.state
+sim-fan.json
+
+# Build outputs — installers, portable packages and linker artefacts never go
+# into the repository; `npx tauri build` writes them under /target.
+*.exe
+*.dll
+*.msi
+*.msix
+*.appx
+*.AppImage
+*.deb
+*.rpm
+*.dmg
+*.pdb
+*.res
+build/
+bundle/
+out/
+pkg/
