@@ -104,6 +104,8 @@ pub fn run() {
             commands::apply_led,
             commands::reload_state,
             commands::open_external,
+            commands::get_autostart,
+            commands::set_autostart,
             update_ipc::update_check,
             update_ipc::update_install,
         ])

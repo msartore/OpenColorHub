@@ -307,6 +307,22 @@ export function createDemoBackend(): DemoBackend {
       case "request_elevation":
         return "declined" as T;
 
+      case "get_autostart":
+        return {
+          supported: false,
+          enabled: false,
+          mechanism: "none",
+          detail: "Browser demo — starting with the OS only exists in the desktop build.",
+        } as T;
+
+      case "set_autostart":
+        return {
+          supported: false,
+          enabled: false,
+          mechanism: "none",
+          detail: "Browser demo — starting with the OS only exists in the desktop build.",
+        } as T;
+
       case "save_settings": {
         const patch = (args.patch ?? {}) as SettingsPatch;
         state.settings = {

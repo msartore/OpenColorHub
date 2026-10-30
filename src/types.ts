@@ -13,6 +13,17 @@ export type BoardConfidence = "verified" | "compatible" | "unknown" | "unsupport
 export type ScreenId = "dashboard" | "fans" | "leds" | "settings" | "about";
 
 /** Privilege state, as reported by `get_elevation`. */
+export interface AutostartState {
+  /** False on platforms with no implementation (macOS). */
+  supported: boolean;
+  /** Whether the OS currently has a logon entry for this user. */
+  enabled: boolean;
+  /** `logon-task`, `xdg-autostart` or `none`. */
+  mechanism: string;
+  /** Where the entry lives, shown verbatim. */
+  detail: string;
+}
+
 export interface ElevationState {
   elevated: boolean;
   can_request: boolean;

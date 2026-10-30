@@ -306,3 +306,15 @@ pub fn reload_state(state: State<'_, AppState>) -> Result<Snapshot, String> {
     inner.service.reload_led_state();
     Ok(inner.service.snapshot())
 }
+
+/// Whether the OS will launch this app at sign-in.
+#[tauri::command]
+pub fn get_autostart() -> colorctl_core::autostart::Autostart {
+    colorctl_core::autostart::status()
+}
+
+/// Registers or removes the logon entry. Requires elevation on Windows.
+#[tauri::command]
+pub fn set_autostart(enabled: bool) -> Result<colorctl_core::autostart::Autostart, String> {
+    colorctl_core::autostart::set_enabled(enabled).map_err(|e| e.to_string())
+}

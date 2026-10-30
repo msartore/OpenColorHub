@@ -218,6 +218,30 @@ If that is unwanted, delete `src-tauri/app.manifest`, revert `build.rs` to
 button — at the cost of Windows fan control, which then degrades to HWiNFO or
 the simulator.
 
+### Start with the OS
+
+**Settings → Startup** registers a sign-in entry for the current user:
+
+* **Windows** — a Task Scheduler logon task named `OpenColorHub` with
+  `RunLevel Highest`. A `HKCU\...\Run` value would be simpler, but those start
+  the process unelevated, which for this app means no fan control and a UAC
+  prompt at every sign-in anyway.
+* **Linux** — an XDG autostart entry at
+  `${XDG_CONFIG_HOME:-~/.config}/autostart/opencolorhub.desktop`.
+* **macOS** — not implemented; the panel says so rather than pretending.
+
+Turning the switch off deletes the entry. It is created only when you ask for
+it, named plainly in Task Scheduler, and removed by the same switch — unlike the
+vendor pattern this project rejects, where installation itself plants a hidden
+highest-privilege task.
+
+Enabling it also turns on **Re-apply lighting at launch**, so the saved `CCTL`
+state is pushed to the controller at sign-in. Without that the app would start
+and leave the lighting dark, which is not what "start with the OS" should mean.
+
+The window still opens at sign-in; there is no tray icon yet, so hiding it would
+leave no way to bring it back.
+
 ## Run it
 
 ```bash

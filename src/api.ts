@@ -7,6 +7,7 @@ import { inTauri } from "./dom";
 import { createDemoBackend } from "./mock";
 import type {
   AboutInfo,
+  AutostartState,
   ActionResult,
   ChannelId,
   CurvePoint,
@@ -40,6 +41,9 @@ export const api = {
   elevation: () => call<ElevationState>("get_elevation"),
   /** Resolves to "launched" or "declined"; on "launched" this process exits. */
   requestElevation: () => call<string>("request_elevation"),
+
+  autostart: () => call<AutostartState>("get_autostart"),
+  setAutostart: (enabled: boolean) => call<AutostartState>("set_autostart", { enabled }),
 
   setFanPercent: (header: FanHeaderId, percent: number) =>
     call<Result>("set_fan_percent", { header, percent }),

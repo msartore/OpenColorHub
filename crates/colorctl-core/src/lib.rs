@@ -16,6 +16,7 @@
 //! `cargo test -p colorctl-core` passes on Windows, macOS and Linux.
 
 pub mod about;
+pub mod autostart;
 pub mod backend;
 pub mod board;
 pub mod curve;

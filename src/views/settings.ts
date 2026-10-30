@@ -2,7 +2,7 @@
 
 import { api, isDemo } from "../api";
 import { el } from "../dom";
-import type { BackendMode, ElevationState, Settings, SettingsPatch, Snapshot, TempUnit } from "../types";
+import type { AutostartState, BackendMode, ElevationState, Settings, SettingsPatch, Snapshot, TempUnit } from "../types";
 import type { View, ViewContext } from "../view";
 import { checkForUpdate, showUpdateDialog } from "../update";
 import {
@@ -270,6 +270,51 @@ export function createSettings(ctx: ViewContext): View {
     },
   });
 
+  // ----------------------------------------------------------- startup
+  const platformName = navigator.userAgent.includes("Windows") ? "Windows" : "Linux";
+
+  const autostartNote = inlineNote("Checking the logon entry…");
+  const autostartToggle = toggle({
+    label: `Start with ${platformName}`,
+    description: "Launch when you sign in, then push the lighting you saved.",
+    checked: false,
+    onChange: (checked) => {
+      void (async () => {
+        try {
+          const next = await api.setAutostart(checked);
+          renderAutostart(next);
+          if (checked) {
+            // Starting at sign-in is pointless if nothing is applied, so make
+            // sure the saved state is pushed on launch.
+            await ctx.saveSettings({ reapply_led_on_launch: true });
+            reapplyToggle.setChecked(true);
+            ctx.toast("Saved lighting will be applied at sign-in", "ok");
+          } else {
+            ctx.toast("No longer starting with the OS", "muted");
+          }
+        } catch (err) {
+          autostartToggle.setChecked(!checked);
+          ctx.toast(String(err), "danger");
+        }
+      })();
+    },
+  });
+
+  const renderAutostart = (state: AutostartState) => {
+    autostartToggle.setChecked(state.enabled);
+    autostartToggle.el.style.display = state.supported ? "" : "none";
+    autostartNote.textContent = state.detail;
+    autostartNote.className = state.supported ? "note note--muted" : "note note--warn";
+  };
+
+  void api
+    .autostart()
+    .then(renderAutostart)
+    .catch((err) => {
+      autostartNote.textContent = String(err);
+      autostartNote.className = "note note--warn";
+    });
+
   const root = el(
     "div",
     { class: "screen" },
@@ -320,6 +365,11 @@ export function createSettings(ctx: ViewContext): View {
         title: "Telemetry",
         subtitle: "How often the controller is polled",
         body: [pollSlider.el, smoothing.el],
+      }),
+      panel({
+        className: "area-startup",
+        title: "Startup",
+        body: [autostartToggle.el, autostartNote],
       }),
       panel({
         className: "area-display",
