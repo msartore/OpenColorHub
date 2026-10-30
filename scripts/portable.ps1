@@ -4,7 +4,7 @@
 # the app then keeps settings and state in `config/` and `data/` beside it
 # instead of under %APPDATA%, so the whole folder can be moved or deleted.
 
-param([string]$Version = "0.2.0")
+param([string]$Version = "")
 
 $ErrorActionPreference = "Stop"
 
@@ -12,6 +12,15 @@ $root = Split-Path -Parent $PSScriptRoot
 $exe = Join-Path $root "target\release\opencolorhub.exe"
 if (-not (Test-Path $exe)) {
   throw "release binary not found at $exe - run 'npx tauri build' first"
+}
+
+# Default the version to the executable's own FileVersion. A hardcoded default
+# here once shipped a zip named 0.2.0 that contained the 0.3.0 binary.
+if (-not $Version) {
+  $Version = (Get-Item $exe).VersionInfo.FileVersion
+  if (-not $Version) { throw "cannot read a version from $exe" }
+  $Version = $Version.Trim()
+  Write-Host "version from the binary: $Version" -ForegroundColor DarkGray
 }
 
 $out = Join-Path $root "target\release\bundle\portable"
