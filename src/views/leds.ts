@@ -31,7 +31,6 @@ export function createLeds(ctx: ViewContext): View {
   const cards = new Map<string, ChannelCard>();
   const strip = ledStrip();
 
-  // ---------------------------------------------------------------- global
   const globalColor = el("input", { class: "color-input", type: "color", value: "#22d3ee" });
   const globalBright = slider({ min: 0, max: 100, value: 80, suffix: "%", label: "Brightness" });
   const globalHex = el("span", { class: "color-hex" }, "#22D3EE");
@@ -103,7 +102,6 @@ export function createLeds(ctx: ViewContext): View {
     ),
   );
 
-  // ---------------------------------------------------------------- cards
   const grid = el("div", { class: "channel-grid" });
 
   const makeCard = (id: string, label: string, name: string, description: string, leds: number): ChannelCard => {

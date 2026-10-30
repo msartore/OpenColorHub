@@ -42,7 +42,6 @@ export function createSettings(ctx: ViewContext): View {
     await ctx.saveSettings(patch);
   };
 
-  // ----------------------------------------------------------- privileges
   const elevationBody = el("div", { class: "elevation-body" });
 
   const renderElevation = (state: ElevationState) => {
@@ -90,7 +89,6 @@ export function createSettings(ctx: ViewContext): View {
     .then(renderElevation)
     .catch((err) => elevationBody.replaceChildren(inlineNote(String(err), "danger")));
 
-  // ------------------------------------------------------------- backend
   const backendBlurb = el("p", { class: "field-help" }, BACKEND_COPY[draft.backend].blurb);
   const backendState = el("div", { class: "backend-state" });
 
@@ -108,7 +106,6 @@ export function createSettings(ctx: ViewContext): View {
     },
   });
 
-  // ------------------------------------------------------------- polling
   const pollSlider: Slider = slider({
     min: 250,
     max: 10000,
@@ -129,7 +126,6 @@ export function createSettings(ctx: ViewContext): View {
     onChange: (checked) => void persist({ smoothing: checked }),
   });
 
-  // ------------------------------------------------------------- display
   const unitSwitch = segmented<TempUnit>({
     value: draft.temp_unit,
     items: [
@@ -171,7 +167,6 @@ export function createSettings(ctx: ViewContext): View {
     ),
   );
 
-  // ------------------------------------------------------------- safety
   const confirmToggle = toggle({
     label: "Confirm hardware writes",
     description: "Show a confirmation before every fan or lighting change.",
@@ -196,7 +191,6 @@ export function createSettings(ctx: ViewContext): View {
     onCommit: (value) => void persist({ low_duty_warning: value }),
   });
 
-  // ------------------------------------------------------------- paths
   const pathsBody = el("div", { class: "kv-list" });
   const copyButton = (value: string) =>
     button("copy", {
@@ -212,7 +206,6 @@ export function createSettings(ctx: ViewContext): View {
       },
     });
 
-  // ------------------------------------------------------------- danger
   const resetButton = button("Reset to defaults", {
     variant: "danger",
     onClick: async () => {
@@ -270,7 +263,6 @@ export function createSettings(ctx: ViewContext): View {
     },
   });
 
-  // ----------------------------------------------------------- startup
   const platformName = navigator.userAgent.includes("Windows") ? "Windows" : "Linux";
 
   const autostartNote = inlineNote("Checking the logon entry…");

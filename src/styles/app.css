@@ -126,7 +126,6 @@ select {
   background-clip: content-box;
 }
 
-/* ---------------------------------------------------------------- shell -- */
 
 .app {
   position: relative;
@@ -294,7 +293,6 @@ select {
   opacity: 0.5;
 }
 
-/* --------------------------------------------------------- status strip -- */
 
 .main-column {
   display: grid;
@@ -310,7 +308,6 @@ select {
   min-height: 0;
 }
 
-/* --------------------------------------------------------------- screen -- */
 
 .screen {
   display: flex;
@@ -355,7 +352,6 @@ select {
   color: var(--text-faint);
 }
 
-/* ---------------------------------------------------------------- panel -- */
 
 .panel {
   position: relative;
@@ -441,7 +437,6 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-/* -------------------------------------------------------------- buttons -- */
 
 .btn {
   display: inline-flex;
@@ -531,7 +526,6 @@ select {
   color: var(--accent);
 }
 
-/* -------------------------------------------------- pills, badges, chips -- */
 
 .pill {
   display: inline-flex;
@@ -655,7 +649,6 @@ select {
   background: color-mix(in srgb, var(--info) 8%, transparent);
 }
 
-/* -------------------------------------------------------------- notices -- */
 
 .notice {
   display: flex;
@@ -725,7 +718,6 @@ select {
   color: var(--danger);
 }
 
-/* ------------------------------------------------------------ form bits -- */
 
 .field {
   display: flex;
@@ -1010,7 +1002,6 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-/* ---------------------------------------------------------- data bits ---- */
 
 .kv-list {
   display: flex;
@@ -1162,7 +1153,6 @@ select {
   white-space: nowrap;
 }
 
-/* ------------------------------------------------------------- dashboard -- */
 
 .dash {
   display: grid;
@@ -1446,7 +1436,6 @@ select {
   padding: 4px 0;
 }
 
-/* ---------------------------------------------------------------- fans -- */
 
 .fans-warning {
   display: flex;
@@ -1778,7 +1767,6 @@ select {
   font-family: var(--mono);
 }
 
-/* ------------------------------------------------------------ lighting -- */
 
 .global-colour {
   display: flex;
@@ -1911,7 +1899,6 @@ select {
   gap: 10px;
 }
 
-/* ------------------------------------------------------------ settings -- */
 
 .settings-grid {
   column-count: 2;
@@ -1968,7 +1955,6 @@ select {
   padding: 4px 12px 10px;
 }
 
-/* --------------------------------------------------------------- about -- */
 
 .about-hero .panel-body {
   gap: 10px;
@@ -2151,7 +2137,6 @@ select {
   font-weight: 600;
 }
 
-/* --------------------------------------------------------------- misc --- */
 
 .empty {
   display: flex;
@@ -2283,7 +2268,6 @@ select {
   overflow-x: auto;
 }
 
-/* ---------------------------------------------------------- responsive -- */
 
 @media (max-width: 1180px) {
   .dash {
@@ -2429,7 +2413,6 @@ select {
   max-width: 92ch;
 }
 
-/* ------------------------------------------------------------ update dialog -- */
 
 .update-backdrop {
   position: fixed;

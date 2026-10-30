@@ -466,7 +466,6 @@ impl Capabilities {
     }
 }
 
-/// Fan card payload.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FanStatus {
     pub header: FanHeader,
@@ -482,7 +481,6 @@ pub struct FanStatus {
     pub curve_percent: Option<u8>,
 }
 
-/// Channel card payload.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelStatus {
     pub id: Channel,

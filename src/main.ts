@@ -57,7 +57,6 @@ function applyAccent(accent: string): void {
   }
 }
 
-// ---------------------------------------------------------------- shell
 
 const mainColumn = el(
   "div",
@@ -71,7 +70,6 @@ const sidebar = createSidebar({
 
 appRoot.append(sidebar.el, mainColumn);
 
-// ---------------------------------------------------------------- routing
 
 function parseHash(): ScreenId | null {
   const raw = window.location.hash.replace(/^#\/?/, "").trim();
@@ -152,7 +150,6 @@ function updateStatusbar(): void {
   sidebar.update(snapshot);
 }
 
-// ---------------------------------------------------------------- boot
 
 async function boot(): Promise<void> {
   try {

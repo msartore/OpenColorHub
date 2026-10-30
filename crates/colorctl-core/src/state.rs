@@ -124,7 +124,6 @@ impl RgbState {
         leds
     }
 
-    /// UI projection of the state.
     pub fn statuses(&self) -> Vec<ChannelStatus> {
         Channel::all()
             .iter()

@@ -15,7 +15,6 @@ use tauri::{Emitter, Manager};
 
 use crate::state::{AppState, Inner};
 
-/// Builds and runs the desktop application.
 pub fn run() {
     update::clean_previous();
 
@@ -163,7 +162,6 @@ fn portable_root() -> Option<std::path::PathBuf> {
     dir.join("opencolorhub.portable").is_file().then_some(dir)
 }
 
-/// Where settings and state live.
 ///
 /// Portable builds keep both beside the executable so the folder can be moved
 /// or deleted as a unit; installed builds use the per-user AppData paths.
