@@ -258,7 +258,7 @@ npm install            # frontend dependencies
 
 npm run tauri dev      # desktop app with hot reload
 npm run tauri build    # installers in src-tauri/target/release/bundle
-pwsh scripts/build-release.ps1   # same, with build paths stripped (see below)
+pwsh scripts/build-release.ps1 -Portable   # stripped paths + zip (see below)
 npm run dev            # browser-only demo (simulated backend, no Rust needed)
 cargo test             # core + CLI + shell unit tests
 cargo run -p opencolorhub-cli -- fan status --backend simulated

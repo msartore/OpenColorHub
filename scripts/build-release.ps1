@@ -18,7 +18,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Bundles = "all"
+    [string]$Bundles = "all",
+    [switch]$Portable
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,6 +44,28 @@ try {
         npx tauri build --bundles $Bundles
     }
     if ($LASTEXITCODE -ne 0) { throw "tauri build failed ($LASTEXITCODE)" }
+
+    # A "successful" run must actually have produced an executable newer than the
+    # code it claims to contain. A plain mtime-vs-build-start check would fail
+    # whenever cargo legitimately skipped relinking, so compare against the
+    # newest input instead. Without this, a failed or racing build leaves the
+    # previous binary in place and a separate packaging step ships it - which is
+    # how a zip once ended up containing a pre-tray executable.
+    $exe = Join-Path $repo "target\release\opencolorhub.exe"
+    if (-not (Test-Path $exe)) { throw "no executable at $exe" }
+    $stamp = (Get-Item $exe).LastWriteTime
+    $newest = Get-ChildItem -Path $repo -Recurse -File -Include *.rs, *.ts, *.css, *.html, *.json, *.toml |
+        Where-Object { $_.FullName -notmatch '\\target\\|\\node_modules\\|\\dist\\|\\gen\\' } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if ($newest -and $stamp -lt $newest.LastWriteTime) {
+        throw "executable ($stamp) is older than $($newest.Name) ($($newest.LastWriteTime)) - refusing to package a stale binary"
+    }
+
+    if ($Portable) {
+        & (Join-Path $PSScriptRoot "portable.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "portable packaging failed ($LASTEXITCODE)" }
+    }
 }
 finally {
     Pop-Location
