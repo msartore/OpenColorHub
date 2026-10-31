@@ -1,9 +1,10 @@
 /** Left navigation rail: brand, screens, backend health. */
 
-import { el, svg } from "../dom";
+import { el } from "../dom";
 import logoUrl from "../assets/logo.png";
 import { isDemo } from "../api";
 import type { ScreenId, Snapshot } from "../types";
+import { icon } from "./icons";
 import { pill } from "./ui";
 
 export interface Sidebar {
@@ -14,15 +15,6 @@ export interface Sidebar {
   setLicence(license: string): void;
 }
 
-const ICONS: Record<ScreenId, string> = {
-  dashboard: "M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z",
-  fans: "M12 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0-2V3m0 8 7 4M12 11 5 15",
-  leds: "M12 3v2m0 14v2M5 12H3m18 0h-2M6.3 6.3 4.9 4.9m14.2 14.2-1.4-1.4M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z",
-  settings: "M4 7h10m4 0h2M4 17h4m4 0h8M8 4v6m8 6v6",
-  drivers: "M12 3v11m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2",
-  about: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13h.01M11 12h1v5h1",
-};
-
 const NAV: { id: ScreenId; label: string; hint: string }[] = [
   { id: "dashboard", label: "Dashboard", hint: "Overview" },
   { id: "fans", label: "Fan control", hint: "Headers & curves" },
@@ -31,20 +23,6 @@ const NAV: { id: ScreenId; label: string; hint: string }[] = [
   { id: "settings", label: "Settings", hint: "Backend & display" },
   { id: "about", label: "About", hint: "Board detection" },
 ];
-
-function icon(path: string): SVGSVGElement {
-  const node = svg("svg", {
-    class: "nav-icon",
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    "stroke-width": 1.4,
-    "stroke-linecap": "round",
-    "stroke-linejoin": "round",
-  });
-  node.appendChild(svg("path", { d: path }));
-  return node;
-}
 
 function brandMark(): HTMLImageElement {
   return el("img", {
@@ -71,7 +49,7 @@ export function createSidebar(options: { onNavigate: (screen: ScreenId) => void 
           "data-screen": item.id,
           onclick: () => options.onNavigate(item.id),
         },
-        icon(ICONS[item.id]),
+        icon(item.id),
         el(
           "span",
           { class: "nav-copy" },
