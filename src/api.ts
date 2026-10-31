@@ -17,6 +17,10 @@ import type {
   FanProfileId,
   Settings,
   SettingsPatch,
+  DriverFile,
+  DriverList,
+  DownloadedFile,
+  DriverProgress,
   Snapshot,
   ActivityEntry,
 } from "./types";
@@ -66,9 +70,23 @@ export const api = {
   applyLed: () => call<ActionResult>("apply_led"),
 
   openExternal: (url: string) => call<void>("open_external", { url }),
+
+  /** Vendor downloads for the detected board. Hits the network; may take a second. */
+  drivers: () => call<DriverList>("get_drivers"),
+  downloadDriver: (file: DriverFile) =>
+    call<DownloadedFile>("download_driver", { file }),
+  revealDriver: (path: string) => call<void>("reveal_driver", { path }),
 };
 
 /** Subscribes to telemetry ticks; returns an unsubscribe function. */
+/** Subscribes to download progress; resolves once the listener is installed. */
+export async function onDriverProgress(
+  cb: (progress: DriverProgress) => void,
+): Promise<() => void> {
+  if (demo) return () => {};
+  return listen<DriverProgress>("drivers://progress", (event) => cb(event.payload));
+}
+
 export async function onTelemetry(cb: (snapshot: Snapshot) => void): Promise<() => void> {
   if (demo) return demo.subscribe(cb);
   const unlisten = await listen<Snapshot>("telemetry", (event) => cb(event.payload));

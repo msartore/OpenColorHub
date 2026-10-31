@@ -10,7 +10,13 @@ export type BackendMode = "auto" | "hardware" | "simulated";
 export type TempUnit = "celsius" | "fahrenheit";
 export type FanProfileId = "quiet" | "standard" | "full";
 export type BoardConfidence = "verified" | "compatible" | "unknown" | "unsupported";
-export type ScreenId = "dashboard" | "fans" | "leds" | "settings" | "about";
+export type ScreenId =
+  | "dashboard"
+  | "fans"
+  | "leds"
+  | "drivers"
+  | "settings"
+  | "about";
 
 /** Privilege state, as reported by `get_elevation`. */
 export interface AutostartState {
@@ -173,4 +179,42 @@ export interface ActivityEntry {
   at_ms: number;
   kind: string;
   message: string;
+}
+
+/** What a vendor download is, as classified by the core. */
+export type DriverKind = "bios" | "driver" | "utility" | "manual" | "other";
+
+export interface DriverFile {
+  title: string;
+  kind: DriverKind;
+  url: string;
+  /** Server-provided name, already sanitised for the local filesystem. */
+  file_name: string;
+  /** `YYYY-MM-DD`, empty when the vendor published no date. */
+  published: string;
+}
+
+export interface DriverRow extends DriverFile {
+  /** True when this is firmware newer than the installed BIOS. */
+  newer: boolean;
+}
+
+export interface DriverList {
+  board: string;
+  product_id: number;
+  /** BIOS version reported by SMBIOS. */
+  installed_bios: string;
+  files: DriverRow[];
+}
+
+export interface DownloadedFile {
+  path: string;
+  bytes: number;
+  sha256: string;
+}
+
+export interface DriverProgress {
+  file: string;
+  received: number;
+  total: number | null;
 }

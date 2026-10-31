@@ -2491,3 +2491,69 @@ select {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Drivers screen -------------------------------------------------------- */
+
+.drivers-stack {
+  display: grid;
+  gap: var(--gap);
+}
+
+.screen-sub-sep {
+  color: var(--text-faint);
+}
+
+.driver-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.driver-detail {
+  margin-top: 2px;
+}
+
+.driver-file {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  word-break: break-all;
+}
+
+.driver-progress {
+  margin: 6px 0 4px;
+  max-width: 320px;
+}
+
+.data-table td.driver-actions {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.drivers-loading,
+.drivers-empty {
+  padding: 18px 0;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.driver-progress-wrap.is-hidden {
+  display: none;
+}
+
+.driver-progress-wrap .bar-fill--indeterminate {
+  animation: driver-indeterminate 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes driver-indeterminate {
+  from {
+    margin-left: 0;
+  }
+  to {
+    margin-left: 55%;
+  }
+}

@@ -20,6 +20,7 @@ pub mod autostart;
 pub mod backend;
 pub mod board;
 pub mod curve;
+pub mod drivers;
 pub mod error;
 pub mod model;
 pub mod platform;
@@ -31,6 +32,7 @@ pub mod units;
 pub use about::AboutInfo;
 pub use board::{BOARDS, BoardConfidence, BoardFamily, BoardIdentity, BoardInfo};
 pub use curve::{CURVE_POINTS, CurvePoint, FanCurve, FanProfile};
+pub use drivers::{DownloadedFile, DriverCatalogue, DriverFile, DriverKind};
 pub use error::{CurveError, Error, Result};
 pub use model::{
     Capabilities, Channel, ChannelConfig, ChannelStatus, DeviceInfo, FAN_HEADERS, FanHeader,

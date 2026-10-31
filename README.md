@@ -36,8 +36,10 @@ Both are labelled, never disguised. → [Platform notes](docs/PLATFORM.md)
 | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Fan control](docs/screenshots/fans.png) |
 | **Dashboard** — gauge, duty, tachometers, lighting | **Fan control** — per-header curves, presets, pump floor |
-| ![Lighting](docs/screenshots/leds.png) | ![About](docs/screenshots/about.png) |
-| **Lighting** — six channels, 200-LED frame | **About** — the board this build detected |
+| ![Lighting](docs/screenshots/leds.png) | ![Drivers](docs/screenshots/drivers.png) |
+| **Lighting** — six channels, 200-LED frame | **Drivers** — vendor downloads, nothing executed |
+| ![About](docs/screenshots/about.png) | |
+| **About** — the board this build detected | |
 
 Settings covers backend selection, elevation, units, safety confirmations, poll
 interval, startup with the OS and updates. The app lives in the tray: closing the
@@ -75,6 +77,7 @@ sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
 | [Platform notes](docs/PLATFORM.md) | Driver rationale, fallbacks, elevation, startup, tray |
 | [Board detection](docs/BOARD-DETECTION.md) | Confidence levels, sources, the hardware guard |
 | [Updates](docs/UPDATES.md) | Self-updater, release process, integrity caveats |
+| [Drivers](docs/DRIVERS.md) | Board download catalogue, URL rules, why nothing is executed |
 | [NOTICE.md](NOTICE.md) | Licensing of this project and everything it embeds |
 
 ## Safety

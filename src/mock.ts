@@ -435,6 +435,56 @@ export function createDemoBackend(): DemoBackend {
       case "open_external":
         return undefined as T;
 
+      case "get_drivers": {
+        // Shape mirrors the real catalogue so the view can be developed in a
+        // plain browser without touching the network.
+        const files = [
+          {
+            title: "CVN X570M GAMING PRO V14 BIOS 1016",
+            kind: "bios" as const,
+            url: "https://endownload.colorful.cn/demo/bios-1016.zip",
+            file_name: "CVN X570M BIOS 1016.zip",
+            published: "2026-07-20",
+            newer: true,
+          },
+          {
+            title: "AMD Chipset Driver",
+            kind: "driver" as const,
+            url: "https://endownload.colorful.cn/demo/chipset.exe",
+            file_name: "amd_chipset_software_8.02.18.557.exe",
+            published: "2026-03-01",
+            newer: false,
+          },
+          {
+            title: "CVN X570M GAMING PRO V14",
+            kind: "manual" as const,
+            url: "https://endownload.colorful.cn/demo/manual.pdf",
+            file_name: "CVN X570M GAMING PRO V14.pdf",
+            published: "2020-05-27",
+            newer: false,
+          },
+        ];
+        return {
+          board: "CVN X570M GAMING PRO V14",
+          product_id: 880,
+          installed_bios: "1015",
+          files,
+        } as T;
+      }
+
+      case "download_driver": {
+        const file = (args.file ?? {}) as { file_name?: string };
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return {
+          path: "C:\\Users\\demo\\drivers\\" + (file.file_name ?? "download.bin"),
+          bytes: 15_461_350,
+          sha256: "0".repeat(64),
+        } as T;
+      }
+
+      case "reveal_driver":
+        return undefined as T;
+
       case "get_about": {
         const about: AboutInfo = {
           name: "OpenColorHub",

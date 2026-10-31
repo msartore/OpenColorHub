@@ -10,6 +10,7 @@
 use std::process::Command;
 
 use colorctl_core::about::{AboutInfo, AboutParams};
+use colorctl_core::drivers::{self, DownloadedFile, DriverFile, DriverKind};
 use colorctl_core::model::{Channel, ChannelConfig, FanHeader, Snapshot};
 use colorctl_core::platform::{self, Elevation};
 use colorctl_core::service::{ActionResult, Activity};
@@ -310,4 +311,134 @@ pub fn get_autostart() -> colorctl_core::autostart::Autostart {
 #[tauri::command]
 pub fn set_autostart(enabled: bool) -> Result<colorctl_core::autostart::Autostart, String> {
     colorctl_core::autostart::set_enabled(enabled).map_err(|e| e.to_string())
+}
+
+/// Catalogue row as the UI sees it: the file plus whether it is newer than what
+/// is installed.
+#[derive(serde::Serialize)]
+pub struct DriverRow {
+    #[serde(flatten)]
+    pub file: DriverFile,
+    /// True when this is firmware newer than the running BIOS.
+    pub newer: bool,
+}
+
+#[derive(serde::Serialize)]
+pub struct DriverList {
+    pub board: String,
+    pub product_id: u32,
+    /// BIOS version reported by SMBIOS, for context in the UI.
+    pub installed_bios: String,
+    pub files: Vec<DriverRow>,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct DriverProgress {
+    file: String,
+    received: u64,
+    total: Option<u64>,
+}
+
+/// Lists the vendor's downloads for the detected board.
+///
+/// Two HTTP round-trips, so it runs off the UI thread. The board name and BIOS
+/// version are copied out of the guarded state before awaiting: a `MutexGuard`
+/// must not cross an await point.
+#[tauri::command]
+pub async fn get_drivers(state: State<'_, AppState>) -> Result<DriverList, String> {
+    let (board, bios) = {
+        let inner = state.lock()?;
+        let identity = inner.service.board().identity.clone();
+        match identity {
+            Some(identity) => (identity.name, identity.bios_version),
+            None => (String::new(), String::new()),
+        }
+    };
+    if board.trim().is_empty() {
+        return Err("this machine did not report a motherboard model".to_string());
+    }
+
+    let lookup = board.clone();
+    let catalogue = tauri::async_runtime::spawn_blocking(move || drivers::fetch_catalogue(&lookup))
+        .await
+        .map_err(|e| format!("driver lookup panicked: {e}"))?
+        .map_err(|e| e.to_string())?;
+
+    let files = catalogue
+        .files
+        .into_iter()
+        .map(|file| DriverRow {
+            newer: file.kind == DriverKind::Bios && drivers::is_newer_firmware(&file.title, &bios),
+            file,
+        })
+        .collect();
+
+    Ok(DriverList {
+        board: catalogue.board,
+        product_id: catalogue.product_id,
+        installed_bios: bios,
+        files,
+    })
+}
+
+/// Downloads one catalogue entry into the app's data directory.
+///
+/// Emits `drivers://progress` while the transfer runs. Nothing is executed: the
+/// file is written, hashed and reported back.
+#[tauri::command]
+pub async fn download_driver(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    file: DriverFile,
+) -> Result<DownloadedFile, String> {
+    let dir = state.data_dir().join("drivers");
+    let name = file.file_name.clone();
+    let handle = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        drivers::download_with_progress(&file, &dir, |received, total| {
+            let _ = handle.emit(
+                "drivers://progress",
+                DriverProgress {
+                    file: name.clone(),
+                    received,
+                    total,
+                },
+            );
+        })
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("download panicked: {e}"))?
+}
+
+/// Opens the folder a downloaded file landed in, selecting the file itself.
+#[tauri::command]
+pub fn reveal_driver(path: String) -> Result<(), String> {
+    let target = std::path::PathBuf::from(&path);
+    if !target.exists() {
+        return Err(format!("{path} does not exist"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(format!("/select,{}", target.display()))
+            .spawn()
+            .map_err(|e| format!("could not open Explorer: {e}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let dir = target.parent().unwrap_or(&target);
+        Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("could not open the file manager: {e}"))?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("revealing files is not supported on this platform".to_string())
 }

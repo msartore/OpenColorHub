@@ -11,6 +11,7 @@ import { maybeOfferUpdate } from "./update";
 import type { View, ViewContext, ViewFactory } from "./view";
 import { createAbout } from "./views/about";
 import { createDashboard } from "./views/dashboard";
+import { createDrivers } from "./views/drivers";
 import { createFans } from "./views/fans";
 import { createLeds } from "./views/leds";
 import { createSettings } from "./views/settings";
@@ -19,11 +20,19 @@ const VIEWS: Record<ScreenId, ViewFactory> = {
   dashboard: createDashboard,
   fans: createFans,
   leds: createLeds,
+  drivers: createDrivers,
   settings: createSettings,
   about: createAbout,
 };
 
-const SCREEN_ORDER: ScreenId[] = ["dashboard", "fans", "leds", "settings", "about"];
+const SCREEN_ORDER: ScreenId[] = [
+  "dashboard",
+  "fans",
+  "leds",
+  "drivers",
+  "settings",
+  "about",
+];
 
 const state: {
   snapshot: Snapshot | null;
