@@ -1161,7 +1161,7 @@ select {
   grid-template-areas:
     "gauge stats"
     "fans light"
-    "activity activity";
+    "system activity";
   align-items: stretch;
 }
 
@@ -1179,6 +1179,10 @@ select {
 
 .area-light {
   grid-area: light;
+}
+
+.area-system {
+  grid-area: system;
 }
 
 .area-activity {
@@ -2270,18 +2274,20 @@ select {
 
 
 @media (max-width: 1180px) {
+  /* Keep the gauge beside the tiles: stacking them pushes the numbers below
+     the fold at the minimum window height, which defeats an overview screen. */
   .dash {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(215px, 0.85fr) minmax(250px, 1fr);
     grid-template-areas:
-      "gauge"
-      "stats"
-      "fans"
-      "light"
-      "activity";
+      "gauge stats"
+      "fans fans"
+      "light light"
+      "system system"
+      "activity activity";
   }
 
   .stat-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2562,4 +2568,107 @@ select {
   margin: 2px 0 0;
   font-size: 11px;
   color: var(--text-faint);
+}
+
+/* Dashboard additions: session range, history chart, system facts -------- */
+
+.gauge-range {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.panel-foot {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.area-gauge .gauge {
+  max-width: 250px;
+}
+
+.spark {
+  display: block;
+  width: 100%;
+  height: 54px;
+  margin-top: 2px;
+}
+
+.spark-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.spark-area {
+  fill: var(--accent);
+  opacity: 0.14;
+}
+
+.spark-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.spark-now {
+  color: var(--accent);
+}
+
+.dash-led-table td {
+  padding: 5px 0;
+}
+
+.dash-led-table tr.is-off td {
+  color: var(--text-faint);
+}
+
+.dash-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.dash-swatch-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  flex: none;
+}
+
+.sys-list {
+  display: grid;
+  gap: 7px;
+}
+
+.kv-value--ok {
+  color: var(--ok);
+}
+
+.kv-value--warn {
+  color: var(--warn);
+}
+
+.kv-value--danger {
+  color: var(--danger);
+}
+
+@media (min-width: 1500px) {
+  /* Widescreen: three tiles per row keeps them from stretching into bands. */
+  .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dash {
+    grid-template-columns: minmax(340px, 0.72fr) minmax(0, 1fr);
+  }
 }

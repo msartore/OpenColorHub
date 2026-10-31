@@ -1,20 +1,35 @@
-/** Overview screen: thermal gauge, headline numbers, fan snapshot, lighting, activity. */
+/**
+ * Overview screen: thermal gauge with the session range, six headline numbers,
+ * fan and lighting state, temperature history, system facts and recent writes.
+ */
 
 import { api } from "../api";
 import { el } from "../dom";
-import { dutyColor, formatClock, formatRpm } from "../format";
-import type { FanHeaderId, Snapshot } from "../types";
+import { dutyColor, formatClock, formatRpm, formatTemp } from "../format";
+import type { ElevationState, FanHeaderId, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
-import { ledStrip, temperatureGauge } from "../components/charts";
+import { ledStrip, sparkline, temperatureGauge } from "../components/charts";
 import { button, panel, pill, statTile } from "../components/ui";
+
+/** Samples kept for the history chart; at the default 1 s poll that is two minutes. */
+const HISTORY = 120;
 
 export function createDashboard(ctx: ViewContext): View {
   const gauge = temperatureGauge();
+  const spark = sparkline({ capacity: HISTORY });
 
-  const dutyTile = statTile({ label: "Average duty", value: "—", unit: "%", hint: "across 5 headers" });
+  /** Every temperature seen this session; the gauge shows the instantaneous value. */
+  const history: number[] = [];
+
+  const dutyTile = statTile({ label: "Average duty", value: "—", unit: "%", hint: "across every header" });
   const rpmTile = statTile({ label: "Total rpm", value: "—", unit: "rpm", hint: "all headers" });
+  const idleTile = statTile({ label: "Idle headers", value: "—", hint: "reporting 0 rpm" });
   const litTile = statTile({ label: "Channels lit", value: "—", hint: "of 6 lighting channels" });
   const curveTile = statTile({ label: "Curve driven", value: "—", hint: "headers on SmartFan" });
+  const ledTile = statTile({ label: "LEDs lit", value: "—", hint: "of 200 addressable" });
+
+  const gaugeRange = el("p", { class: "gauge-range mono" }, "session —");
+  const fastest = el("p", { class: "panel-foot mono" }, "fastest —");
 
   const fanList = el("ul", { class: "fan-mini" });
   const fanRows = new Map<
@@ -52,14 +67,37 @@ export function createDashboard(ctx: ViewContext): View {
   forEachHeader();
 
   const strip = ledStrip({ legend: false });
-  const channelList = el("div", { class: "channel-chips" });
   const lightNote = el("p", { class: "note" }, "");
+  const channelBody = el("tbody");
+  const channelTable = el(
+    "table",
+    { class: "data-table dash-led-table" },
+    el(
+      "thead",
+      {},
+      el("tr", {}, el("th", {}, "channel"), el("th", {}, "leds"), el("th", {}, "colour"), el("th", {}, "level")),
+    ),
+    channelBody,
+  );
 
+  const sparkLegend = el("div", { class: "spark-legend" });
+  const sysList = el("div", { class: "kv-list sys-list" });
   const activity = el("ul", { class: "activity" });
   let lastActivityFetch = 0;
 
   const notes = el("div", { class: "notice-list" });
   const boardPill = pill("detecting board…", "muted");
+
+  /** Privileges are fixed for the life of the process, so this is read once. */
+  let elevation: ElevationState | null = null;
+  void api
+    .elevation()
+    .then((state) => {
+      elevation = state;
+    })
+    .catch(() => {
+      elevation = null;
+    });
 
   const root = el(
     "div",
@@ -67,11 +105,7 @@ export function createDashboard(ctx: ViewContext): View {
     el(
       "header",
       { class: "screen-head" },
-      el(
-        "div",
-        {},
-        el("h1", { class: "screen-title" }, "Dashboard"),
-      ),
+      el("div", {}, el("h1", { class: "screen-title" }, "Dashboard")),
       el(
         "div",
         { class: "screen-actions" },
@@ -86,22 +120,37 @@ export function createDashboard(ctx: ViewContext): View {
       panel({
         className: "area-gauge",
         title: "Motherboard temperature",
-        body: [
-          gauge.el,
-        ],
+        body: [gauge.el, gaugeRange, spark.el, sparkLegend],
       }),
-      el("div", { class: "stat-grid area-stats" }, dutyTile.el, rpmTile.el, litTile.el, curveTile.el),
+      el(
+        "div",
+        { class: "stat-grid area-stats" },
+        dutyTile.el,
+        rpmTile.el,
+        idleTile.el,
+        litTile.el,
+        curveTile.el,
+        ledTile.el,
+      ),
       panel({
         className: "area-fans",
         title: "Fan headers",
-        actions: [button("Open fan control", { variant: "quiet", size: "sm", onClick: () => ctx.navigate("fans") })],
-        body: [fanList],
+        actions: [
+          button("Open fan control", { variant: "quiet", size: "sm", onClick: () => ctx.navigate("fans") }),
+        ],
+        body: [fanList, fastest],
       }),
       panel({
         className: "area-light",
         title: "Lighting",
         actions: [button("Edit lighting", { variant: "quiet", size: "sm", onClick: () => ctx.navigate("leds") })],
-        body: [strip.el, lightNote, channelList],
+        body: [strip.el, lightNote, channelTable],
+      }),
+      panel({
+        className: "area-system",
+        title: "System",
+        subtitle: "What this build is talking to",
+        body: [sysList],
       }),
       panel({
         className: "area-activity",
@@ -110,6 +159,8 @@ export function createDashboard(ctx: ViewContext): View {
       }),
     ),
   );
+
+  const tempText = (celsius: number): string => formatTemp(celsius, ctx.settings().temp_unit, 0);
 
   const renderActivity = async () => {
     try {
@@ -136,15 +187,88 @@ export function createDashboard(ctx: ViewContext): View {
     }
   };
 
+  const renderSystem = (snapshot: Snapshot) => {
+    const board = snapshot.board;
+    const name = board.identity?.name?.trim() || board.identity?.vendor?.trim() || "unknown board";
+    const row = (key: string, value: string, tone?: string) =>
+      el(
+        "div",
+        { class: "kv" },
+        el("span", { class: "kv-key" }, key),
+        el("span", { class: `kv-value mono${tone ? ` kv-value--${tone}` : ""}`, title: value }, value),
+      );
+
+    const backend = (device: Snapshot["fan_device"]) =>
+      device.available ? `${device.name}${device.simulated ? " · simulated" : ""}` : "unavailable";
+
+    const privileges = elevation
+      ? elevation.elevated
+        ? "administrator"
+        : elevation.can_request
+          ? "standard · can elevate"
+          : "standard"
+      : "—";
+
+    sysList.replaceChildren(
+      row("board", name),
+      row(
+        "support",
+        board.confidence,
+        board.confidence === "verified" ? "ok" : board.confidence === "unsupported" ? "danger" : "warn",
+      ),
+      row("fan backend", backend(snapshot.fan_device)),
+      row("lighting backend", backend(snapshot.led_device)),
+      row("bios", board.identity?.bios_version?.trim() || "—"),
+      row("polling", `${ctx.settings().poll_interval_ms} ms`),
+      row("privileges", privileges, elevation?.elevated ? "ok" : undefined),
+      row("last sample", formatClock(snapshot.timestamp_ms)),
+    );
+  };
+
   const update = (snapshot: Snapshot) => {
     gauge.update(snapshot.temperature_c, ctx.settings().temp_unit);
 
-    dutyTile.set(String(snapshot.avg_percent), `across ${snapshot.fans.length} headers`, snapshot.avg_percent > 85 ? "warn" : "accent");
+    if (snapshot.temperature_c !== null) {
+      history.push(snapshot.temperature_c);
+      if (history.length > HISTORY) history.shift();
+    }
+    if (history.length) {
+      const low = Math.min(...history);
+      const high = Math.max(...history);
+      const mean = history.reduce((sum, value) => sum + value, 0) / history.length;
+      gaugeRange.textContent = `session ${tempText(low)} · ${tempText(mean)} · ${tempText(high)}`;
+      spark.update(history);
+      sparkLegend.replaceChildren(
+        el("span", { class: "spark-now mono" }, `now ${tempText(history[history.length - 1])}`),
+        el("span", {}, `${history.length} samples`),
+        el("span", {}, `range ${tempText(low)} – ${tempText(high)}`),
+      );
+    } else {
+      gaugeRange.textContent = "session —";
+      sparkLegend.replaceChildren(el("span", {}, "Waiting for the first temperature reading"));
+    }
+
+    const idle = snapshot.fans.filter((fan) => fan.rpm === 0).length;
     const totalRpm = snapshot.fans.reduce((sum, fan) => sum + fan.rpm, 0);
-    rpmTile.set(formatRpm(totalRpm), `${snapshot.fans.filter((f) => f.rpm === 0).length} idle`, "muted");
-    const lit = snapshot.channels.filter((c) => c.enabled).length;
-    litTile.set(String(lit), lit ? `${snapshot.channels.filter((c) => c.enabled).map((c) => c.label).slice(0, 2).join(", ")}${lit > 2 ? "…" : ""}` : "all off", lit ? "accent" : "muted");
-    const curved = snapshot.fans.filter((f) => f.mode === "smart_fan").length;
+    dutyTile.set(
+      String(snapshot.avg_percent),
+      `across ${snapshot.fans.length} headers`,
+      snapshot.avg_percent > 85 ? "warn" : "accent",
+    );
+    rpmTile.set(formatRpm(totalRpm), `${idle} idle`, "muted");
+    idleTile.set(String(idle), idle ? "not spinning" : "all spinning", idle ? "warn" : "ok");
+
+    const lit = snapshot.channels.filter((channel) => channel.enabled);
+    litTile.set(
+      String(lit.length),
+      `${lit.length} of ${snapshot.channels.length} on`,
+      lit.length ? "accent" : "muted",
+    );
+    const totalLeds = snapshot.channels.reduce((sum, channel) => sum + channel.leds, 0);
+    const leds = lit.reduce((sum, channel) => sum + channel.leds, 0);
+    ledTile.set(String(leds), `of ${totalLeds}`, leds ? "accent" : "muted");
+
+    const curved = snapshot.fans.filter((fan) => fan.mode === "smart_fan").length;
     curveTile.set(String(curved), curved ? "SmartFan curves active" : "all manual", curved ? "ok" : "muted");
 
     for (const fan of snapshot.fans) {
@@ -155,24 +279,48 @@ export function createDashboard(ctx: ViewContext): View {
       row.fill.style.width = `${fan.percent}%`;
       row.fill.style.background = dutyColor(fan.percent);
       row.mode.textContent =
-        fan.mode === "smart_fan" ? `curve · ${fan.curve_percent ?? "—"}%` : fan.mode === "manual" ? "manual" : "—";
+        fan.mode === "smart_fan"
+          ? `curve · ${fan.curve_percent ?? "—"}%`
+          : fan.mode === "manual"
+            ? "manual"
+            : "—";
       row.mode.className = `fan-mini-mode${fan.mode === "smart_fan" ? " is-curve" : ""}`;
       row.root.classList.toggle("is-idle", fan.rpm === 0);
     }
 
+    const spinning = snapshot.fans.filter((fan) => fan.rpm > 0);
+    fastest.textContent = spinning.length
+      ? `fastest ${spinning.reduce((best, fan) => (fan.rpm > best.rpm ? fan : best)).label} · ${formatRpm(
+          Math.max(...spinning.map((fan) => fan.rpm)),
+        )} rpm`
+      : "no header is spinning";
+
     strip.update(snapshot.channels);
-    lightNote.textContent = snapshot.channels.some((channel) => channel.enabled)
-      ? `${snapshot.channels.filter((c) => c.enabled).length} of 6 channels lit`
+    lightNote.textContent = lit.length
+      ? `${lit.length} of ${snapshot.channels.length} channels lit · ${leds} LEDs`
       : "All channels are off — open Lighting to set a colour.";
 
-    channelList.replaceChildren(
+    channelBody.replaceChildren(
       ...snapshot.channels.map((channel) =>
         el(
-          "span",
-          { class: `channel-chip${channel.enabled ? "" : " is-off"}`, title: channel.name },
-          el("span", { class: "channel-chip-swatch", style: { background: channel.enabled ? channel.hex : "transparent" } }),
-          el("span", { class: "channel-chip-label" }, channel.label),
-          el("span", { class: "channel-chip-value mono" }, channel.enabled ? `${channel.brightness}%` : "off"),
+          "tr",
+          { class: channel.enabled ? "" : "is-off", title: channel.name },
+          el("td", {}, channel.label),
+          el("td", { class: "mono" }, String(channel.leds)),
+          el(
+            "td",
+            {},
+            el(
+              "span",
+              { class: "dash-swatch" },
+              el("i", {
+                class: "dash-swatch-dot",
+                style: { background: channel.enabled ? channel.hex : "transparent" },
+              }),
+              channel.enabled ? channel.hex.toUpperCase() : "off",
+            ),
+          ),
+          el("td", { class: "mono" }, channel.enabled ? `${channel.brightness}%` : "—"),
         ),
       ),
     );
@@ -219,6 +367,8 @@ export function createDashboard(ctx: ViewContext): View {
     } else {
       notes.replaceChildren();
     }
+
+    renderSystem(snapshot);
 
     if (Date.now() - lastActivityFetch > 2000) {
       lastActivityFetch = Date.now();

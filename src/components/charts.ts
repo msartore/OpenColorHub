@@ -493,3 +493,54 @@ export function ledStrip(options: { legend?: boolean } = {}): LedStrip {
   return { el: wrap, update };
 }
 
+
+export interface Sparkline {
+  el: SVGSVGElement;
+  update(values: number[]): void;
+}
+
+/**
+ * Compact history line. The box is 100×30 and stretched by CSS, so the stroke
+ * uses `non-scaling-stroke` to stay 1 px whatever the panel width.
+ */
+export function sparkline(options: { capacity?: number } = {}): Sparkline {
+  const capacity = options.capacity ?? 120;
+  const width = 100;
+  const height = 30;
+  const pad = 1.5;
+
+  const root = svg("svg", {
+    class: "spark",
+    viewBox: `0 0 ${width} ${height}`,
+    preserveAspectRatio: "none",
+    role: "img",
+    "aria-label": "Temperature history",
+  });
+  const area = svg("path", { class: "spark-area", d: "" });
+  const line = svg("path", { class: "spark-line", d: "", "vector-effect": "non-scaling-stroke" });
+  root.append(area, line);
+
+  const update = (values: number[]): void => {
+    const samples = values.slice(-capacity);
+    if (samples.length < 2) {
+      area.setAttribute("d", "");
+      line.setAttribute("d", "");
+      return;
+    }
+    const low = Math.min(...samples);
+    const high = Math.max(...samples);
+    // A flat line still needs a band, or every point maps to the same pixel row.
+    const span = Math.max(1, high - low);
+    const floor = low - span * 0.18;
+    const ceiling = high + span * 0.18;
+    const x = (index: number) => (index / (samples.length - 1)) * width;
+    const y = (value: number) =>
+      height - pad - ((value - floor) / (ceiling - floor)) * (height - pad * 2);
+    const points = samples.map((value, index) => `${x(index).toFixed(2)} ${y(value).toFixed(2)}`);
+
+    line.setAttribute("d", `M ${points.join(" L ")}`);
+    area.setAttribute("d", `M ${x(0).toFixed(2)} ${height} L ${points.join(" L ")} L ${width} ${height} Z`);
+  };
+
+  return { el: root, update };
+}
