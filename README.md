@@ -35,7 +35,7 @@ Both are labelled, never disguised. → [Platform notes](docs/PLATFORM.md)
 | | |
 | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Fan control](docs/screenshots/fans.png) |
-| **Dashboard** — gauge, duty, tachometers, lighting | **Fan control** — per-header curves, presets, pump floor |
+| **Dashboard** — gauge with session history, six live metrics, fan and channel detail | **Fan control** — per-header curves, presets, pump floor |
 | ![Lighting](docs/screenshots/leds.png) | ![Drivers](docs/screenshots/drivers.png) |
 | **Lighting** — six channels, 200-LED frame | **Drivers** — vendor downloads, nothing executed |
 | ![About](docs/screenshots/about.png) | |
