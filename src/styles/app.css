@@ -1093,27 +1093,17 @@ select {
   overflow: hidden;
 }
 
-.stat::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--accent);
-  opacity: 0.5;
+/* The tone lives in the number, not in a stripe down the edge. */
+.stat--warn .stat-value {
+  color: var(--warn);
 }
 
-.stat--warn::after {
-  background: var(--warn);
+.stat--danger .stat-value {
+  color: var(--danger);
 }
 
-.stat--danger::after {
-  background: var(--danger);
-}
-
-.stat--muted::after {
-  background: var(--line-bright);
+.stat--muted .stat-value {
+  color: var(--text-dim);
 }
 
 .stat-label {
@@ -1871,11 +1861,15 @@ select {
   cursor: pointer;
 }
 
-.channel-colour .color-input {
-  width: 42px;
-  height: 36px;
-  border-radius: 7px;
-  box-shadow: 0 0 22px -8px currentColor;
+/* The picker is opened from the hex label; the input itself stays out of the
+   layout so no block of colour sits in the card. */
+.color-input--hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
 }
 
 .channel-colour.is-off .color-input {
@@ -2878,4 +2872,35 @@ select {
 
 .state--compact .state-description {
   font-size: 12px;
+}
+
+
+.color-hex--button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 7px;
+  margin-left: -2px;
+  /* A standing border, not only on hover: this is the only way to open the
+     picker now, so it has to read as a control at rest. */
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+
+.color-hex--button:hover {
+  border-color: var(--accent-line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+.color-hex--button:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 1px;
 }

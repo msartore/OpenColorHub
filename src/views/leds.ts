@@ -112,9 +112,22 @@ export function createLeds(ctx: ViewContext): View {
   const ledState = stateSlot();
 
   const makeCard = (id: string, label: string, name: string, description: string, leds: number): ChannelCard => {
-    const colorInput = el("input", { class: "color-input", type: "color", value: "#22d3ee" });
-    const hexLabel = el("span", { class: "color-hex" }, "#22D3EE");
-    const colorWrap = el("label", { class: "channel-colour" }, colorInput);
+    const colorInput = el("input", { class: "color-input color-input--hidden", type: "color", value: "#22d3ee" });
+    // The hex is the colour control: clicking it opens the picker. A filled
+    // swatch beside it only repeated what the hex already says, in a block of
+    // colour that dominates the card.
+    const hexLabel = el(
+      "button",
+      {
+        class: "color-hex color-hex--button",
+        type: "button",
+        title: "Change this channel's colour",
+        "aria-label": "Change colour",
+      },
+      "#22D3EE",
+    ) as HTMLButtonElement;
+    hexLabel.addEventListener("click", () => colorInput.click());
+    const colorWrap = el("span", { class: "channel-colour" }, colorInput);
     const bright = slider({ min: 0, max: 100, value: 60, suffix: "%", label: "Brightness" });
     const toggle = el("input", { type: "checkbox", class: "switch-input", checked: false });
     const stateChip = el("span", { class: "mode-chip" }, "off");
@@ -167,7 +180,6 @@ export function createLeds(ctx: ViewContext): View {
         el(
           "div",
           { class: "channel-preview" },
-          colorWrap,
           el(
             "div",
             { class: "channel-preview-meta" },
@@ -184,6 +196,8 @@ export function createLeds(ctx: ViewContext): View {
         el("div", { class: "channel-controls" }, bright.el),
         el("div", { class: "card-actions" }, apply, off),
       ),
+      // Out of the layout: only exists to be opened by the hex label.
+      colorWrap,
     );
 
     return {
