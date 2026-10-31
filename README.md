@@ -25,7 +25,6 @@ losing its lighting state.
 | --- | --- | --- |
 | **Linux** | ✅ `/dev/port` — root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` |
 | **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO without it | ✅ SetupAPI + `hid.dll`, no driver |
-| **macOS** | ⛔ not supported, not shipped | ⛔ |
 
 Windows needs a signed driver to broker `IN`/`OUT`; PawnIO is **not bundled**,
 and without it the app falls back to HWiNFO telemetry and then the simulator.
@@ -67,21 +66,6 @@ executable. Real hardware on Linux needs privileges:
 ```bash
 sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
 ```
-
-## CLI
-
-`colorctl` keeps the upstream syntax, plus `--backend`, `--json` and a `board`
-subcommand:
-
-```bash
-colorctl rgb set --color '#ff0088' --brightness 60 --channel 5v_1,led
-colorctl fan status
-colorctl fan set-speed --fan cpu --percent 60
-colorctl fan set-curve --fan cpu --points 30:25,50:45,70:75,85:100
-colorctl board
-```
-
-`--backend simulated` exercises everything without touching hardware.
 
 ## Documentation
 
