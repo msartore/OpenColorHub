@@ -153,6 +153,26 @@ impl Service {
         needs_rebuild
     }
 
+    /// Rebuilds the backends in place, keeping settings and state.
+    ///
+    /// Used after installing a driver: the previous probe already cached its
+    /// verdict, so the only way to pick the new device up is to rebuild.
+    pub fn reload_backends(&mut self) -> bool {
+        let set = backend::build(
+            self.settings.backend,
+            self.settings.state_file.as_deref(),
+            &self.data_dir,
+            &self.board,
+        );
+        self.fan = set.fan;
+        self.led = set.led;
+        self.capabilities = set.capabilities;
+        self.smoothed = None;
+        self.last_read_error = None;
+        self.record("settings", "Hardware re-probed");
+        true
+    }
+
     fn record(&mut self, kind: &str, message: impl Into<String>) {
         self.activity.push(Activity {
             at_ms: now_ms(),

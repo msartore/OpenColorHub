@@ -16,7 +16,7 @@ use colorctl_core::platform::{self, Elevation};
 use colorctl_core::service::{ActionResult, Activity};
 use colorctl_core::settings::{Settings, SettingsPatch};
 use colorctl_core::{CURVE_POINTS, CurvePoint, FanCurve, FanProfile};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::state::AppState;
 
@@ -518,4 +518,56 @@ pub fn delete_setup(state: State<'_, AppState>, id: String) -> Result<SetupList,
     let mut store = setup_store(&state)?;
     store.remove(&id).map_err(|e| e.to_string())?;
     Ok(setup_list(store))
+}
+
+/// Whether fan control can reach PawnIO right now.
+#[tauri::command]
+pub fn pawnio_status() -> colorctl_core::PawnioStatus {
+    colorctl_core::platform::pawnio_status()
+}
+
+#[derive(Clone, serde::Serialize)]
+struct PawnioProgress {
+    received: u64,
+    total: Option<u64>,
+}
+
+/// Downloads PawnIO's official installer, verifies it, runs it, then re-probes.
+///
+/// The installer is shown with its own UI: this does not install a kernel driver
+/// silently, it starts the vendor's installer and waits for the user to finish.
+#[tauri::command]
+pub async fn install_pawnio(app: AppHandle) -> Result<colorctl_core::PawnioStatus, String> {
+    let dir = {
+        let state = app.state::<AppState>();
+        state.data_dir().join("tools")
+    };
+
+    let handle = app.clone();
+    let installer = tauri::async_runtime::spawn_blocking(move || {
+        colorctl_core::pawnio_install::download(&dir, |received, total| {
+            let _ = handle.emit("pawnio://progress", PawnioProgress { received, total });
+        })
+    })
+    .await
+    .map_err(|e| format!("download panicked: {e}"))?
+    .map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        colorctl_core::pawnio_install::run_installer(&installer)
+    })
+    .await
+    .map_err(|e| format!("installer panicked: {e}"))?
+    .map_err(|e| e.to_string())?;
+
+    // The probe verdict is cached in the backend, so rebuild before reporting.
+    let state = app.state::<AppState>();
+    let status = {
+        let mut inner = state.lock()?;
+        if let Ok(service) = inner.service_mut() {
+            service.reload_backends();
+        }
+        colorctl_core::platform::pawnio_status()
+    };
+    Ok(status)
 }

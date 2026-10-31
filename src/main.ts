@@ -7,6 +7,7 @@ import { createSidebar } from "./components/sidebar";
 import { el, qs } from "./dom";
 import type { ScreenId, Settings, SettingsPatch, Snapshot } from "./types";
 import type { Tone } from "./components/ui";
+import { maybeOfferPawnio } from "./pawnio";
 import { maybeOfferUpdate } from "./update";
 import type { View, ViewContext, ViewFactory } from "./view";
 import { createAbout } from "./views/about";
@@ -245,6 +246,9 @@ void boot();
 
 // Offer a newer release once the interface has painted.
 setTimeout(() => void maybeOfferUpdate(), 2500);
+
+// Fan control needs a driver on Windows; offer it once the window is settled.
+setTimeout(() => void maybeOfferPawnio(context), 1200);
 
 // Surface unexpected failures instead of leaving a blank window.
 window.addEventListener("error", (event) => {

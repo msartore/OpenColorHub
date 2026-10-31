@@ -61,6 +61,65 @@ struct Api {
 unsafe impl Send for Api {}
 unsafe impl Sync for Api {}
 
+/// What this process can do with PawnIO right now.
+///
+/// The UI needs the difference between "not installed" (offer the installer) and
+/// "installed but not elevated" (offer a restart), so the failure is typed
+/// rather than a formatted string.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum Status {
+    Ready { version: String },
+    NotInstalled { detail: String },
+    Denied { detail: String },
+    Failed { detail: String },
+}
+
+/// Probes the driver without keeping it open.
+pub fn status() -> Status {
+    let api = match api() {
+        Ok(api) => api,
+        Err(error) => {
+            return Status::NotInstalled {
+                detail: error.to_string(),
+            };
+        }
+    };
+
+    let mut packed = 0u32;
+    // SAFETY: valid out-pointer.
+    let version_hr = unsafe { (api.version)(&mut packed) };
+
+    let mut handle: HANDLE = std::ptr::null_mut();
+    // SAFETY: valid out-pointer; closed below when it succeeds.
+    let hr = unsafe { (api.open)(&mut handle) };
+    if hr < 0 || handle.is_null() {
+        return if (hr as u32) == E_ACCESSDENIED {
+            Status::Denied {
+                detail: describe(hr),
+            }
+        } else {
+            Status::Failed {
+                detail: describe(hr),
+            }
+        };
+    }
+    // SAFETY: the handle came from pawnio_open and is not used afterwards.
+    unsafe { (api.close)(handle) };
+
+    let version = if version_hr >= 0 {
+        format!(
+            "{}.{}.{}",
+            packed >> 16,
+            (packed >> 8) & 0xFF,
+            packed & 0xFF
+        )
+    } else {
+        "unknown".to_string()
+    };
+    Status::Ready { version }
+}
+
 /// Loads `PawnIOLib.dll` once per process.
 fn api() -> Result<&'static Api> {
     use std::sync::OnceLock;

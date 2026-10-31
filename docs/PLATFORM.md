@@ -20,8 +20,15 @@ discovered BARs, and which never exposes physical memory.
 OpenColorHub talks to it through `PawnIOLib.dll`, with the LpcIO module embedded
 and passed to the driver at runtime.
 
-**PawnIO is not bundled.** Install it separately — the LibreHardwareMonitor
-installer ships it. Without it the app falls back, in order:
+**PawnIO is not bundled.** The app offers to install it instead: a dialog on
+launch, and a callout on the Fan control screen, fetch `PawnIO_setup.exe` from
+the project's own GitHub release (currently 2.2.0), verify it against a pinned
+SHA-256, and run it so its installer UI and UAC prompt are what you see. A hash
+mismatch deletes the download and refuses to run it. When the driver is present
+but the process is not elevated, the prompt offers *Restart as administrator*
+instead of a pointless install.
+
+Without it the app falls back, in order:
 
 1. **PawnIO** — real RPM, real board temperature, real manual duty. Requires the
    driver installed and the app elevated.

@@ -246,3 +246,16 @@ export interface SetupList {
   setups: Setup[];
   warning: string | null;
 }
+
+/** Whether fan control can reach PawnIO's driver. */
+export type PawnioStatus =
+  | { state: "ready"; version: string }
+  | { state: "not_installed"; detail: string }
+  | { state: "denied"; detail: string }
+  | { state: "failed"; detail: string }
+  | { state: "unsupported" };
+
+export interface PawnioProgress {
+  received: number;
+  total: number | null;
+}

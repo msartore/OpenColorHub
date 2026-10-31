@@ -287,3 +287,41 @@ mod tests {
         assert_eq!(is_elevated(), is_elevated());
     }
 }
+
+/// PawnIO availability, as the UI needs to see it.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum PawnioStatus {
+    Ready {
+        version: String,
+    },
+    NotInstalled {
+        detail: String,
+    },
+    Denied {
+        detail: String,
+    },
+    Failed {
+        detail: String,
+    },
+    /// Platform where PawnIO does not apply (Linux uses /dev/port).
+    Unsupported,
+}
+
+pub fn pawnio_status() -> PawnioStatus {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::backend::windows::pawnio;
+        match pawnio::status() {
+            pawnio::Status::Ready { version } => PawnioStatus::Ready { version },
+            pawnio::Status::NotInstalled { detail } => PawnioStatus::NotInstalled { detail },
+            pawnio::Status::Denied { detail } => PawnioStatus::Denied { detail },
+            pawnio::Status::Failed { detail } => PawnioStatus::Failed { detail },
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        PawnioStatus::Unsupported
+    }
+}

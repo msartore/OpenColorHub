@@ -22,6 +22,8 @@ import type {
   DownloadedFile,
   DriverProgress,
   SetupList,
+  PawnioStatus,
+  PawnioProgress,
   Snapshot,
   ActivityEntry,
 } from "./types";
@@ -78,6 +80,9 @@ export const api = {
     call<DownloadedFile>("download_driver", { file }),
   revealDriver: (path: string) => call<void>("reveal_driver", { path }),
 
+  pawnioStatus: () => call<PawnioStatus>("pawnio_status"),
+  installPawnio: () => call<PawnioStatus>("install_pawnio"),
+
   setups: () => call<SetupList>("list_setups"),
   saveSetup: (name: string, id?: string) =>
     call<SetupList>("save_setup", { name, id: id ?? null }),
@@ -90,6 +95,14 @@ export const api = {
 export async function onBackendReady(cb: () => void): Promise<() => void> {
   if (demo) return () => {};
   return listen("backend://ready", () => cb());
+}
+
+/** Subscribes to the PawnIO installer download. */
+export async function onPawnioProgress(
+  cb: (progress: PawnioProgress) => void,
+): Promise<() => void> {
+  if (demo) return () => {};
+  return listen<PawnioProgress>("pawnio://progress", (event) => cb(event.payload));
 }
 
 /** Subscribes to download progress; resolves once the listener is installed. */

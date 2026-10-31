@@ -27,8 +27,11 @@ losing its lighting state.
 | **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO without it | ✅ SetupAPI + `hid.dll`, no driver |
 
 Windows needs a signed driver to broker `IN`/`OUT`; PawnIO is **not bundled**,
-and without it the app falls back to HWiNFO telemetry and then the simulator.
-Both are labelled, never disguised. → [Platform notes](docs/PLATFORM.md)
+but the app offers to install it: on launch (and from the Fan control screen) it
+fetches PawnIO's own installer from the project's releases, checks it against a
+pinned SHA-256 and runs it so its UI and UAC prompt appear. Nothing is installed
+silently. Without the driver the app falls back to HWiNFO telemetry and then the
+simulator, both labelled. → [Platform notes](docs/PLATFORM.md)
 
 ## Screenshots
 

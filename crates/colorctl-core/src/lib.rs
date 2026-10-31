@@ -23,6 +23,7 @@ pub mod curve;
 pub mod drivers;
 pub mod error;
 pub mod model;
+pub mod pawnio_install;
 pub mod platform;
 pub mod service;
 pub mod settings;
@@ -39,7 +40,7 @@ pub use model::{
     Capabilities, Channel, ChannelConfig, ChannelStatus, DeviceInfo, FAN_HEADERS, FanHeader,
     FanMode, FanSample, FanStatus, Snapshot, Telemetry,
 };
-pub use platform::Elevation;
+pub use platform::{Elevation, PawnioStatus};
 pub use service::Service;
 pub use settings::{BackendMode, Settings, SettingsPatch, TempUnit};
 pub use setups::{ChannelSetting, FanSetting, Setup, SetupStore};

@@ -8,6 +8,7 @@ import type { CurvePoint, FanHeaderId, FanStatus, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
 import { curveEditor, type CurveEditor } from "../components/charts";
 import { button, cardHead, panel, slider, type Slider } from "../components/ui";
+import { showPawnioDialog } from "../pawnio";
 
 const HEADERS: { id: FanHeaderId; label: string; description: string; floor: number }[] = [
   { id: "cpu", label: "CPU_FAN", description: "CPU cooler / AIO radiator", floor: 0 },
@@ -41,6 +42,8 @@ interface FanCard {
 export function createFans(ctx: ViewContext): View {
   const cards = new Map<FanHeaderId, FanCard>();
   const warningSlot = el("div", { class: "fans-warning" });
+  // Kept apart from `warningSlot`: update() rewrites that one on every tick.
+  const pawnioSlot = el("div", { class: "fans-pawnio" });
   const grid = el("div", { class: "fan-grid" });
 
   const makeCard = (meta: (typeof HEADERS)[number]): FanCard => {
@@ -206,6 +209,7 @@ export function createFans(ctx: ViewContext): View {
       ),
     ),
     warningSlot,
+    pawnioSlot,
     panel({
       title: "Curve presets",
       subtitle: "Quiet, standard or full tilt",
@@ -282,6 +286,36 @@ export function createFans(ctx: ViewContext): View {
 
     for (const fan of snapshot.fans) applyFan(fan, snapshot);
   };
+
+  // PawnIO missing (or blocked by UAC) is the one reason fan control reads
+  // simulated values on a supported board, so offer the fix where it matters.
+  void api
+    .pawnioStatus()
+    .then((status) => {
+      if (status.state !== "not_installed" && status.state !== "denied") return;
+      const action = button(status.state === "denied" ? "Restart as administrator" : "Install PawnIO", {
+        variant: "primary",
+        size: "sm",
+        onClick: () => showPawnioDialog(ctx, status),
+      });
+      pawnioSlot.append(
+        el(
+          "div",
+          { class: "note note--warn pawnio-callout" },
+          el(
+            "span",
+            {},
+            status.state === "denied"
+              ? "Fan readings need administrator rights — PawnIO is installed but this process cannot open it."
+              : "Fan readings are simulated: PawnIO is not installed.",
+          ),
+          action,
+        ),
+      );
+    })
+    .catch(() => {
+      /* the probe must not break the screen */
+    });
 
   const initial = ctx.snapshot();
   if (initial) update(initial);
