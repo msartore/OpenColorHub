@@ -34,8 +34,11 @@ export function createLeds(ctx: ViewContext): View {
   const globalColor = el("input", { class: "color-input", type: "color", value: "#22d3ee" });
   const globalBright = slider({ min: 0, max: 100, value: 80, suffix: "%", label: "Brightness" });
   const globalHex = el("span", { class: "color-hex" }, "#22D3EE");
+  /** Set once the user picks a colour, so snapshots stop overwriting the field. */
+  let pickerTouched = false;
 
   globalColor.addEventListener("input", () => {
+    pickerTouched = true;
     globalHex.textContent = globalColor.value.toUpperCase();
   });
 
@@ -92,6 +95,7 @@ export function createLeds(ctx: ViewContext): View {
           title: preset.label,
           style: { "--swatch": preset.hex },
           onclick: () => {
+            pickerTouched = true;
             globalColor.value = preset.hex;
             globalHex.textContent = preset.hex.toUpperCase();
           },
@@ -253,6 +257,21 @@ export function createLeds(ctx: ViewContext): View {
 
   const update = (snapshot: Snapshot) => {
     strip.update(snapshot.channels);
+
+    // Until the user picks a colour, the global field shows what the controller
+    // is actually running. Leaving it on a hard-coded cyan made the screen
+    // disagree with every channel card after navigating back to it.
+    if (!pickerTouched) {
+      const source = snapshot.channels.find((channel) => channel.enabled) ?? snapshot.channels[0];
+      if (source) {
+        globalColor.value = source.hex.toLowerCase();
+        globalHex.textContent = source.hex.toUpperCase();
+        if (document.activeElement !== globalBright.el.querySelector("input")) {
+          globalBright.setValue(source.brightness);
+        }
+      }
+    }
+
     for (const channel of snapshot.channels) {
       if (!cards.has(channel.id)) {
         const card = makeCard(channel.id, channel.label, channel.name, channel.description, channel.leds);
