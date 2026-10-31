@@ -14,7 +14,8 @@
 //! Every source funnels into [`classify`], which is pure and unit-tested.
 
 use std::path::Path;
-#[cfg(target_os = "windows")]
+// Used by the Windows registry reader, which is compiled on every platform so
+// its parser stays testable — hence no cfg gate here.
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
