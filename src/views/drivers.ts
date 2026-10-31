@@ -4,7 +4,8 @@ import { api, onDriverProgress } from "../api";
 import { el } from "../dom";
 import type { DriverList, DriverProgress, DriverRow, DownloadedFile, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
-import { badge, button, emptyState, inlineNote, panel } from "../components/ui";
+import { badge, button, inlineNote, panel } from "../components/ui";
+import { stateView } from "../components/state";
 
 const KIND_LABELS: Record<DriverRow["kind"], string> = {
   bios: "Firmware",
@@ -274,12 +275,15 @@ export function createDrivers(ctx: ViewContext): View {
     if (error) {
       status.textContent = "";
       body.append(
-        inlineNote(`Could not read the vendor catalogue: ${error}`, "danger"),
-        el(
-          "div",
-          { class: "drivers-empty" },
-          emptyState("No catalogue", "Check your connection and try Refresh."),
-        ),
+        stateView({
+          kind: "error",
+          icon: "offline",
+          title: "Could not reach Colorful",
+          description:
+            "The download catalogue lives on colorfulgroup.com. Without it there is nothing to list for this board.",
+          detail: error,
+          actions: [{ label: "Try again", variant: "primary", onClick: () => void load(true) }],
+        }),
       );
       return;
     }
@@ -327,7 +331,15 @@ export function createDrivers(ctx: ViewContext): View {
       if (node) body.append(node);
     }
     if (files.length === 0) {
-      body.append(emptyState("Nothing published", "The vendor lists no files for this board."));
+      body.append(
+        stateView({
+          kind: "empty",
+          icon: "inbox",
+          title: "Nothing published for this board",
+          description:
+            "The vendor's catalogue lists no BIOS, driver or manual for this model. That is what Colorful publishes, not a failed lookup.",
+        }),
+      );
     }
   }
 

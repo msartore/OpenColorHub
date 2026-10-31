@@ -118,6 +118,8 @@ export interface Snapshot {
   led_device: DeviceInfo;
   capabilities: Capabilities;
   avg_percent: number;
+  /** Why the last telemetry read failed, when it did. */
+  read_error: string | null;
   board: BoardInfo;
 }
 

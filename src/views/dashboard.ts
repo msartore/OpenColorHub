@@ -10,6 +10,7 @@ import type { ElevationState, FanHeaderId, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
 import { ledStrip, sparkline, temperatureGauge } from "../components/charts";
 import { button, panel, pill, statTile } from "../components/ui";
+import { stateSlot } from "../components/state";
 
 /** Samples kept for the history chart; at the default 1 s poll that is two minutes. */
 const HISTORY = 120;
@@ -35,6 +36,8 @@ export function createDashboard(ctx: ViewContext): View {
   const fastest = el("p", { class: "panel-foot mono" }, "fastest —");
 
   const fanList = el("ul", { class: "fan-mini" });
+  const fanPanelState = stateSlot();
+  const lightPanelState = stateSlot();
   const fanRows = new Map<
     FanHeaderId,
     { root: HTMLElement; rpm: HTMLElement; pct: HTMLElement; fill: HTMLElement; mode: HTMLElement }
@@ -141,13 +144,13 @@ export function createDashboard(ctx: ViewContext): View {
         actions: [
           button("Open fan control", { variant: "quiet", size: "sm", onClick: () => ctx.navigate("fans") }),
         ],
-        body: [fanList, fastest],
+        body: [fanList, fastest, fanPanelState.el],
       }),
       panel({
         className: "area-light",
         title: "Lighting",
         actions: [button("Edit lighting", { variant: "quiet", size: "sm", onClick: () => ctx.navigate("leds") })],
-        body: [strip.el, lightNote, channelTable],
+        body: [strip.el, lightNote, channelTable, lightPanelState.el],
       }),
       panel({
         className: "area-system",
@@ -262,6 +265,44 @@ export function createDashboard(ctx: ViewContext): View {
 
     const present = snapshot.fans.filter((fan) => fan.detected);
     const idle = present.filter((fan) => fan.rpm === 0).length;
+
+    if (present.length === 0) {
+      fanList.hidden = true;
+      fastest.hidden = true;
+      fanPanelState.show({
+        kind: snapshot.read_error ? "error" : "empty",
+        icon: snapshot.read_error ? "alert" : "fans",
+        title: snapshot.read_error ? "No readings" : "No fans detected",
+        description: snapshot.read_error
+          ? "The Super I/O did not answer this tick."
+          : "No header is reporting a speed.",
+        detail: snapshot.read_error,
+        compact: true,
+      });
+    } else {
+      fanList.hidden = false;
+      fastest.hidden = false;
+      fanPanelState.clear();
+    }
+
+    if (snapshot.channels.length === 0) {
+      channelTable.hidden = true;
+      strip.el.hidden = true;
+      lightPanelState.show({
+        kind: snapshot.led_device.available ? "empty" : "error",
+        icon: snapshot.led_device.available ? "leds" : "plug-off",
+        title: snapshot.led_device.available ? "No channels" : "Controller unavailable",
+        description: snapshot.led_device.available
+          ? "The controller reported no lighting channels."
+          : "The USB HID controller did not answer.",
+        detail: snapshot.led_device.error,
+        compact: true,
+      });
+    } else {
+      channelTable.hidden = false;
+      strip.el.hidden = false;
+      lightPanelState.clear();
+    }
     const totalRpm = present.reduce((sum, fan) => sum + fan.rpm, 0);
     dutyTile.set(
       String(snapshot.avg_percent),

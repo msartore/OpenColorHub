@@ -1,8 +1,8 @@
 /**
  * Navigation glyphs, taken verbatim from Tabler Icons (MIT).
  *
- * Path data is inlined rather than pulled from `@tabler/icons`: six icons are
- * needed, the package ships ~5,900, and these paths never change without an
+ * Path data is inlined rather than pulled from `@tabler/icons`: a dozen glyphs
+ * are needed, the package ships ~5,900, and these paths never change without an
  * explicit edit here. Tabler's outline set uses a 24×24 box, 2 px stroke and
  * round joins, which is what `icon()` renders.
  *
@@ -13,7 +13,16 @@
 import type { ScreenId } from "../types";
 import { svg } from "../dom";
 
-const PATHS: Record<ScreenId, string[]> = {
+/** Navigation screens plus the glyphs the empty/error states need. */
+export type IconName =
+  | ScreenId
+  | "alert"
+  | "inbox"
+  | "plug-off"
+  | "file-off"
+  | "offline";
+
+const PATHS: Record<IconName, string[]> = {
   // layout-dashboard
   dashboard: [
     "M5 4h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1",
@@ -51,10 +60,37 @@ const PATHS: Record<ScreenId, string[]> = {
     "M12 9h.01",
     "M11 12h1v4h1",
   ],
+  // alert-triangle
+  alert: [
+    "M12 9v4",
+    "M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0",
+    "M12 16h.01",
+  ],
+  // inbox
+  inbox: [
+    "M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12",
+    "M4 13h3l3 3h4l3 -3h3",
+  ],
+  // plug-off
+  "plug-off": [
+    "M16.123 16.092l-.177 .177a5.81 5.81 0 1 1 -8.215 -8.215l.159 -.159",
+    "M4 20l3.5 -3.5",
+    "M15 4l-3.5 3.5",
+    "M20 9l-3.5 3.5",
+  ],
+  // file-off
+  "file-off": ["M3 3l18 18", "M7 3h7l5 5v7m0 4a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-14"],
+  // wifi-off
+  offline: [
+    "M12 18l.01 0",
+    "M9.172 15.172a4 4 0 0 1 5.656 0",
+    "M6.343 12.343a7.963 7.963 0 0 1 3.864 -2.14m4.163 .155a7.965 7.965 0 0 1 3.287 2",
+    "M3.515 9.515a12 12 0 0 1 3.544 -2.455m3.101 -.92a12 12 0 0 1 10.325 3.374",
+  ],
 };
 
 /** Builds one Tabler glyph, sized by CSS. */
-export function icon(name: ScreenId, className = "nav-icon"): SVGSVGElement {
+export function icon(name: IconName, className = "nav-icon"): SVGSVGElement {
   const node = svg("svg", {
     class: className,
     viewBox: "0 0 24 24",

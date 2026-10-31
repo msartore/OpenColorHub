@@ -273,6 +273,7 @@ export function createDemoBackend(): DemoBackend {
         ],
       },
       avg_percent: Math.round(fans.reduce((sum, f) => sum + f.percent, 0) / fans.length),
+      read_error: null,
       board: DEMO_BOARD,
     };
   };

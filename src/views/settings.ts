@@ -18,6 +18,7 @@ import {
   toggle,
   type Slider,
 } from "../components/ui";
+import { stateView } from "../components/state";
 
 const BACKEND_COPY: Record<BackendMode, { label: string; blurb: string }> = {
   auto: {
@@ -87,7 +88,18 @@ export function createSettings(ctx: ViewContext): View {
   void api
     .elevation()
     .then(renderElevation)
-    .catch((err) => elevationBody.replaceChildren(inlineNote(String(err), "danger")));
+    .catch((err) =>
+      elevationBody.replaceChildren(
+        stateView({
+          kind: "error",
+          icon: "alert",
+          title: "Could not read the elevation state",
+          description: "The app cannot tell whether it is running as administrator.",
+          detail: String(err),
+          compact: true,
+        }),
+      ),
+    );
 
   const backendBlurb = el("p", { class: "field-help" }, BACKEND_COPY[draft.backend].blurb);
   const backendState = el("div", { class: "backend-state" });

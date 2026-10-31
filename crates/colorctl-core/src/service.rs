@@ -330,6 +330,7 @@ impl Service {
             led_device: self.led_info(),
             capabilities: self.capabilities.clone(),
             avg_percent,
+            read_error: self.last_read_error.clone(),
             board: self.board.clone(),
         }
     }

@@ -6,6 +6,7 @@ import type { ChannelStatus, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
 import { ledStrip } from "../components/charts";
 import { setupsPanel } from "../components/setups-panel";
+import { stateSlot } from "../components/state";
 import { button, cardHead, panel, pill, slider, type Slider } from "../components/ui";
 
 interface ChannelCard {
@@ -108,6 +109,7 @@ export function createLeds(ctx: ViewContext): View {
   );
 
   const grid = el("div", { class: "channel-grid" });
+  const ledState = stateSlot();
 
   const makeCard = (id: string, label: string, name: string, description: string, leds: number): ChannelCard => {
     const colorInput = el("input", { class: "color-input", type: "color", value: "#22d3ee" });
@@ -233,6 +235,7 @@ export function createLeds(ctx: ViewContext): View {
       body: [strip.el],
     }),
     grid,
+    ledState.el,
   );
 
   const syncCard = (channel: ChannelStatus) => {
@@ -258,6 +261,33 @@ export function createLeds(ctx: ViewContext): View {
   };
 
   const update = (snapshot: Snapshot) => {
+    const device = snapshot.led_device;
+    if (!device.available || snapshot.channels.length === 0) {
+      grid.hidden = true;
+      ledState.show(
+        device.available
+          ? {
+              kind: "empty",
+              icon: "leds",
+              title: "No lighting channels",
+              description:
+                "The controller reported no addressable channels. On this board six are expected; check that the RGB header is connected.",
+            }
+          : {
+              kind: "error",
+              icon: "plug-off",
+              title: "Lighting controller not reachable",
+              description:
+                "The USB HID controller did not answer, so colours and brightness cannot be written. Replug the header, then try again.",
+              detail: device.error ?? device.detail,
+              actions: [{ label: "Try again", onClick: () => void ctx.refresh() }],
+            },
+      );
+      return;
+    }
+    grid.hidden = false;
+    ledState.clear();
+
     strip.update(snapshot.channels);
 
     // Until the user picks a colour, the global field shows what the controller

@@ -284,3 +284,19 @@ worked, which is the only reliable behaviour across kernels.
   cannot be automated), then driven over CDP; the resulting `sim-fan.json`,
   `rgb.state` and `settings.json` are inspected to prove the Rust side really
   wrote them.
+
+## Empty and error states
+
+Every screen can end up with nothing to show or with a failed read, and a blank
+panel cannot tell those apart. `src/components/state.ts` renders both in one
+shape — a large Tabler glyph, a title, a sentence saying what happened, optional
+technical detail in mono, and an action when retrying makes sense.
+
+- `state--empty` is neutral: no fans reporting a tach, no lighting channels, no
+  catalogue entries, a board SMBIOS could not identify.
+- `state--error` turns the glyph red and carries the backend's own message
+  (`snapshot.read_error`, `led_device.error`, the fetch error) rather than a
+  paraphrase, so the detail line is always something a bug report can quote.
+- `stateSlot()` wraps the pattern used by Fan control, Lighting and the
+  Dashboard: hide the real content, show the state in its place, clear it when
+  data returns.

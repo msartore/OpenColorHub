@@ -5,7 +5,8 @@ import { el } from "../dom";
 import logoUrl from "../assets/logo.png";
 import type { AboutInfo, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
-import { badge, inlineNote, kv, panel } from "../components/ui";
+import { badge, kv, panel } from "../components/ui";
+import { stateView } from "../components/state";
 
 function boardBadge(board: AboutInfo["board"]): HTMLElement {
   const tone = board.confidence === "verified"
@@ -83,29 +84,44 @@ export function createAbout(_ctx: ViewContext): View {
           title: "Detected motherboard",
           subtitle: "Read from SMBIOS at startup — this is what the hardware guard checks",
           actions: [boardBadge(about.board)],
-          body: [
-            el(
-              "div",
-              { class: "detected-grid" },
-              el(
-                "div",
-                { class: "kv-list" },
-                kv("vendor", about.board.identity?.vendor || "—"),
-                kv("model", about.board.identity?.name || "—"),
-                kv("revision", about.board.identity?.version || "—"),
-                kv("system", about.board.identity?.system_product || "—"),
-              ),
-              el(
-                "div",
-                { class: "kv-list" },
-                kv("bios", `${about.board.identity?.bios_vendor ?? ""} ${about.board.identity?.bios_version ?? ""}`.trim() || "—"),
-                kv("detected via", about.board.source),
-                kv("series", about.board.series ?? (about.board.family ?? "—")),
-                kv("catalogue", about.board.matched ? `${about.board.matched}` : `${about.board.catalog_size} verified boards`),
-              ),
-            ),
-            el("ul", { class: "bullet-list" }, ...about.board.notes.map((note) => el("li", {}, note))),
-          ],
+          body: about.board.identity
+            ? [
+                el(
+                  "div",
+                  { class: "detected-grid" },
+                  el(
+                    "div",
+                    { class: "kv-list" },
+                    kv("vendor", about.board.identity.vendor),
+                    kv("model", about.board.identity.name || "—"),
+                    kv("revision", about.board.identity.version || "—"),
+                    kv("system", about.board.identity.system_product || "—"),
+                  ),
+                  el(
+                    "div",
+                    { class: "kv-list" },
+                    kv(
+                      "bios",
+                      `${about.board.identity.bios_vendor ?? ""} ${about.board.identity.bios_version ?? ""}`.trim() || "—",
+                    ),
+                    kv("detected via", about.board.source),
+                    kv("series", about.board.series ?? about.board.family ?? "—"),
+                    kv("catalogue", about.board.matched ? `${about.board.matched}` : `${about.board.catalog_size} verified boards`),
+                  ),
+                ),
+                el("ul", { class: "bullet-list" }, ...about.board.notes.map((note) => el("li", {}, note))),
+              ]
+            : [
+                stateView({
+                  kind: "empty",
+                  icon: "about",
+                  title: "Board not identified",
+                  description:
+                    "SMBIOS did not report a motherboard model, so the hardware guard cannot match this machine to the verified catalogue. RGB and fans may still work; the app just cannot vouch for it.",
+                  detail: `detected via ${about.board.source}`,
+                  compact: true,
+                }),
+              ],
         }),
       ),
     );
@@ -127,9 +143,14 @@ export function createAbout(_ctx: ViewContext): View {
     })
     .catch((error: unknown) => {
       detail.replaceChildren(
-        panel({
-          title: "About unavailable",
-          body: [inlineNote(`Could not read build metadata: ${String(error)}`, "danger")],
+        stateView({
+          kind: "error",
+          icon: "alert",
+          title: "About this build is unavailable",
+          description:
+            "The build metadata could not be read, so the version, paths and licence are unknown for this install.",
+          detail: String(error),
+          actions: [{ label: "Try again", onClick: () => location.reload() }],
         }),
       );
     });

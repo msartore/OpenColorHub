@@ -512,6 +512,9 @@ pub struct Snapshot {
     pub capabilities: Capabilities,
     /// Average fan duty, used by the dashboard summary.
     pub avg_percent: u8,
+    /// Why the last telemetry read failed, when it did. Absent on success.
+    #[serde(default)]
+    pub read_error: Option<String>,
     /// SMBIOS identity of the host board and how well it matches the catalogue.
     pub board: BoardInfo,
 }
@@ -525,6 +528,7 @@ impl Snapshot {
             channels: Vec::new(),
             fan_device: DeviceInfo::unavailable("No fan backend", "none", "not initialised"),
             led_device: DeviceInfo::unavailable("No LED backend", "none", "not initialised"),
+            read_error: None,
             capabilities: Capabilities {
                 fan_control: false,
                 led_control: false,

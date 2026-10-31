@@ -10,6 +10,7 @@ import { curveEditor, type CurveEditor } from "../components/charts";
 import { button, cardHead, panel, slider, type Slider } from "../components/ui";
 import { showPawnioDialog } from "../pawnio";
 import { setupsPanel } from "../components/setups-panel";
+import { stateSlot } from "../components/state";
 
 const HEADERS: { id: FanHeaderId; label: string; description: string; floor: number }[] = [
   { id: "cpu", label: "CPU_FAN", description: "CPU cooler / AIO radiator", floor: 0 },
@@ -49,6 +50,7 @@ export function createFans(ctx: ViewContext): View {
   // Headers nothing is plugged into are hidden rather than shown as five empty
   // cards; this line accounts for them.
   const fanNote = el("p", { class: "fans-note" });
+  const fanState = stateSlot();
 
   const makeCard = (meta: (typeof HEADERS)[number]): FanCard => {
     const rpm = el("span", { class: "readout-value mono" }, "0");
@@ -222,6 +224,7 @@ export function createFans(ctx: ViewContext): View {
       body: [presetRow],
     }),
     grid,
+    fanState.el,
   );
 
   const applyFan = (fan: FanStatus, snapshot: Snapshot) => {
@@ -260,11 +263,28 @@ export function createFans(ctx: ViewContext): View {
     const absent = snapshot.fans.length - present.length;
 
     if (present.length === 0) {
-      fanNote.textContent = "No fans detected — no header is reporting a speed.";
+      fanNote.textContent = "";
+      grid.hidden = true;
+      fanState.show({
+        kind: snapshot.read_error ? "error" : "empty",
+        icon: snapshot.read_error ? "alert" : "fans",
+        title: snapshot.read_error ? "Fan readings failed" : "No fans detected",
+        description: snapshot.read_error
+          ? "The board's Super I/O did not answer, so speeds, duty and curves cannot be read or written."
+          : "No header is reporting a speed. With PawnIO installed this board normally exposes five; check that the fans are seated on the headers.",
+        detail: snapshot.read_error,
+        actions: snapshot.read_error
+          ? [{ label: "Try again", onClick: () => void ctx.refresh() }]
+          : [],
+      });
     } else if (absent > 0) {
+      grid.hidden = false;
+      fanState.clear();
       fanNote.textContent = `No more fans detected — ${present.length} of ${snapshot.fans.length} headers are in use.`;
     } else {
       fanNote.textContent = "";
+      grid.hidden = false;
+      fanState.clear();
     }
 
     const lowDuty = present.filter(
