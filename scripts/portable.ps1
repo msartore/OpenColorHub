@@ -14,8 +14,8 @@ if (-not (Test-Path $exe)) {
   throw "release binary not found at $exe - run 'npx tauri build' first"
 }
 
-# Default the version to the executable's own FileVersion. A hardcoded default
-# here once shipped a zip named 0.2.0 that contained the 0.3.0 binary.
+# Default the version to the executable's own FileVersion, so the package name
+# always matches the binary it contains.
 if (-not $Version) {
   $Version = (Get-Item $exe).VersionInfo.FileVersion
   if (-not $Version) { throw "cannot read a version from $exe" }

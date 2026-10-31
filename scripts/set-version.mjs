@@ -65,10 +65,9 @@ function edit(path, re, label) {
 edit("src-tauri/tauri.conf.json", /"version":\s*"([^"]+)"/, "version");
 edit("package.json", /"version":\s*"([^"]+)"/, "version");
 
-// package-lock.json is parsed rather than pattern-matched. Rewriting it with a
-// global "version" regex once set 79 dependency entries to the project version,
-// and the only symptom was `npm ci` refusing the lock outright. Exactly two
-// fields describe this package: the top-level version and packages[""].
+// package-lock.json is parsed rather than pattern-matched: only two fields
+// describe this package (the top-level version and packages[""]). Every other
+// "version" in the lock belongs to a dependency.
 {
   const path = "package-lock.json";
   const lock = JSON.parse(readFileSync(path, "utf8"));

@@ -53,12 +53,10 @@ try {
     }
     if ($LASTEXITCODE -ne 0) { throw "tauri build failed ($LASTEXITCODE)" }
 
-    # A "successful" run must actually have produced an executable newer than the
-    # code it claims to contain. A plain mtime-vs-build-start check would fail
-    # whenever cargo legitimately skipped relinking, so compare against the
-    # newest input instead. Without this, a failed or racing build leaves the
-    # previous binary in place and a separate packaging step ships it - which is
-    # how a zip once ended up containing a pre-tray executable.
+    # The executable must be newer than every input it claims to contain;
+    # otherwise a build that did not relink leaves the previous binary to be
+    # packaged. Comparing against the newest source rather than against the
+    # build start time keeps this correct when cargo legitimately skips work.
     $exe = Join-Path $repo "target\release\opencolorhub.exe"
     if (-not (Test-Path $exe)) { throw "no executable at $exe" }
     $stamp = (Get-Item $exe).LastWriteTime
