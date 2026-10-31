@@ -29,6 +29,9 @@ export function createDashboard(ctx: ViewContext): View {
   const ledTile = statTile({ label: "LEDs lit", value: "—", hint: "of 200 addressable" });
 
   const gaugeRange = el("p", { class: "gauge-range mono" }, "session —");
+  // The number is only trustworthy if it says where it came from.
+  const gaugeBadge = el("span", { class: "pill pill--warn gauge-badge" }, "simulated");
+  gaugeBadge.hidden = true;
   const fastest = el("p", { class: "panel-foot mono" }, "fastest —");
 
   const fanList = el("ul", { class: "fan-mini" });
@@ -120,6 +123,7 @@ export function createDashboard(ctx: ViewContext): View {
       panel({
         className: "area-gauge",
         title: "Motherboard temperature",
+        actions: [gaugeBadge],
         body: [gauge.el, gaugeRange, spark.el, sparkLegend],
       }),
       el(
@@ -228,6 +232,15 @@ export function createDashboard(ctx: ViewContext): View {
   const update = (snapshot: Snapshot) => {
     gauge.update(snapshot.temperature_c, ctx.settings().temp_unit);
 
+    const simulated = snapshot.fan_device.simulated;
+    gaugeBadge.hidden = !simulated;
+    // The backend already explains why it degraded; quote it rather than
+    // inventing a reason the app cannot know.
+    const why = snapshot.capabilities.notes.find((note) => /PawnIO|HWiNFO|telemetry/i.test(note));
+    gaugeBadge.title = simulated
+      ? why ?? "Synthetic value: no sensor is being read."
+      : "Read from the board's Super I/O chip.";
+
     if (snapshot.temperature_c !== null) {
       history.push(snapshot.temperature_c);
       if (history.length > HISTORY) history.shift();
@@ -236,7 +249,7 @@ export function createDashboard(ctx: ViewContext): View {
       const low = Math.min(...history);
       const high = Math.max(...history);
       const mean = history.reduce((sum, value) => sum + value, 0) / history.length;
-      gaugeRange.textContent = `session ${tempText(low)} · ${tempText(mean)} · ${tempText(high)}`;
+      gaugeRange.textContent = `session min ${tempText(low)} · mean ${tempText(mean)} · max ${tempText(high)}`;
       spark.update(history);
       sparkLegend.replaceChildren(
         el("span", { class: "spark-now mono" }, `now ${tempText(history[history.length - 1])}`),
