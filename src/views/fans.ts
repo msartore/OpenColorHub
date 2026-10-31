@@ -9,7 +9,7 @@ import type { View, ViewContext } from "../view";
 import { curveEditor, type CurveEditor } from "../components/charts";
 import { button, cardHead, panel, slider, type Slider } from "../components/ui";
 import { showPawnioDialog } from "../pawnio";
-import { setupsPanel } from "../components/setups-panel";
+import { presetsButton } from "../components/setups-panel";
 import { stateSlot } from "../components/state";
 
 const HEADERS: { id: FanHeaderId; label: string; description: string; floor: number }[] = [
@@ -214,10 +214,10 @@ export function createFans(ctx: ViewContext): View {
         el("h1", { class: "screen-title" }, "Fan control"),
         fanNote,
       ),
+      el("div", { class: "screen-actions" }, presetsButton(ctx, { kind: "fans" }).el),
     ),
     warningSlot,
     pawnioSlot,
-    setupsPanel(ctx, { kind: "fans" }).el,
     panel({
       title: "Curve presets",
       subtitle: "Quiet, standard or full tilt",

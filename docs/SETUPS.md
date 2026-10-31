@@ -1,8 +1,9 @@
 # Presets
 
 A **preset** is a saved half of the machine you can restore in one click. Fan
-presets live on the **Fan control** screen and lighting presets on the
-**Lighting** screen, each above that screen's controls.
+presets and lighting presets live behind the **save icon** in the header of the
+**Fan control** and **Lighting** screens: the icon opens a dialog with the list,
+the actions and the save form, so the screen itself stays about the controls.
 
 The split is deliberate: a fan preset never writes lighting and a lighting
 preset never writes fans, so recalling a quiet fan curve at night cannot dim the
@@ -62,10 +63,14 @@ data\setups.json                                    (portable)
 
 ## Actions
 
+The dialog opens from the header icon, closes on Escape, on a click outside the
+card, or on the close `×`. Applying a preset also closes it, because the action is
+finished by then.
+
 | Action | What it does |
 |---|---|
 | **Save fan preset** / **Save lighting preset** | Captures that half as it is running now, under the name you type |
-| **Apply** | Replays that half onto the hardware |
+| **Apply** | Replays that half onto the hardware and closes the dialog |
 | **Update** | Overwrites that preset with what is running now |
 | **Delete** | Two clicks: the first arms it, the second removes it (disarms itself after 4 s) |
 

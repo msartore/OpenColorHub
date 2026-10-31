@@ -1,17 +1,21 @@
 /**
- * Saved presets, embedded where the state lives.
+ * Saved presets, behind a save icon.
  *
- * A preset covers one half — fans or lighting — so the Fan control screen hosts
- * the fan list and the Lighting screen hosts the lighting list. Keeping them
- * apart means recalling a fan curve cannot change the colour, and picking a
- * colour cannot change the fans.
+ * The list was a panel on the screen, which put a save form and a row of
+ * buttons in front of the controls people actually came for. It is now one icon
+ * button in the screen header that opens a dialog: the presets are there when
+ * you want them and gone when you do not.
+ *
+ * A preset covers one half — fans or lighting — so each screen opens its own
+ * list, and applying one writes only that half.
  */
 
 import { api } from "../api";
 import { el } from "../dom";
+import { icon } from "./icons";
+import { button, emptyState, inlineNote } from "./ui";
 import type { Setup, SetupKind, SetupList } from "../types";
 import type { ViewContext } from "../view";
-import { button, emptyState, inlineNote, panel } from "./ui";
 
 const hexOf = (channel: Setup["channels"][number]): string =>
   `#${channel.color.map((part) => part.toString(16).padStart(2, "0")).join("")}`;
@@ -39,102 +43,146 @@ function stamp(ms: number): string {
   });
 }
 
-export interface SetupsPanelOptions {
-  /** Which half this panel saves and applies. */
+export interface PresetsButtonOptions {
+  /** Which half this screen saves and applies. */
   kind: SetupKind;
 }
 
-/** Builds the panel; the caller appends `el` to its screen. */
-export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el: HTMLElement } {
-  const root = el("div", { class: "setups-embed" });
-  const body = el("div", { class: "setups-body" });
-  const notes = el("div", { class: "setups-notes" });
+/** Builds the header icon button; clicking it opens the presets dialog. */
+export function presetsButton(ctx: ViewContext, options: PresetsButtonOptions): { el: HTMLButtonElement } {
+  const trigger = el(
+    "button",
+    {
+      class: "icon-btn",
+      type: "button",
+      title: options.kind === "fans" ? "Fan presets" : "Lighting presets",
+      "aria-label": options.kind === "fans" ? "Fan presets" : "Lighting presets",
+    },
+    icon("save", "icon-btn-glyph"),
+  ) as HTMLButtonElement;
 
+  trigger.addEventListener("click", () => openDialog(ctx, options.kind));
+  return { el: trigger };
+}
+
+function openDialog(ctx: ViewContext, kind: SetupKind): void {
+  const noun = kind === "fans" ? "Fan presets" : "Lighting presets";
+  const lead =
+    kind === "fans"
+      ? "Fan settings only — lighting is left alone."
+      : "Colour and brightness only — fans are left alone.";
+
+  const list = el("div", { class: "preset-list" });
+  const note = el("div", {});
   const nameInput = el("input", {
-    class: "input setups-name",
+    class: "input preset-name",
     type: "text",
-    placeholder:
-      options.kind === "fans"
-        ? "Name this preset — e.g. Silent, Bench"
-        : "Name this preset — e.g. Night, Amber",
+    placeholder: kind === "fans" ? "Name this preset — e.g. Silent, Bench" : "Name this preset — e.g. Night, Amber",
     maxlength: 48,
-    "aria-label": "Setup name",
+    "aria-label": "Preset name",
   }) as HTMLInputElement;
 
-  const saveButton = button(options.kind === "fans" ? "Save fan preset" : "Save lighting preset", {
+  const saveButton = button(kind === "fans" ? "Save fan preset" : "Save lighting preset", {
     variant: "primary",
-    size: "sm",
     onClick: () => void save(null),
   });
 
-  let setups: Setup[] = [];
+  const closeButton = button("Close", { variant: "quiet", onClick: () => close() });
+
+  let presets: Setup[] = [];
   let busy: string | null = null;
   /** Row armed for deletion: the first click only warns. */
   let armed: string | null = null;
 
-  function applyList(list: SetupList): void {
-    setups = list.setups;
-    notes.replaceChildren(
-      list.warning ? inlineNote(`Could not read the setups file: ${list.warning}`, "danger") : "",
-    );
+  const closeIcon = el(
+    "button",
+    { class: "icon-btn dialog-close", type: "button", title: "Close", "aria-label": "Close" },
+    "×",
+  );
+  closeIcon.addEventListener("click", () => close());
+
+  const card = el(
+    "div",
+    { class: "update-card presets-card" },
+    el("div", { class: "update-head" }, el("h2", { class: "update-title" }, noun), closeIcon),
+    el("p", { class: "update-lead" }, lead),
+    note,
+    list,
+    el("div", { class: "preset-form" }, nameInput, saveButton),
+    el("div", { class: "update-actions" }, closeButton),
+  );
+
+  const backdrop = el("div", { class: "update-backdrop", role: "dialog", "aria-modal": "true" }, card);
+
+  function close(): void {
+    backdrop.remove();
+    document.removeEventListener("keydown", onKey);
+  }
+
+  function onKey(event: KeyboardEvent): void {
+    if (event.key === "Escape") close();
+  }
+
+  function applyList(next: SetupList): void {
+    presets = next.setups;
+    note.replaceChildren(next.warning ? inlineNote(`Could not read the presets file: ${next.warning}`, "danger") : "");
     render();
   }
 
   async function refresh(): Promise<void> {
     try {
-      applyList(await api.setups(options.kind));
+      applyList(await api.setups(kind));
     } catch (error) {
-      ctx.toast(`Could not load setups: ${String(error)}`, "danger");
+      note.replaceChildren(inlineNote(`Could not load presets: ${String(error)}`, "danger"));
     }
   }
 
   async function save(id: string | null): Promise<void> {
-    const name = id
-      ? setups.find((setup) => setup.id === id)?.name ?? ""
-      : nameInput.value.trim();
+    const name = id ? (presets.find((preset) => preset.id === id)?.name ?? "") : nameInput.value.trim();
     if (!name) {
-      ctx.toast("Give the setup a name first", "warn");
+      note.replaceChildren(inlineNote("Give the preset a name first.", "warn"));
       nameInput.focus();
       return;
     }
     busy = id ?? "new";
     render();
     try {
-      const list = await api.saveSetup(options.kind, name, id ?? undefined);
-      applyList(list);
+      applyList(await api.saveSetup(kind, name, id ?? undefined));
       if (!id) nameInput.value = "";
+      note.replaceChildren();
       ctx.toast(id ? `“${name}” updated` : `“${name}” saved`, "ok");
     } catch (error) {
-      ctx.toast(`Could not save: ${String(error)}`, "danger");
+      note.replaceChildren(inlineNote(`Could not save: ${String(error)}`, "danger"));
     } finally {
       busy = null;
       render();
     }
   }
 
-  async function apply(setup: Setup): Promise<void> {
-    busy = setup.id;
+  async function apply(preset: Setup): Promise<void> {
+    busy = preset.id;
     render();
     try {
-      const result = await api.applySetup(setup.id);
+      const result = await api.applySetup(preset.id);
       ctx.applySnapshot(result.snapshot);
       ctx.toast(result.message, "ok");
+      close();
     } catch (error) {
-      ctx.toast(`Could not apply: ${String(error)}`, "danger");
+      note.replaceChildren(inlineNote(`Could not apply: ${String(error)}`, "danger"));
     } finally {
       busy = null;
       render();
     }
   }
 
-  async function remove(setup: Setup): Promise<void> {
-    busy = setup.id;
+  async function remove(preset: Setup): Promise<void> {
+    busy = preset.id;
     render();
     try {
-      applyList(await api.deleteSetup(options.kind, setup.id));
-      ctx.toast(`“${setup.name}” deleted`, "ok");
+      applyList(await api.deleteSetup(kind, preset.id));
+      ctx.toast(`“${preset.name}” deleted`, "ok");
     } catch (error) {
-      ctx.toast(`Could not delete: ${String(error)}`, "danger");
+      note.replaceChildren(inlineNote(`Could not delete: ${String(error)}`, "danger"));
     } finally {
       busy = null;
       armed = null;
@@ -142,59 +190,48 @@ export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el
     }
   }
 
-  function row(setup: Setup): HTMLElement {
-    const working = busy === setup.id;
-    const confirm = armed === setup.id;
+  function row(preset: Setup): HTMLElement {
+    const working = busy === preset.id;
+    const confirm = armed === preset.id;
 
     return el(
-      "li",
-      { class: "setup-row" },
+      "div",
+      { class: "preset-item" },
       el(
         "div",
-        { class: "setup-main" },
-        el("div", { class: "setup-name" }, setup.name),
-        el(
-          "div",
-          {
-            class: "setup-summary",
-            title:
-            setup.kind === "fans"
-              ? "Manual headers · curve-driven headers · total headers"
-              : "Channels lit · colour",
-          },
-          summarise(setup),
-        ),
-        el("div", { class: "setup-meta mono" }, stamp(setup.saved_at_ms)),
+        { class: "preset-main" },
+        el("div", { class: "preset-title" }, preset.name),
+        el("div", { class: "preset-summary" }, summarise(preset)),
+        el("div", { class: "preset-date mono" }, stamp(preset.saved_at_ms)),
       ),
       el(
         "div",
-        { class: "setup-actions" },
+        { class: "preset-actions" },
         button(working ? "Working…" : "Apply", {
           variant: "primary",
           size: "sm",
           disabled: working,
-          title: "Write this setup — fans and lighting — to the hardware",
-          onClick: () => void apply(setup),
+          onClick: () => void apply(preset),
         }),
         button("Update", {
           variant: "ghost",
           size: "sm",
           disabled: working,
-          title: "Replace this setup with what is running now",
-          onClick: () => void save(setup.id),
+          title: "Replace this preset with what is running now",
+          onClick: () => void save(preset.id),
         }),
-        button(confirm ? "Confirm delete" : "Delete", {
+        button(confirm ? "Confirm" : "Delete", {
           variant: confirm ? "danger" : "ghost",
           size: "sm",
           disabled: working,
           onClick: () => {
-            if (armed === setup.id) {
-              void remove(setup);
+            if (armed === preset.id) {
+              void remove(preset);
             } else {
-              armed = setup.id;
+              armed = preset.id;
               render();
               window.setTimeout(() => {
-                if (armed === setup.id) {
+                if (armed === preset.id) {
                   armed = null;
                   render();
                 }
@@ -207,45 +244,31 @@ export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el
   }
 
   function render(): void {
-    body.replaceChildren();
+    list.replaceChildren();
     saveButton.disabled = busy === "new";
 
-    if (setups.length === 0) {
-      body.append(
+    if (presets.length === 0) {
+      list.append(
         emptyState(
           "Nothing saved yet",
           "Set things the way you like them, then save the state to recall it later.",
         ),
       );
-    } else {
-      body.append(el("ul", { class: "setup-rows" }, ...setups.map(row)));
+      return;
     }
+    list.append(...presets.map(row));
   }
-
-  const subtitle =
-    options.kind === "fans"
-      ? "Fan settings only — lighting is left alone"
-      : "Colour and brightness only — fans are left alone";
-
-  root.append(
-    panel({
-      className: "setups-list",
-      title: options.kind === "fans" ? "Fan presets" : "Lighting presets",
-      subtitle,
-      body: [
-        notes,
-        el("div", { class: "setups-form" }, nameInput, saveButton),
-        body,
-      ],
-    }),
-  );
-
-  render();
-  void refresh();
 
   nameInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") void save(null);
   });
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) close();
+  });
+  document.addEventListener("keydown", onKey);
 
-  return { el: root };
+  document.body.appendChild(backdrop);
+  render();
+  void refresh();
+  nameInput.focus();
 }

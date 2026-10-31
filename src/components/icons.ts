@@ -20,7 +20,8 @@ export type IconName =
   | "inbox"
   | "plug-off"
   | "file-off"
-  | "offline";
+  | "offline"
+  | "save";
 
 const PATHS: Record<IconName, string[]> = {
   // layout-dashboard
@@ -80,6 +81,12 @@ const PATHS: Record<IconName, string[]> = {
   ],
   // file-off
   "file-off": ["M3 3l18 18", "M7 3h7l5 5v7m0 4a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-14"],
+  // device-floppy
+  save: [
+    "M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2",
+    "M10 14a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    "M14 4l0 4l-6 0l0 -4",
+  ],
   // wifi-off
   offline: [
     "M12 18l.01 0",

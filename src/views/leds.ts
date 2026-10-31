@@ -5,7 +5,7 @@ import { el, fromHex } from "../dom";
 import type { ChannelStatus, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
 import { ledStrip } from "../components/charts";
-import { setupsPanel } from "../components/setups-panel";
+import { presetsButton } from "../components/setups-panel";
 import { stateSlot } from "../components/state";
 import { button, cardHead, panel, pill, slider, type Slider } from "../components/ui";
 
@@ -223,8 +223,8 @@ export function createLeds(ctx: ViewContext): View {
         {},
         el("h1", { class: "screen-title" }, "Lighting"),
       ),
+      el("div", { class: "screen-actions" }, presetsButton(ctx, { kind: "lighting" }).el),
     ),
-    setupsPanel(ctx, { kind: "lighting" }).el,
     panel({
       title: "Global colour",
       subtitle: "Every channel, one colour",
