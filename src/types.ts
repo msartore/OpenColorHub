@@ -15,7 +15,6 @@ export type ScreenId =
   | "fans"
   | "leds"
   | "drivers"
-  | "setups"
   | "settings"
   | "about";
 

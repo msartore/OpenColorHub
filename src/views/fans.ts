@@ -9,6 +9,7 @@ import type { View, ViewContext } from "../view";
 import { curveEditor, type CurveEditor } from "../components/charts";
 import { button, cardHead, panel, slider, type Slider } from "../components/ui";
 import { showPawnioDialog } from "../pawnio";
+import { setupsPanel } from "../components/setups-panel";
 
 const HEADERS: { id: FanHeaderId; label: string; description: string; floor: number }[] = [
   { id: "cpu", label: "CPU_FAN", description: "CPU cooler / AIO radiator", floor: 0 },
@@ -210,6 +211,7 @@ export function createFans(ctx: ViewContext): View {
     ),
     warningSlot,
     pawnioSlot,
+    setupsPanel(ctx, { focus: "fans" }).el,
     panel({
       title: "Curve presets",
       subtitle: "Quiet, standard or full tilt",

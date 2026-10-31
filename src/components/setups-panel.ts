@@ -1,10 +1,17 @@
-/** Setups: saved fan + lighting combinations, applied in one action. */
+/**
+ * Saved setups, embedded where the state lives.
+ *
+ * A setup spans both fans and lighting, so the same panel appears on the Fan
+ * control and Lighting screens rather than on a screen of its own: from either
+ * one you can save what is running, or apply a saved combination (which writes
+ * both halves — that is what a setup is).
+ */
 
 import { api } from "../api";
 import { el } from "../dom";
-import type { Setup, SetupList, Snapshot } from "../types";
-import type { View, ViewContext } from "../view";
-import { button, emptyState, inlineNote, panel } from "../components/ui";
+import type { Setup, SetupList } from "../types";
+import type { ViewContext } from "../view";
+import { button, emptyState, inlineNote, panel } from "./ui";
 
 const hexOf = (channel: Setup["channels"][number]): string =>
   `#${channel.color.map((part) => part.toString(16).padStart(2, "0")).join("")}`;
@@ -18,15 +25,14 @@ function summarise(setup: Setup): string {
     colours.length === 0
       ? "all channels off"
       : colours.length === 1
-        ? `${colours[0].toUpperCase()}`
+        ? colours[0].toUpperCase()
         : `${colours.length} colours`;
   return `${manual} manual · ${curves} curve · ${lit.length}/${setup.channels.length} lit · ${colourText}`;
 }
 
 function stamp(ms: number): string {
   if (!ms) return "unknown date";
-  const date = new Date(ms);
-  return date.toLocaleString(undefined, {
+  return new Date(ms).toLocaleString(undefined, {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -35,70 +41,41 @@ function stamp(ms: number): string {
   });
 }
 
-export function createSetups(ctx: ViewContext): View {
-  const root = el("div", { class: "screen" });
-  const actions = el("div", { class: "screen-actions" });
-  const head = el(
-    "div",
-    { class: "screen-head" },
-    el(
-      "div",
-      {},
-      el("h1", { class: "screen-title" }, "Setups"),
-      el(
-        "p",
-        { class: "screen-sub" },
-        "Save the current fan and lighting state, then restore it in one click.",
-      ),
-    ),
-    actions,
-  );
+export interface SetupsPanelOptions {
+  /** Emphasised half, used in the subtitle so the panel reads as local. */
+  focus: "fans" | "lighting";
+}
 
-  const notes = el("div", { class: "notice-list" });
-  const body = el("div", { class: "setups-stack" });
+/** Builds the panel; the caller appends `el` to its screen. */
+export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el: HTMLElement } {
+  const root = el("div", { class: "setups-embed" });
+  const body = el("div", { class: "setups-body" });
+  const notes = el("div", { class: "setups-notes" });
 
-  // Save controls -----------------------------------------------------------------
   const nameInput = el("input", {
     class: "input setups-name",
-    id: "setup-name",
     type: "text",
     placeholder: "Name this setup — e.g. Night, Bench, Silent",
     maxlength: 48,
     "aria-label": "Setup name",
   }) as HTMLInputElement;
-  const saveButton = button("Save current state", {
+
+  const saveButton = button("Save current", {
     variant: "primary",
+    size: "sm",
     onClick: () => void save(null),
-  });
-  const savePanel = panel({
-    className: "setups-save",
-    title: "Save what is running now",
-    subtitle: "Fans (duty or curve) and every lighting channel, together.",
-    body: [
-      el("label", { class: "setups-label", for: "setup-name" }, "Setup name"),
-      el(
-        "div",
-        { class: "setups-form" },
-        nameInput,
-        saveButton,
-      ),
-    ],
   });
 
   let setups: Setup[] = [];
   let busy: string | null = null;
-  /** Row that is armed for deletion: the first click only warns. */
+  /** Row armed for deletion: the first click only warns. */
   let armed: string | null = null;
 
   function applyList(list: SetupList): void {
     setups = list.setups;
-    if (list.warning) {
-      notes.replaceChildren(
-        inlineNote(`Could not read the setups file: ${list.warning}`, "danger"),
-      );
-    } else {
-      notes.replaceChildren();
-    }
+    notes.replaceChildren(
+      list.warning ? inlineNote(`Could not read the setups file: ${list.warning}`, "danger") : "",
+    );
     render();
   }
 
@@ -111,7 +88,9 @@ export function createSetups(ctx: ViewContext): View {
   }
 
   async function save(id: string | null): Promise<void> {
-    const name = id ? setups.find((setup) => setup.id === id)?.name ?? "" : nameInput.value.trim();
+    const name = id
+      ? setups.find((setup) => setup.id === id)?.name ?? ""
+      : nameInput.value.trim();
     if (!name) {
       ctx.toast("Give the setup a name first", "warn");
       nameInput.focus();
@@ -190,6 +169,7 @@ export function createSetups(ctx: ViewContext): View {
           variant: "primary",
           size: "sm",
           disabled: working,
+          title: "Write this setup — fans and lighting — to the hardware",
           onClick: () => void apply(setup),
         }),
         button("Update", {
@@ -209,7 +189,6 @@ export function createSetups(ctx: ViewContext): View {
             } else {
               armed = setup.id;
               render();
-              // Disarm on its own, so a stray click cannot delete later.
               window.setTimeout(() => {
                 if (armed === setup.id) {
                   armed = null;
@@ -224,36 +203,39 @@ export function createSetups(ctx: ViewContext): View {
   }
 
   function render(): void {
-    body.replaceChildren(savePanel);
+    body.replaceChildren();
     saveButton.disabled = busy === "new";
 
     if (setups.length === 0) {
       body.append(
-        panel({
-          className: "setups-list",
-          title: "Saved setups",
-          body: [
-            emptyState(
-              "Nothing saved yet",
-              "Set the fans and lighting the way you like them, then save the state as a setup.",
-            ),
-          ],
-        }),
+        emptyState(
+          "Nothing saved yet",
+          "Set things the way you like them, then save the state to recall it later.",
+        ),
       );
-      return;
+    } else {
+      body.append(el("ul", { class: "setup-rows" }, ...setups.map(row)));
     }
-
-    body.append(
-      panel({
-        className: "setups-list",
-        title: "Saved setups",
-        subtitle: `${setups.length} configuration${setups.length === 1 ? "" : "s"}`,
-        body: [el("ul", { class: "setup-rows" }, ...setups.map(row))],
-      }),
-    );
   }
 
-  root.append(head, notes, body);
+  const subtitle =
+    options.focus === "fans"
+      ? "Save or recall fan and lighting state together"
+      : "Save or recall lighting and fan state together";
+
+  root.append(
+    panel({
+      className: "setups-list",
+      title: "Setups",
+      subtitle,
+      body: [
+        notes,
+        el("div", { class: "setups-form" }, nameInput, saveButton),
+        body,
+      ],
+    }),
+  );
+
   render();
   void refresh();
 
@@ -261,10 +243,5 @@ export function createSetups(ctx: ViewContext): View {
     if (event.key === "Enter") void save(null);
   });
 
-  return {
-    el: root,
-    update(_snapshot: Snapshot): void {
-      // The list is independent of telemetry; nothing to redraw per tick.
-    },
-  };
+  return { el: root };
 }

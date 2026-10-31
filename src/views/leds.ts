@@ -5,6 +5,7 @@ import { el, fromHex } from "../dom";
 import type { ChannelStatus, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
 import { ledStrip } from "../components/charts";
+import { setupsPanel } from "../components/setups-panel";
 import { button, cardHead, panel, pill, slider, type Slider } from "../components/ui";
 
 interface ChannelCard {
@@ -207,6 +208,7 @@ export function createLeds(ctx: ViewContext): View {
         el("h1", { class: "screen-title" }, "Lighting"),
       ),
     ),
+    setupsPanel(ctx, { focus: "lighting" }).el,
     panel({
       title: "Global colour",
       subtitle: "Every channel, one colour",

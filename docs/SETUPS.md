@@ -1,7 +1,9 @@
 # Setups
 
 A **setup** is a saved combination of fan and lighting settings you can restore
-in one click. The screen lives under **Setups** in the rail.
+in one click. The panel sits at the bottom of the **Fan control** and
+**Lighting** screens — both show the same list, because a setup spans both
+halves and saving one is a whole-machine action.
 
 ---
 
@@ -69,3 +71,5 @@ what identify them, so renaming is "save under a new name, delete the old one".
   header with an explanation rather than silently doing nothing (the same guard
   as the Fan control screen).
 - Setups are per machine. There is no export/import yet.
+- Applying from either screen writes **both** fans and lighting; there is no
+  "apply lighting only" button.
