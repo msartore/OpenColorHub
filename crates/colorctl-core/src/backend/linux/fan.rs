@@ -78,6 +78,7 @@ impl FanBackend for LinuxFan {
         }
 
         Ok(Telemetry {
+            temperature_source: Some("hwmon".to_string()),
             temperature_c,
             fans,
         })

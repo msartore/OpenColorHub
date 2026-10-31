@@ -112,6 +112,8 @@ export interface BoardInfo {
 export interface Snapshot {
   timestamp_ms: number;
   temperature_c: number | null;
+  /** Which sensor the number came from, e.g. "bank 1 · 0x50". */
+  temperature_source: string | null;
   fans: FanStatus[];
   channels: ChannelStatus[];
   fan_device: DeviceInfo;

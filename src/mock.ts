@@ -246,6 +246,7 @@ export function createDemoBackend(): DemoBackend {
     return {
       timestamp_ms: Date.now(),
       temperature_c: tempC,
+      temperature_source: "synthetic",
       fans,
       channels: channelStatuses(),
       fan_device: {

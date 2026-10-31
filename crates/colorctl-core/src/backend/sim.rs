@@ -161,6 +161,7 @@ impl FanBackend for SimFan {
             .collect();
         Ok(Telemetry {
             temperature_c: Some(temp),
+            temperature_source: Some("synthetic".to_string()),
             fans,
         })
     }

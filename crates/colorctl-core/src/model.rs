@@ -374,6 +374,10 @@ impl FanSample {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Telemetry {
     pub temperature_c: Option<f32>,
+    /// Where the reading came from — `bank 1 · 0x50`, `HWiNFO shared memory`,
+    /// `synthetic`. A number nobody can trace is a number nobody should trust.
+    #[serde(default)]
+    pub temperature_source: Option<String>,
     pub fans: Vec<FanSample>,
 }
 
@@ -381,6 +385,7 @@ impl Telemetry {
     pub fn empty() -> Self {
         Self {
             temperature_c: None,
+            temperature_source: None,
             fans: Vec::new(),
         }
     }
@@ -505,6 +510,9 @@ pub struct ChannelStatus {
 pub struct Snapshot {
     pub timestamp_ms: u64,
     pub temperature_c: Option<f32>,
+    /// Which sensor the temperature came from, e.g. `bank 1 · 0x50`.
+    #[serde(default)]
+    pub temperature_source: Option<String>,
     pub fans: Vec<FanStatus>,
     pub channels: Vec<ChannelStatus>,
     pub fan_device: DeviceInfo,
@@ -524,6 +532,7 @@ impl Snapshot {
         Self {
             timestamp_ms: 0,
             temperature_c: None,
+            temperature_source: None,
             fans: Vec::new(),
             channels: Vec::new(),
             fan_device: DeviceInfo::unavailable("No fan backend", "none", "not initialised"),

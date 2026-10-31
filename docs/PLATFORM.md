@@ -20,6 +20,15 @@ discovered BARs, and which never exposes physical memory.
 OpenColorHub talks to it through `PawnIOLib.dll`, with the LpcIO module embedded
 and passed to the driver at runtime.
 
+**Temperature comes from the register Colorful's own client reads.** On the
+NCT5567D-B (`0xD121`) iGC.Lite calls `GetTemp(1, 80)` — bank 1, register `0x50` —
+and uses that value as the X axis of its fan curves. OpenColorHub reads the same
+one first, then falls back to the bank-0 Nuvoton sensors (`0x27`, `0x73`, `0x75`,
+`0x77`) for boards that leave `0x50` unwired. The Dashboard names the register in
+use ("temp sensor" in System facts, and in the gauge's tooltip), so a reading can
+always be traced to the sensor behind it. Values outside 5–110 °C are rejected
+rather than shown.
+
 **Headers with nothing plugged in are hidden.** A header that never reports a
 tach is an empty socket, not a fan at 0 rpm, so its card is dropped and the
 screen says *"No more fans detected — N of 5 headers are in use."* The check is

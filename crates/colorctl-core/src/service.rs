@@ -228,6 +228,7 @@ impl Service {
             .collect();
 
         Telemetry {
+            temperature_source: fresh.temperature_source.clone(),
             temperature_c,
             fans,
         }
@@ -260,6 +261,9 @@ impl Service {
         };
 
         let temp = telemetry.as_ref().and_then(|t| t.temperature_c);
+        let temp_source = telemetry
+            .as_ref()
+            .and_then(|t| t.temperature_source.clone());
         let samples = telemetry.map(|t| t.fans).unwrap_or_default();
 
         let mut fans: Vec<FanStatus> = samples
@@ -324,6 +328,7 @@ impl Service {
         Snapshot {
             timestamp_ms: now_ms(),
             temperature_c: temp,
+            temperature_source: temp_source,
             fans,
             channels: self.led.state().statuses(),
             fan_device: self.fan_info(),

@@ -44,9 +44,15 @@ const TACH_BANK: u8 = 6;
 const TACH_BASE: u8 = 0x56;
 const TACH_SLOTS: usize = 5;
 
-/// Temperature registers in bank 0 (Nuvoton 8-bit sensors).
-const TEMP_BANK: u8 = 0;
-const TEMP_REGISTERS: [u8; 4] = [0x27, 0x73, 0x75, 0x77];
+/// Temperature registers, in the order Colorful's own client reads them.
+///
+/// iGC.Lite's NCT6793D service (`GetSMARTFanPointCurrent`) calls
+/// `GetTemp(1, 80)` — bank 1, register 0x50 — and uses that value as the X of
+/// the fan curve, so it is the sensor the board is built around. The bank-0
+/// Nuvoton sensors follow as fallbacks for boards that leave 0x50 unwired.
+/// PWM duty readback lives in bank 0 alongside the original Nuvoton sensors.
+const PWM_BANK: u8 = 0;
+const TEMP_SOURCES: [(u8, u8); 5] = [(1, 0x50), (0, 0x27), (0, 0x73), (0, 0x75), (0, 0x77)];
 
 /// Below this a tach reading is noise rather than a stopped fan.
 const MIN_RPM: u16 = 200;
@@ -156,14 +162,14 @@ impl PawnIoFan {
         Ok(out)
     }
 
-    /// Best available temperature: the first plausible bank-0 sensor.
-    fn temperature(&self) -> Result<Option<f32>> {
-        for register in TEMP_REGISTERS {
-            let raw = self.read_byte(TEMP_BANK, register)?;
+    /// Best available temperature, with the register it came from.
+    fn temperature(&self) -> Result<Option<(f32, u8, u8)>> {
+        for (bank, register) in TEMP_SOURCES {
+            let raw = self.read_byte(bank, register)?;
             let signed = raw as i8;
             // Reject the 0x80-ish rail that unwired sensors report.
             if (5..110).contains(&signed) {
-                return Ok(Some(f32::from(signed)));
+                return Ok(Some((f32::from(signed), bank, register)));
             }
         }
         Ok(None)
@@ -183,7 +189,7 @@ impl PawnIoFan {
 
         // Verify against the independent duty readback. A silent refusal would
         // otherwise be indistinguishable from success.
-        let applied = self.read_byte(TEMP_BANK, PWM_OUT_REGISTERS[slot])?;
+        let applied = self.read_byte(PWM_BANK, PWM_OUT_REGISTERS[slot])?;
         if applied.abs_diff(pwm) > 8 {
             return Err(Error::backend(format!(
                 "Wrote {pwm} to fan {slot}, but the chip reports {applied}. The register                  map may not match this board, so fan control is not trusted here."
@@ -245,7 +251,7 @@ impl FanBackend for PawnIoFan {
 
         // Software curves are driven from here: the poll is the only clock the
         // backend has, and it already has the temperature.
-        self.apply_curves(temperature)?;
+        self.apply_curves(temperature.map(|(value, _, _)| value))?;
 
         let tachs = self.tachometers()?;
 
@@ -254,7 +260,7 @@ impl FanBackend for PawnIoFan {
             // Duty is a separate register from the tachometer; a failed read
             // leaves it at zero rather than failing the whole snapshot.
             let pwm = self
-                .read_byte(TEMP_BANK, PWM_OUT_REGISTERS[slot])
+                .read_byte(PWM_BANK, PWM_OUT_REGISTERS[slot])
                 .unwrap_or(0);
             fans.push(FanSample {
                 header: FanHeader::all()[slot.min(TACH_SLOTS - 1)],
@@ -270,7 +276,9 @@ impl FanBackend for PawnIoFan {
         }
 
         Ok(Telemetry {
-            temperature_c: temperature,
+            temperature_c: temperature.map(|(value, _, _)| value),
+            temperature_source: temperature
+                .map(|(_, bank, register)| format!("bank {bank} · 0x{register:02X}")),
             fans,
         })
     }
@@ -290,7 +298,7 @@ impl FanBackend for PawnIoFan {
 
         // Verify against the independent duty readback. A silent refusal would
         // otherwise be indistinguishable from success.
-        let applied = self.read_byte(TEMP_BANK, PWM_OUT_REGISTERS[slot])?;
+        let applied = self.read_byte(PWM_BANK, PWM_OUT_REGISTERS[slot])?;
         if applied.abs_diff(pwm) > 8 {
             return Err(Error::backend(format!(
                 "Wrote {pwm} to fan {slot}, but the chip reports {applied}. The register \
@@ -313,7 +321,7 @@ impl FanBackend for PawnIoFan {
         self.curves[slot] = Some(*curve);
         self.last_duty[slot] = None;
 
-        if let Some(temp) = self.temperature()? {
+        if let Some((temp, _, _)) = self.temperature()? {
             let duty = crate::units::pct(crate::curve::eval(curve, temp));
             self.write_duty(slot, duty)?;
             self.last_duty[slot] = Some(duty);

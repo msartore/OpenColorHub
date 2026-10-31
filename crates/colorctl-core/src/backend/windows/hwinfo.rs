@@ -406,6 +406,7 @@ impl FanBackend for HwinfoFan {
         }
 
         Ok(Telemetry {
+            temperature_source: Some("HWiNFO shared memory".to_string()),
             temperature_c,
             fans,
         })

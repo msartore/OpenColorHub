@@ -225,6 +225,7 @@ export function createDashboard(ctx: ViewContext): View {
       row("fan backend", backend(snapshot.fan_device)),
       row("lighting backend", backend(snapshot.led_device)),
       row("bios", board.identity?.bios_version?.trim() || "—"),
+      row("temp sensor", snapshot.temperature_source ?? "—"),
       row("polling", `${ctx.settings().poll_interval_ms} ms`),
       row("privileges", privileges, elevation?.elevated ? "ok" : undefined),
       row("last sample", formatClock(snapshot.timestamp_ms)),
@@ -239,9 +240,10 @@ export function createDashboard(ctx: ViewContext): View {
     // The backend already explains why it degraded; quote it rather than
     // inventing a reason the app cannot know.
     const why = snapshot.capabilities.notes.find((note) => /PawnIO|HWiNFO|telemetry/i.test(note));
+    const sensor = snapshot.temperature_source ?? "unknown sensor";
     gaugeBadge.title = simulated
-      ? why ?? "Synthetic value: no sensor is being read."
-      : "Read from the board's Super I/O chip.";
+      ? `${why ?? "Synthetic value: no sensor is being read."} (${sensor})`
+      : `Read from ${sensor}.`;
 
     if (snapshot.temperature_c !== null) {
       history.push(snapshot.temperature_c);
