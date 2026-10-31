@@ -48,6 +48,12 @@ pub trait FanBackend: Send {
     fn set_curve(&mut self, header: FanHeader, curve: &FanCurve) -> std::result::Result<(), Error>;
 
     /// Whether curves can be programmed (false for read-only backends).
+    /// Raw register dump for diagnosing the bank map. Read-only; `None` when
+    /// the backend has no such thing to show.
+    fn register_dump(&self) -> Option<crate::error::Result<Vec<crate::model::RegisterRead>>> {
+        None
+    }
+
     fn supports_curves(&self) -> bool {
         true
     }

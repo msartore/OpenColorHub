@@ -104,6 +104,11 @@ impl Service {
         }
     }
 
+    /// Raw Super I/O dump, when the active backend can produce one.
+    pub fn register_dump(&self) -> Option<Result<Vec<crate::model::RegisterRead>>> {
+        self.fan.register_dump()
+    }
+
     pub fn settings(&self) -> &Settings {
         &self.settings
     }

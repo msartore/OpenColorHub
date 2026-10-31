@@ -158,3 +158,27 @@ Two Super I/O families are in play, which is why nothing promises a single chip:
 
 Lighting is the common denominator: all of these expose the same Colorful RGB
 controller as HID `2F4C:1000` on usage page `0xFF01`.
+
+## Settling the bank map
+
+Which Super I/O bank drives which physical header is not settled on this board,
+and a wrong bank means commanding the wrong fan. Two readings disagree:
+
+| | This app | Colorful's NCT5567D_B service |
+|---|---|---|
+| Fan banks | 1, 2, 3, 8, 9 | SYS=1, CPU=2, AUX0=3, AUX1=8, AUX2=9, AUX3=10 |
+| Tachometers | bank 6, `0x56 + 2i` | bank 4, `0xC0 + 2i`, MSB first |
+| Temperature | bank 1 `0x50` first, then bank 0 | bank 1, `0x50` |
+
+`colorctl fan probe` prints every register either layout depends on, from an
+elevated shell:
+
+```
+colorctl.exe fan probe          # table
+colorctl.exe fan probe --json   # machine-readable
+```
+
+It writes nothing. Run it twice — once idle, once with a fan curve or a manual
+duty applied — and the registers that move are the ones that belong to a fan.
+Until that is done, treat fan writes as unverified and RGB as the only fully
+tested path.

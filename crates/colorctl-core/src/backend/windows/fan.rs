@@ -15,14 +15,19 @@
 //! That detail matters: writing to `base+0x4E` directly is denied by PawnIO's
 //! port allow-list, and silently leaves every bank reading identical.
 //!
-//! Writing fan speeds needs the PWM command registers, which have not been
-//! identified on this chip yet. The backend therefore reports real readings and
-//! refuses control with a reason, rather than guessing at registers.
+//! Writes go to the PWM command register (`0x09`) of a control bank, after
+//! clearing the mode bit (`0x02`), and are verified by reading the duty back.
+//!
+//! Which bank drives which physical header is **not** settled: this module uses
+//! `[1, 2, 3, 8, 9]`, while Colorful's own NCT5567D_B service assigns SYS=1,
+//! CPU=2, AUX0=3, AUX1=8, AUX2=9, AUX3=10 and reads tachometers from bank 4 at
+//! `0xC0` rather than bank 6 at `0x56`. `dump_registers()` reads both layouts so
+//! the disagreement can be measured on hardware before a write is trusted.
 
 use crate::backend::windows::pawnio::LpcIo;
 use crate::backend::{FanBackend, FanHeader};
 use crate::error::{Error, Result};
-use crate::model::{DeviceInfo, FanMode, FanSample, Telemetry};
+use crate::model::{DeviceInfo, FanMode, FanSample, RegisterRead, Telemetry};
 
 /// HWM index / data offsets inside the 8-byte BAR window.
 const INDEX_OFFSET: u16 = 0x05;
@@ -177,6 +182,88 @@ impl PawnIoFan {
 }
 
 impl PawnIoFan {
+    /// Every register this app reads or writes, so the bank map can be settled
+    /// on real hardware instead of guessed.
+    ///
+    /// Read-only. The generic Nuvoton layout and Colorful's own NCT5567D_B
+    /// service disagree about which bank drives which header, and a wrong bank
+    /// means commanding the wrong fan — so the disagreement gets measured
+    /// before any write is trusted.
+    pub fn dump_registers(&self) -> Result<Vec<RegisterRead>> {
+        let mut out = Vec::new();
+
+        // Temperature candidates: the vendor's register first, then the
+        // generic bank-0 sensors.
+        for (bank, register, label) in [
+            (1u8, 0x50u8, "temp (vendor NCT5567D_B)"),
+            (0, 0x27, "temp bank0 0x27"),
+            (0, 0x73, "temp bank0 0x73"),
+            (0, 0x75, "temp bank0 0x75"),
+            (0, 0x77, "temp bank0 0x77"),
+        ] {
+            let value = self.read_byte(bank, register).unwrap_or(0xFF);
+            out.push(RegisterRead {
+                label: label.to_string(),
+                bank,
+                register,
+                value: u16::from(value),
+            });
+        }
+
+        // Fan banks: Colorful assigns SYS=1, CPU=2, AUX0=3, AUX1=8, AUX2=9,
+        // AUX3=10. Report the mode bit and the duty command root for each.
+        for bank in [1u8, 2, 3, 8, 9, 10] {
+            let mode = self.read_byte(bank, REG_CONTROL_MODE).unwrap_or(0xFF);
+            out.push(RegisterRead {
+                label: format!("bank {bank} mode (0x02)"),
+                bank,
+                register: REG_CONTROL_MODE,
+                value: u16::from(mode),
+            });
+            let duty = self.read_byte(bank, REG_PWM_COMMAND).unwrap_or(0xFF);
+            out.push(RegisterRead {
+                label: format!("bank {bank} duty cmd (0x09)"),
+                bank,
+                register: REG_PWM_COMMAND,
+                value: u16::from(duty),
+            });
+        }
+
+        // Duty readback as this app assumes it, bank 0.
+        for (slot, register) in PWM_OUT_REGISTERS.iter().enumerate() {
+            let value = self.read_byte(PWM_BANK, *register).unwrap_or(0xFF);
+            out.push(RegisterRead {
+                label: format!("duty readback slot {slot}"),
+                bank: PWM_BANK,
+                register: *register,
+                value: u16::from(value),
+            });
+        }
+
+        // Tachometers from both candidate layouts. The vendor reads words from
+        // bank 4 at 0xC0, MSB first; this app used bank 6 at 0x56.
+        for (index, register) in (0xC0u8..0xCC).step_by(2).enumerate() {
+            let value = self.read_word(4, register).unwrap_or(0xFFFF);
+            out.push(RegisterRead {
+                label: format!("tach bank4 slot {index}"),
+                bank: 4,
+                register,
+                value,
+            });
+        }
+        for (index, register) in (0x56u8..0x60).step_by(2).enumerate() {
+            let value = self.read_word(6, register).unwrap_or(0xFFFF);
+            out.push(RegisterRead {
+                label: format!("tach bank6 slot {index}"),
+                bank: 6,
+                register,
+                value,
+            });
+        }
+
+        Ok(out)
+    }
+
     /// Writes a raw duty to one header and verifies it against the readback.
     fn write_duty(&mut self, slot: usize, pwm: u8) -> Result<()> {
         let bank = CONTROL_BANKS[slot.min(CONTROL_BANKS.len() - 1)];
@@ -244,6 +331,10 @@ impl FanBackend for PawnIoFan {
             simulated: false,
             error: None,
         }
+    }
+
+    fn register_dump(&self) -> Option<Result<Vec<RegisterRead>>> {
+        Some(self.dump_registers())
     }
 
     fn read(&mut self) -> std::result::Result<Telemetry, Error> {

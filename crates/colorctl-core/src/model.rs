@@ -490,6 +490,16 @@ pub struct FanStatus {
     pub curve_percent: Option<u8>,
 }
 
+/// One Super I/O register read by the diagnostic probe.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RegisterRead {
+    /// What this register is believed to hold.
+    pub label: String,
+    pub bank: u8,
+    pub register: u8,
+    pub value: u16,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelStatus {
     pub id: Channel,

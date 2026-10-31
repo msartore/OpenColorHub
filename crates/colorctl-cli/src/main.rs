@@ -297,6 +297,29 @@ fn handle_fan(action: FanAction, service: &mut Service, json: bool) -> Result<Ex
     }
 
     match action {
+        FanAction::Probe => {
+            let Some(dump) = service.register_dump() else {
+                eprintln!(
+                    "no register map on this backend — the probe needs the Super I/O through PawnIO, run elevated"
+                );
+                return Ok(ExitCode::FAILURE);
+            };
+            let reads = dump?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&reads)?);
+            } else {
+                println!("{:<28} {:>4}  {:>6}  {:>5}", "what", "bank", "reg", "value");
+                for read in &reads {
+                    println!(
+                        "{:<28} {:>4}  0x{:02X}  {:>5}",
+                        read.label, read.bank, read.register, read.value
+                    );
+                }
+                println!();
+                println!("read-only: nothing was written");
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
         FanAction::Status => {
             if json {
                 println!("{}", serde_json::to_string_pretty(&snapshot)?);

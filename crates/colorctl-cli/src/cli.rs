@@ -55,7 +55,7 @@ impl From<BackendArg> for BackendMode {
 pub enum Command {
     /// Motherboard RGB lighting control (USB HID 2F4C:1000)
     Rgb(RgbArgs),
-    /// Fan and hardware monitor control (NCT5584D Super I/O)
+    /// Fan and hardware monitor control (Nuvoton Super I/O)
     Fan(FanArgs),
     /// Show the detected motherboard and whether it is supported
     Board,
@@ -206,6 +206,8 @@ impl From<ProfileArg> for FanProfile {
 pub enum FanAction {
     /// Show temperatures, fan speeds, modes and active curves
     Status,
+    /// Dump every Super I/O register this app depends on (read-only)
+    Probe,
     /// Set a manual fan speed (percent or raw PWM)
     SetSpeed {
         /// Target header
