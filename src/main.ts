@@ -160,8 +160,38 @@ function updateStatusbar(): void {
 }
 
 
+/**
+ * The hardware probe runs behind the window, so the first calls can arrive
+ * before it finishes. Poll instead of waiting on the ready event: an event
+ * that fires between a failed call and the subscription would never be seen.
+ */
+async function waitForBackend(): Promise<void> {
+  const deadline = Date.now() + 20_000;
+  for (;;) {
+    try {
+      await api.snapshot();
+      return;
+    } catch (error) {
+      if (!String(error).includes("still starting")) throw error;
+      if (Date.now() > deadline) {
+        throw new Error("the hardware probe did not finish within 20 seconds");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+}
+
+/** Fades the inline boot overlay once the shell has something to show. */
+function hideBoot(): void {
+  const boot = document.getElementById("boot");
+  if (!boot) return;
+  boot.classList.add("is-done");
+  window.setTimeout(() => boot.remove(), 200);
+}
+
 async function boot(): Promise<void> {
   try {
+    await waitForBackend();
     const [settings, snapshot, about] = await Promise.all([api.settings(), api.snapshot(), api.about()]);
     state.settings = settings;
     state.snapshot = snapshot;
@@ -173,6 +203,7 @@ async function boot(): Promise<void> {
 
     const target = parseHash() ?? (settings.last_screen as ScreenId);
     navigate((SCREEN_ORDER as string[]).includes(target) ? target : "dashboard");
+    requestAnimationFrame(hideBoot);
 
     await onTelemetry((next) => {
       state.snapshot = next;
@@ -194,6 +225,7 @@ async function boot(): Promise<void> {
       }
     });
   } catch (error) {
+    hideBoot();
     appRoot.replaceChildren(
       el(
         "div",

@@ -26,7 +26,7 @@ pub const TELEMETRY_EVENT: &str = "telemetry";
 #[tauri::command]
 pub fn get_snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let mut inner = state.lock()?;
-    Ok(inner.service.snapshot())
+    Ok(inner.service_mut()?.snapshot())
 }
 
 #[tauri::command]
@@ -71,7 +71,7 @@ pub fn save_settings(
         let mut inner = state.lock()?;
         let mut settings = inner.settings.clone();
         settings.apply_patch(patch);
-        let rebuilt = inner.service.update_settings(settings.clone());
+        let rebuilt = inner.service_mut()?.update_settings(settings.clone());
         inner.settings = settings.clone();
         inner.persist_settings()?;
         (settings, rebuilt)
@@ -81,7 +81,7 @@ pub fn save_settings(
         // Backend changed: push a fresh snapshot so the UI leaves stale data behind.
         let snapshot = {
             let mut inner = state.lock()?;
-            inner.service.snapshot()
+            inner.service_mut()?.snapshot()
         };
         let _ = app.emit(TELEMETRY_EVENT, snapshot);
     }
@@ -93,21 +93,21 @@ pub fn save_settings(
 #[tauri::command]
 pub fn get_board(state: State<'_, AppState>) -> Result<colorctl_core::BoardInfo, String> {
     let inner = state.lock()?;
-    Ok(inner.service.board().clone())
+    Ok(inner.service()?.board().clone())
 }
 
 #[tauri::command]
 pub fn get_activity(state: State<'_, AppState>) -> Result<Vec<Activity>, String> {
     let inner = state.lock()?;
-    Ok(inner.service.activity().to_vec())
+    Ok(inner.service()?.activity().to_vec())
 }
 
 #[tauri::command]
 pub fn get_about(app: AppHandle, state: State<'_, AppState>) -> Result<AboutInfo, String> {
-    let inner = state.lock()?;
+    let mut inner = state.lock()?;
     let package = app.package_info();
     let state_path = inner
-        .service
+        .service_mut()?
         .state_path()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| "—".to_string());
@@ -116,7 +116,7 @@ pub fn get_about(app: AppHandle, state: State<'_, AppState>) -> Result<AboutInfo
         name: package.name.clone(),
         version: package.version.to_string(),
         tagline: "Fan and lighting control for Colorful motherboards".to_string(),
-        board: inner.service.board().clone(),
+        board: inner.service()?.board().clone(),
         tauri_version: Some(tauri::VERSION.to_string()),
         data_dir: inner.data_dir.display().to_string(),
         settings_path: inner.settings_path.display().to_string(),
@@ -137,7 +137,7 @@ pub fn set_fan_pwm(
 ) -> Result<ActionResult, String> {
     let mut inner = state.lock()?;
     inner
-        .service
+        .service_mut()?
         .set_fan_pwm(header, pwm)
         .map_err(|e| e.to_string())
 }
@@ -150,7 +150,7 @@ pub fn set_fan_percent(
 ) -> Result<ActionResult, String> {
     let mut inner = state.lock()?;
     inner
-        .service
+        .service_mut()?
         .set_fan_percent(header, percent)
         .map_err(|e| e.to_string())
 }
@@ -172,7 +172,7 @@ pub fn set_fan_curve(
 
     let mut inner = state.lock()?;
     inner
-        .service
+        .service_mut()?
         .set_fan_curve(header, &curve)
         .map_err(|e| e.to_string())
 }
@@ -185,7 +185,7 @@ pub fn apply_profile(
 ) -> Result<ActionResult, String> {
     let mut inner = state.lock()?;
     inner
-        .service
+        .service_mut()?
         .apply_profile(&headers, profile)
         .map_err(|e| e.to_string())
 }
@@ -205,7 +205,7 @@ pub fn set_channel(
         ChannelConfig::off()
     };
     inner
-        .service
+        .service_mut()?
         .set_channel(channel, config, true)
         .map_err(|e| e.to_string())
 }
@@ -219,7 +219,7 @@ pub fn set_all_channels(
 ) -> Result<ActionResult, String> {
     let mut inner = state.lock()?;
     inner
-        .service
+        .service_mut()?
         .set_all_channels(color, brightness, enabled)
         .map_err(|e| e.to_string())
 }
@@ -228,7 +228,7 @@ pub fn set_all_channels(
 pub fn set_brightness(state: State<'_, AppState>, percent: u8) -> Result<ActionResult, String> {
     let mut inner = state.lock()?;
     inner
-        .service
+        .service_mut()?
         .set_global_brightness(percent)
         .map_err(|e| e.to_string())
 }
@@ -240,7 +240,7 @@ pub fn turn_off_channel(
 ) -> Result<ActionResult, String> {
     let mut inner = state.lock()?;
     inner
-        .service
+        .service_mut()?
         .turn_off_channel(channel)
         .map_err(|e| e.to_string())
 }
@@ -248,7 +248,7 @@ pub fn turn_off_channel(
 #[tauri::command]
 pub fn apply_led(state: State<'_, AppState>) -> Result<ActionResult, String> {
     let mut inner = state.lock()?;
-    inner.service.apply_led().map_err(|e| e.to_string())
+    inner.service_mut()?.apply_led().map_err(|e| e.to_string())
 }
 
 /// Opens a link in the user's browser.
@@ -297,8 +297,8 @@ pub fn get_settings_warning(state: State<'_, AppState>) -> Result<Option<String>
 #[tauri::command]
 pub fn reload_state(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let mut inner = state.lock()?;
-    inner.service.reload_led_state();
-    Ok(inner.service.snapshot())
+    inner.service_mut()?.reload_led_state();
+    Ok(inner.service_mut()?.snapshot())
 }
 
 /// Whether the OS will launch this app at sign-in.
@@ -348,7 +348,7 @@ struct DriverProgress {
 pub async fn get_drivers(state: State<'_, AppState>) -> Result<DriverList, String> {
     let (board, bios) = {
         let inner = state.lock()?;
-        let identity = inner.service.board().identity.clone();
+        let identity = inner.service()?.board().identity.clone();
         match identity {
             Some(identity) => (identity.name, identity.bios_version),
             None => (String::new(), String::new()),

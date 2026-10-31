@@ -13,13 +13,17 @@ use colorctl_core::Service;
 use colorctl_core::settings::{POLL_MAX_MS, POLL_MIN_MS, Settings};
 use tauri::{Emitter, Manager};
 
-use crate::state::{AppState, Inner};
+use crate::state::{AppState, Inner, ServiceSlot};
+
+/// Emitted once the hardware probe finishes, so the UI can drop its boot overlay.
+pub const BACKEND_READY_EVENT: &str = "backend://ready";
 
 pub fn run() {
+    let started = std::time::Instant::now();
     update::clean_previous();
 
     tauri::Builder::default()
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
 
             let (config_dir, data_dir) = state_dirs(&handle)?;
@@ -35,45 +39,16 @@ pub fn run() {
                 eprintln!("opencolorhub: settings file problem: {warning} (using defaults)");
             }
 
-            let mut service = Service::new(settings.clone(), data_dir.clone());
-            let snapshot = service.snapshot();
-            let board = snapshot.board.clone();
-            eprintln!(
-                "opencolorhub {}: board = {} [{} via {}]",
-                env!("CARGO_PKG_VERSION"),
-                board.display_name(),
-                board.confidence.label(),
-                board.source,
-            );
-            for note in &board.notes {
-                eprintln!("opencolorhub: board note: {note}");
-            }
-            eprintln!(
-                "opencolorhub {}: fan backend = {} ({}), led backend = {} ({})",
-                env!("CARGO_PKG_VERSION"),
-                snapshot.fan_device.name,
-                if snapshot.fan_device.simulated {
-                    "simulated"
-                } else {
-                    "hardware"
-                },
-                snapshot.led_device.name,
-                if snapshot.led_device.simulated {
-                    "simulated"
-                } else {
-                    "hardware"
-                },
-            );
-
-            if settings.reapply_led_on_launch {
-                match service.apply_led() {
-                    Ok(result) => eprintln!("opencolorhub: {}", result.message),
-                    Err(error) => eprintln!("opencolorhub: could not re-apply lighting: {error}"),
-                }
-            }
+            // Publish the state and show the window *before* the hardware probe.
+            // Probing costs a few hundred milliseconds, and none of it is needed
+            // to paint the shell: the UI shows a boot overlay until the
+            // `backend://ready` event arrives.
+            let probe_settings = settings.clone();
+            let probe_data = data_dir.clone();
+            let reapply_led = settings.reapply_led_on_launch;
 
             app.manage(AppState::new(Inner {
-                service,
+                service: ServiceSlot::Loading,
                 settings,
                 settings_path,
                 settings_warning,
@@ -82,6 +57,81 @@ pub fn run() {
 
             tray::install(&handle)?;
             tray::show_unless_hidden(&handle);
+            eprintln!("opencolorhub: window shown at {:?}", started.elapsed());
+
+            let ready = handle.clone();
+            thread::spawn(move || {
+                // A probe that panics must not leave the UI waiting forever.
+                let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    Service::new(probe_settings, probe_data)
+                }));
+                let mut service = match built {
+                    Ok(service) => service,
+                    Err(_) => {
+                        let state = ready.state::<AppState>();
+                        if let Ok(mut inner) = state.lock() {
+                            inner.service = ServiceSlot::Failed(
+                                "the hardware probe failed — see the app log".to_string(),
+                            );
+                        }
+                        let _ = ready.emit(BACKEND_READY_EVENT, ());
+                        return;
+                    }
+                };
+                let snapshot = service.snapshot();
+                let board = snapshot.board.clone();
+                eprintln!(
+                    "opencolorhub {}: board = {} [{} via {}]",
+                    env!("CARGO_PKG_VERSION"),
+                    board.display_name(),
+                    board.confidence.label(),
+                    board.source,
+                );
+                for note in &board.notes {
+                    eprintln!("opencolorhub: board note: {note}");
+                }
+                eprintln!(
+                    "opencolorhub {}: fan backend = {} ({}), led backend = {} ({})",
+                    env!("CARGO_PKG_VERSION"),
+                    snapshot.fan_device.name,
+                    if snapshot.fan_device.simulated {
+                        "simulated"
+                    } else {
+                        "hardware"
+                    },
+                    snapshot.led_device.name,
+                    if snapshot.led_device.simulated {
+                        "simulated"
+                    } else {
+                        "hardware"
+                    },
+                );
+
+                if reapply_led {
+                    match service.apply_led() {
+                        Ok(result) => eprintln!("opencolorhub: {}", result.message),
+                        Err(error) => {
+                            eprintln!("opencolorhub: could not re-apply lighting: {error}")
+                        }
+                    }
+                }
+
+                {
+                    let state = ready.state::<AppState>();
+                    match state.lock() {
+                        Ok(mut inner) => inner.service = ServiceSlot::Ready(Box::new(service)),
+                        Err(error) => {
+                            eprintln!("opencolorhub: could not publish the backend: {error}");
+                            return;
+                        }
+                    }
+                }
+                eprintln!("opencolorhub: hardware ready at {:?}", started.elapsed());
+
+                if let Err(error) = ready.emit(BACKEND_READY_EVENT, ()) {
+                    eprintln!("opencolorhub: could not announce readiness: {error}");
+                }
+            });
 
             spawn_ticker(handle);
             Ok(())
@@ -140,7 +190,10 @@ fn spawn_ticker(app: tauri::AppHandle) {
             let snapshot = {
                 let state = app.state::<AppState>();
                 match state.lock() {
-                    Ok(mut inner) => Some(inner.service.snapshot()),
+                    Ok(mut inner) => match inner.service_mut() {
+                        Ok(service) => Some(service.snapshot()),
+                        Err(_) => None,
+                    },
                     Err(error) => {
                         eprintln!("opencolorhub: telemetry skipped: {error}");
                         None

@@ -11,8 +11,17 @@ use colorctl_core::settings::Settings;
 /// One mutex is deliberate: hardware access must be serialised (register banks
 /// and the HID frame are global resources), and the ticker plus IPC commands
 /// are the only writers.
+/// The hardware probe takes a few hundred milliseconds, so it runs after the
+/// window is on screen. Until it finishes the slot is `Loading` and commands
+/// answer with a "still starting" error the UI can retry.
+pub enum ServiceSlot {
+    Loading,
+    Ready(Box<Service>),
+    Failed(String),
+}
+
 pub struct Inner {
-    pub service: Service,
+    pub service: ServiceSlot,
     pub settings: Settings,
     pub settings_path: PathBuf,
     /// Set when `settings.json` could not be parsed; surfaced in the UI.
@@ -47,6 +56,25 @@ impl AppState {
 }
 
 impl Inner {
+    /// Message returned while the probe is still running.
+    pub const STARTING: &'static str = "still starting: probing the hardware";
+
+    pub fn service(&self) -> Result<&Service, String> {
+        match &self.service {
+            ServiceSlot::Ready(service) => Ok(service.as_ref()),
+            ServiceSlot::Loading => Err(Self::STARTING.to_string()),
+            ServiceSlot::Failed(error) => Err(error.clone()),
+        }
+    }
+
+    pub fn service_mut(&mut self) -> Result<&mut Service, String> {
+        match &mut self.service {
+            ServiceSlot::Ready(service) => Ok(service.as_mut()),
+            ServiceSlot::Loading => Err(Self::STARTING.to_string()),
+            ServiceSlot::Failed(error) => Err(error.clone()),
+        }
+    }
+
     /// Persists the current settings (atomic write in the core crate).
     pub fn persist_settings(&self) -> Result<(), String> {
         self.settings

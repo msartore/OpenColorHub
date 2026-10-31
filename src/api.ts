@@ -79,6 +79,12 @@ export const api = {
 };
 
 /** Subscribes to telemetry ticks; returns an unsubscribe function. */
+/** Resolves when the backend finishes probing the hardware. */
+export async function onBackendReady(cb: () => void): Promise<() => void> {
+  if (demo) return () => {};
+  return listen("backend://ready", () => cb());
+}
+
 /** Subscribes to download progress; resolves once the listener is installed. */
 export async function onDriverProgress(
   cb: (progress: DriverProgress) => void,

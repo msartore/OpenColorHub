@@ -564,18 +564,31 @@ pub fn detect_from_dmi(dir: &Path) -> BoardInfo {
 /// function so it is testable without a registry.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn detect_from_registry() -> BoardInfo {
+    #[cfg(target_os = "windows")]
+    if let Some(pairs) = read_bios_key() {
+        return board_from_pairs(&pairs, "registry");
+    }
+
+    // Fallback: `reg.exe`. Spawning a process costs a few hundred milliseconds,
+    // which used to sit directly in the startup path; the direct read above
+    // normally makes this unreachable.
     const KEY: &str = r"HKLM\HARDWARE\DESCRIPTION\System\BIOS";
 
     let output = Command::new("reg").args(["query", KEY]).output();
     let Ok(output) = output else {
-        return BoardInfo::unknown("registry", "could not run `reg query` to read SMBIOS data");
+        return BoardInfo::unknown("registry", "could not read the SMBIOS registry key");
     };
     if !output.status.success() {
         return BoardInfo::unknown("registry", "SMBIOS registry key is not readable");
     }
 
     let text = String::from_utf8_lossy(&output.stdout);
-    let pairs = parse_reg_query(&text);
+    board_from_pairs(&parse_reg_query(&text), "registry")
+}
+
+/// Turns SMBIOS name/value pairs into a classified board.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn board_from_pairs(pairs: &[(String, String)], source: &str) -> BoardInfo {
     let get = |key: &str| {
         pairs
             .iter()
@@ -595,10 +608,93 @@ pub fn detect_from_registry() -> BoardInfo {
     };
 
     if identity.is_empty() {
-        return BoardInfo::unknown("registry", "SMBIOS registry key had no board values");
+        return BoardInfo::unknown(source, "SMBIOS registry key had no board values");
     }
 
-    classify(Some(identity), "registry")
+    classify(Some(identity), source)
+}
+
+/// Reads the SMBIOS mirror key through the Win32 API.
+///
+/// The values are the same ones `reg query` prints, but this avoids creating a
+/// process — worth several hundred milliseconds on the startup path.
+#[cfg(target_os = "windows")]
+fn read_bios_key() -> Option<Vec<(String, String)>> {
+    use windows_sys::Win32::System::Registry::{
+        HKEY_LOCAL_MACHINE, KEY_READ, RegCloseKey, RegOpenKeyExW, RegQueryValueExW,
+    };
+
+    const NAMES: [&str; 8] = [
+        "BaseBoardManufacturer",
+        "BaseBoardProduct",
+        "BaseBoardVersion",
+        "BIOSVendor",
+        "BIOSVersion",
+        "SystemManufacturer",
+        "SystemProductName",
+        "SystemVersion",
+    ];
+
+    let subkey: Vec<u16> = r"HARDWARE\DESCRIPTION\System\BIOS"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut key: *mut core::ffi::c_void = std::ptr::null_mut();
+    // SAFETY: the subkey is NUL-terminated and `key` is a valid out-pointer.
+    let opened =
+        unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.as_ptr(), 0, KEY_READ, &mut key) };
+    if opened != 0 {
+        return None;
+    }
+
+    let mut pairs = Vec::new();
+    for name in NAMES {
+        let name_wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+        let mut kind = 0u32;
+        let mut size = 0u32;
+        // SAFETY: sizes are probed first, then the buffer is sized to match.
+        let probed = unsafe {
+            RegQueryValueExW(
+                key,
+                name_wide.as_ptr(),
+                std::ptr::null(),
+                &mut kind,
+                std::ptr::null_mut(),
+                &mut size,
+            )
+        };
+        if probed != 0 || size < 2 {
+            continue;
+        }
+        let mut buffer = vec![0u8; size as usize];
+        let read = unsafe {
+            RegQueryValueExW(
+                key,
+                name_wide.as_ptr(),
+                std::ptr::null(),
+                &mut kind,
+                buffer.as_mut_ptr(),
+                &mut size,
+            )
+        };
+        if read != 0 {
+            continue;
+        }
+        let wide: Vec<u16> = buffer
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|chunk| u16::from_le_bytes(*chunk))
+            .take_while(|value| *value != 0)
+            .collect();
+        let value = String::from_utf16_lossy(&wide).trim().to_string();
+        if !value.is_empty() {
+            pairs.push((name.to_string(), value));
+        }
+    }
+    // SAFETY: `key` was opened above and is closed exactly once.
+    unsafe { RegCloseKey(key) };
+    Some(pairs)
 }
 
 /// Parses `reg query` output lines of the form
