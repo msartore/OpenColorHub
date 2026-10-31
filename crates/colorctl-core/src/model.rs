@@ -475,6 +475,10 @@ pub struct FanStatus {
     pub rpm: u16,
     pub pwm: u8,
     pub percent: u8,
+    /// Whether this header has ever reported a tach signal since the app
+    /// started. Headers nothing is plugged into read zero forever, and showing
+    /// five empty cards hides the two that matter.
+    pub detected: bool,
     pub mode: FanMode,
     pub curve: Option<FanCurve>,
     /// Duty the curve would ask for at the current temperature.

@@ -20,6 +20,13 @@ discovered BARs, and which never exposes physical memory.
 OpenColorHub talks to it through `PawnIOLib.dll`, with the LpcIO module embedded
 and passed to the driver at runtime.
 
+**Headers with nothing plugged in are hidden.** A header that never reports a
+tach is an empty socket, not a fan at 0 rpm, so its card is dropped and the
+screen says *"No more fans detected — N of 5 headers are in use."* The check is
+latched: once a header has spun, it keeps its card even when a 0% curve stops it.
+Average duty and the total rpm on the Dashboard count only the headers that
+exist.
+
 **PawnIO is not bundled.** The app offers to install it instead: a dialog on
 launch, and a callout on the Fan control screen, fetch `PawnIO_setup.exe` from
 the project's own GitHub release (currently 2.2.0), verify it against a pinned

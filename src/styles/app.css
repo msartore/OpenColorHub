@@ -2788,3 +2788,18 @@ select {
   color: var(--text-faint);
   font-style: italic;
 }
+
+/* A header with nothing plugged in is not a card: it is one line of text. */
+.fan-card.is-undetected {
+  display: none;
+}
+
+.fans-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.fans-note:empty {
+  display: none;
+}

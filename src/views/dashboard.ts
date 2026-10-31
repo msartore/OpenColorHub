@@ -248,11 +248,12 @@ export function createDashboard(ctx: ViewContext): View {
       sparkLegend.replaceChildren(el("span", {}, "Waiting for the first temperature reading"));
     }
 
-    const idle = snapshot.fans.filter((fan) => fan.rpm === 0).length;
-    const totalRpm = snapshot.fans.reduce((sum, fan) => sum + fan.rpm, 0);
+    const present = snapshot.fans.filter((fan) => fan.detected);
+    const idle = present.filter((fan) => fan.rpm === 0).length;
+    const totalRpm = present.reduce((sum, fan) => sum + fan.rpm, 0);
     dutyTile.set(
       String(snapshot.avg_percent),
-      `across ${snapshot.fans.length} headers`,
+      `across ${present.length} ${present.length === 1 ? "header" : "headers"}`,
       snapshot.avg_percent > 85 ? "warn" : "accent",
     );
     rpmTile.set(formatRpm(totalRpm), `${idle} idle`, "muted");
@@ -288,7 +289,7 @@ export function createDashboard(ctx: ViewContext): View {
       row.root.classList.toggle("is-idle", fan.rpm === 0);
     }
 
-    const spinning = snapshot.fans.filter((fan) => fan.rpm > 0);
+    const spinning = present.filter((fan) => fan.rpm > 0);
     fastest.textContent = spinning.length
       ? `fastest ${spinning.reduce((best, fan) => (fan.rpm > best.rpm ? fan : best)).label} · ${formatRpm(
           Math.max(...spinning.map((fan) => fan.rpm)),

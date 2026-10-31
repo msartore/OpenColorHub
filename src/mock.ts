@@ -211,6 +211,7 @@ export function createDemoBackend(): DemoBackend {
         rpm: rpmFor(header, pwm),
         pwm,
         percent: pwmToPct(pwm),
+        detected: true,
         mode: cfg.mode,
         curve: cfg.curve,
         curve_percent: cfg.curve ? evalCurve(cfg.curve, tempC) : null,

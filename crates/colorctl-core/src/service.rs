@@ -48,6 +48,9 @@ pub struct Service {
     settings: Settings,
     data_dir: PathBuf,
     smoothed: Option<Telemetry>,
+    /// Bit per header index, set once that header reports a tach. Latched so a
+    /// fan stopped by a 0% curve or a 0 rpm reading does not lose its card.
+    seen_fans: u8,
     last_read_error: Option<String>,
     activity: Vec<Activity>,
 }
@@ -95,6 +98,7 @@ impl Service {
             settings,
             data_dir,
             smoothed: None,
+            seen_fans: 0,
             last_read_error: None,
             activity: Vec::new(),
         }
@@ -229,6 +233,22 @@ impl Service {
         }
     }
 
+    /// Marks the headers that have reported a tach, and only those.
+    ///
+    /// The bit is never cleared: a header that showed 900 rpm a minute ago is a
+    /// real fan that is currently stopped, not an empty socket.
+    fn latch_detection(&mut self, fans: &mut [FanStatus]) {
+        let mut seen = self.seen_fans;
+        for fan in fans.iter_mut() {
+            let bit = 1u8 << fan.header.index();
+            if fan.rpm > 0 {
+                seen |= bit;
+            }
+            fan.detected = seen & bit != 0;
+        }
+        self.seen_fans = seen;
+    }
+
     /// Full UI snapshot. Never fails: read errors are reported inside it.
     pub fn snapshot(&mut self) -> Snapshot {
         let telemetry = match self.read_telemetry() {
@@ -260,6 +280,7 @@ impl Service {
                     mode: s.mode,
                     curve: s.curve,
                     curve_percent,
+                    detected: false,
                 }
             })
             .collect();
@@ -279,15 +300,25 @@ impl Service {
                     mode: FanMode::Unknown,
                     curve: None,
                     curve_percent: None,
+                    detected: false,
                 });
             }
         }
         fans.sort_by_key(|f| f.header.index());
+        self.latch_detection(&mut fans);
 
-        let avg_percent = if fans.is_empty() {
+        // Averaged over the headers that exist: empty sockets would otherwise
+        // drag the figure toward zero.
+        let present: Vec<&FanStatus> = fans.iter().filter(|f| f.detected).collect();
+        let pool: Vec<&FanStatus> = if present.is_empty() {
+            fans.iter().collect()
+        } else {
+            present
+        };
+        let avg_percent = if pool.is_empty() {
             0
         } else {
-            (fans.iter().map(|f| f.percent as u32).sum::<u32>() / fans.len() as u32) as u8
+            (pool.iter().map(|f| f.percent as u32).sum::<u32>() / pool.len() as u32) as u8
         };
 
         Snapshot {
@@ -539,6 +570,41 @@ mod tests {
             ..Settings::default()
         };
         (Service::new(settings, dir.clone()), dir)
+    }
+
+    fn fan_status(header: FanHeader, rpm: u16) -> FanStatus {
+        FanStatus {
+            header,
+            label: header.label().to_string(),
+            description: header.description().to_string(),
+            bank: header.bank(),
+            rpm,
+            pwm: 0,
+            percent: 50,
+            detected: false,
+            mode: FanMode::Manual,
+            curve: None,
+            curve_percent: None,
+        }
+    }
+
+    #[test]
+    fn detection_latches_and_leaves_silent_headers_alone() {
+        let (mut svc, _dir) = service("detect");
+        let mut fans = vec![
+            fan_status(FanHeader::Cpu, 900),
+            fan_status(FanHeader::ChaFan2, 0),
+        ];
+
+        svc.latch_detection(&mut fans);
+        assert!(fans[0].detected, "a spinning header is a fan");
+        assert!(!fans[1].detected, "a silent header is an empty socket");
+
+        // The fan is stopped by a curve later on: it keeps its card.
+        fans[0].rpm = 0;
+        svc.latch_detection(&mut fans);
+        assert!(fans[0].detected, "a stopped fan is still a fan");
+        assert!(!fans[1].detected, "silence never becomes presence");
     }
 
     #[test]

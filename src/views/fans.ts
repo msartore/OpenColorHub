@@ -46,6 +46,9 @@ export function createFans(ctx: ViewContext): View {
   // Kept apart from `warningSlot`: update() rewrites that one on every tick.
   const pawnioSlot = el("div", { class: "fans-pawnio" });
   const grid = el("div", { class: "fan-grid" });
+  // Headers nothing is plugged into are hidden rather than shown as five empty
+  // cards; this line accounts for them.
+  const fanNote = el("p", { class: "fans-note" });
 
   const makeCard = (meta: (typeof HEADERS)[number]): FanCard => {
     const rpm = el("span", { class: "readout-value mono" }, "0");
@@ -207,6 +210,7 @@ export function createFans(ctx: ViewContext): View {
         "div",
         {},
         el("h1", { class: "screen-title" }, "Fan control"),
+        fanNote,
       ),
     ),
     warningSlot,
@@ -224,6 +228,7 @@ export function createFans(ctx: ViewContext): View {
     const card = cards.get(fan.header);
     if (!card) return;
 
+    card.root.classList.toggle("is-undetected", !fan.detected);
     card.rpm.textContent = formatRpm(fan.rpm);
     card.pct.textContent = `${fan.percent}%`;
     card.fill.style.width = `${fan.percent}%`;
@@ -251,7 +256,18 @@ export function createFans(ctx: ViewContext): View {
 
   const update = (snapshot: Snapshot) => {
     const settings = ctx.settings();
-    const lowDuty = snapshot.fans.filter(
+    const present = snapshot.fans.filter((fan) => fan.detected);
+    const absent = snapshot.fans.length - present.length;
+
+    if (present.length === 0) {
+      fanNote.textContent = "No fans detected — no header is reporting a speed.";
+    } else if (absent > 0) {
+      fanNote.textContent = `No more fans detected — ${present.length} of ${snapshot.fans.length} headers are in use.`;
+    } else {
+      fanNote.textContent = "";
+    }
+
+    const lowDuty = present.filter(
       (fan) => fan.header !== "pump" && fan.percent < settings.low_duty_warning,
     );
 
@@ -280,9 +296,10 @@ export function createFans(ctx: ViewContext): View {
     // Highlight the preset that matches every header, so the user can see at a
     // glance which profile the board is currently running.
     PROFILES.forEach((profile, index) => {
-      const active = snapshot.fans.every((fan) =>
-        sameCurve(fan.curve, curveFor(profile.id, fan.header === "pump")),
-      );
+      // Only the headers that exist decide whether a profile is "running".
+      const active =
+        present.length > 0 &&
+        present.every((fan) => sameCurve(fan.curve, curveFor(profile.id, fan.header === "pump")));
       presetButtons[index].classList.toggle("is-active", active);
     });
 

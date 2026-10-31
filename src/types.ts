@@ -46,6 +46,8 @@ export type FanCurve = CurvePoint[];
 
 export interface FanStatus {
   header: FanHeaderId;
+  /** False when the header has never reported a tach — nothing is plugged in. */
+  detected: boolean;
   label: string;
   description: string;
   bank: number;
