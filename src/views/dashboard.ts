@@ -113,7 +113,6 @@ export function createDashboard(ctx: ViewContext): View {
         "div",
         { class: "screen-actions" },
         boardPill,
-        button("Refresh", { variant: "ghost", size: "sm", onClick: () => void ctx.refresh() }),
       ),
     ),
     notes,
