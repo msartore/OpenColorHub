@@ -206,6 +206,12 @@ export interface DriverList {
   /** BIOS version reported by SMBIOS. */
   installed_bios: string;
   files: DriverRow[];
+  /** When the vendor was last asked, in ms since the epoch. */
+  fetched_at_ms: number;
+  /** True when this came from the local copy rather than the network. */
+  cached: boolean;
+  /** Set when a refresh failed but a cached copy could still be served. */
+  warning: string | null;
 }
 
 export interface DownloadedFile {

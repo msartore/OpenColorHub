@@ -52,20 +52,32 @@ impl DriverKind {
     }
 
     /// Classifies an entry from the remote catalogue.
+    ///
+    /// The URL carries the vendor's own folder structure, which is more reliable
+    /// than the title: `/drivers/…` is a driver even when the title is just
+    /// `RLNetwork`, and `/manual/…` is always a document.
     pub fn classify(title: &str, url: &str) -> Self {
         let upper = title.to_uppercase();
         let lower_url = url.to_ascii_lowercase();
-        if upper.contains("BIOS") {
-            return DriverKind::Bios;
-        }
-        if lower_url.ends_with(".pdf") {
+
+        if lower_url.contains("/manual/") || lower_url.ends_with(".pdf") {
             return DriverKind::Manual;
         }
-        if upper.contains("DRIVER") || upper.contains("CHIPSET") || upper.contains("AUDIO") {
-            return DriverKind::Driver;
+        if lower_url.contains("/bios/") || upper.contains("BIOS") {
+            return DriverKind::Bios;
+        }
+        if lower_url.contains("/drivers/") || lower_url.contains("/driver/") {
+            return if upper.contains("IGAMECENTER") || upper.contains("UTILITY") {
+                DriverKind::Utility
+            } else {
+                DriverKind::Driver
+            };
         }
         if upper.contains("IGAMECENTER") || upper.contains("UTILITY") || upper.contains("TOOL") {
             return DriverKind::Utility;
+        }
+        if upper.contains("DRIVER") || upper.contains("CHIPSET") || upper.contains("AUDIO") {
+            return DriverKind::Driver;
         }
         DriverKind::Other
     }
@@ -90,6 +102,77 @@ pub struct DriverCatalogue {
     pub board: String,
     pub product_id: u32,
     pub files: Vec<DriverFile>,
+}
+
+/// The catalogue as kept on disk.
+///
+/// Stored as one JSON record rather than in SQLite: it is a single small list
+/// keyed by board, queried only by "give me the last copy". A database would add
+/// a dependency and a migration story for no gain.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CachedCatalogue {
+    /// Board name as the vendor spells it.
+    pub board: String,
+    /// Board name as SMBIOS reported it, so a hardware change invalidates the cache.
+    #[serde(default)]
+    pub source_board: String,
+    pub product_id: u32,
+    /// When the vendor was last asked, in milliseconds since the epoch.
+    pub fetched_at_ms: u64,
+    pub files: Vec<DriverFile>,
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|delta| delta.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Reads the cached catalogue, or `None` when there is no usable copy.
+pub fn load_cache(path: &Path) -> Option<CachedCatalogue> {
+    let text = std::fs::read_to_string(path).ok()?;
+    match serde_json::from_str::<CachedCatalogue>(&text) {
+        Ok(cache) if !cache.files.is_empty() => Some(cache),
+        _ => None,
+    }
+}
+
+/// Cached copy for `board`, if it was read for the same machine.
+pub fn load_cache_for(path: &Path, board: &str) -> Option<CachedCatalogue> {
+    let cache = load_cache(path)?;
+    cache
+        .source_board
+        .eq_ignore_ascii_case(board)
+        .then_some(cache)
+}
+
+/// Writes the cache, replacing any previous copy atomically.
+pub fn save_cache(path: &Path, cache: &CachedCatalogue) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let text = serde_json::to_string_pretty(cache)?;
+    let mut temp = path.to_path_buf().into_os_string();
+    temp.push(".tmp");
+    let temp = PathBuf::from(temp);
+    std::fs::write(&temp, text)?;
+    std::fs::rename(&temp, path)?;
+    Ok(())
+}
+
+/// Fetches the catalogue and records when it was read.
+pub fn fetch_and_cache(board: &str, cache_path: &Path) -> Result<CachedCatalogue> {
+    let catalogue = fetch_catalogue(board)?;
+    let cache = CachedCatalogue {
+        board: catalogue.board,
+        source_board: board.to_string(),
+        product_id: catalogue.product_id,
+        fetched_at_ms: now_ms(),
+        files: catalogue.files,
+    };
+    save_cache(cache_path, &cache)?;
+    Ok(cache)
 }
 
 /// Result of a completed download.
@@ -521,6 +604,74 @@ mod tests {
             DriverKind::classify("Spec sheet", "x.pdf"),
             DriverKind::Manual
         );
+    }
+
+    #[test]
+    fn trusts_the_vendor_folder_over_the_title() {
+        // A bare product name in /drivers/ is a driver, not "other".
+        assert_eq!(
+            DriverKind::classify(
+                "RLNetwork",
+                "https://endownload.colorful.cn/MotherBroard/Smart4/drivers/intel/i400/RLNetwork.rar"
+            ),
+            DriverKind::Driver
+        );
+        assert_eq!(
+            DriverKind::classify(
+                "19.10.16_19H1_WHQL_190514",
+                "https://endownload.colorful.cn/x/drivers/am4/19.10.16_19H1_WHQL_190514.7z"
+            ),
+            DriverKind::Driver
+        );
+        assert_eq!(
+            DriverKind::classify(
+                "iGameCenter-1.0.3.1",
+                "https://endownload.colorful.cn/x/drivers/intel/I500/iGameCenter.zip"
+            ),
+            DriverKind::Utility
+        );
+        assert_eq!(
+            DriverKind::classify(
+                "Some board",
+                "https://endownload.colorful.cn/x/manual/amd/board.pdf"
+            ),
+            DriverKind::Manual
+        );
+        assert_eq!(
+            DriverKind::classify(
+                "Board BIOS 1016",
+                "https://endownload.colorful.cn/EnDownload/MotherBroard/2026/BIOS/x.zip"
+            ),
+            DriverKind::Bios
+        );
+    }
+
+    #[test]
+    fn cache_round_trips_and_ignores_a_broken_file() {
+        let dir = std::env::temp_dir().join(format!("ocb-driver-cache-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("drivers-cache.json");
+
+        assert!(load_cache(&path).is_none(), "missing file yields nothing");
+
+        let cache = CachedCatalogue {
+            board: "CVN X570M GAMING PRO V14".to_string(),
+            source_board: "CVN X570M GAMING PRO".to_string(),
+            product_id: 880,
+            fetched_at_ms: 1_793_450_000_000,
+            files: parse_files(FILES).unwrap(),
+        };
+        save_cache(&path, &cache).unwrap();
+
+        assert_eq!(load_cache(&path).expect("cached copy"), cache);
+        assert!(
+            !path.with_extension("json.tmp").exists(),
+            "the temporary file must be renamed, not left behind"
+        );
+
+        std::fs::write(&path, "{ truncated").unwrap();
+        assert!(load_cache(&path).is_none(), "a broken cache is ignored");
     }
 
     #[test]

@@ -75,7 +75,7 @@ export const api = {
   openExternal: (url: string) => call<void>("open_external", { url }),
 
   /** Vendor downloads for the detected board. Hits the network; may take a second. */
-  drivers: () => call<DriverList>("get_drivers"),
+  drivers: (refresh = false) => call<DriverList>("get_drivers", { refresh }),
   downloadDriver: (file: DriverFile) =>
     call<DownloadedFile>("download_driver", { file }),
   revealDriver: (path: string) => call<void>("reveal_driver", { path }),

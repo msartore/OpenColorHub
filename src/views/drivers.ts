@@ -56,7 +56,7 @@ export function createDrivers(ctx: ViewContext): View {
   const status = el("p", { class: "screen-sub" }, "Looking up the board…");
   const body = el("div", { class: "drivers-stack" });
 
-  actions.append(button("Refresh", { variant: "ghost", onClick: () => void load() }));
+  actions.append(button("Refresh", { variant: "ghost", onClick: () => void load(true) }));
 
   let catalogue: DriverList | null = null;
   let error: string | null = null;
@@ -88,18 +88,34 @@ export function createDrivers(ctx: ViewContext): View {
     }
   }
 
-  async function load(): Promise<void> {
-    loading = true;
-    error = null;
-    progress.clear();
-    render();
+  let refreshing = false;
+
+  /**
+   * Shows the cached catalogue first and only then asks the vendor, so the
+   * screen has content offline and updates in place when the network answers.
+   */
+  async function load(refresh = false, background = false): Promise<void> {
+    if (background) {
+      refreshing = true;
+      render();
+    } else {
+      loading = true;
+      error = null;
+      progress.clear();
+      render();
+    }
     try {
-      catalogue = await api.drivers();
+      const list = await api.drivers(refresh);
+      catalogue = list;
+      error = null;
     } catch (e) {
-      error = String(e);
-      catalogue = null;
+      if (!background) {
+        error = String(e);
+        catalogue = null;
+      }
     } finally {
       loading = false;
+      refreshing = false;
       render();
     }
   }
@@ -195,20 +211,53 @@ export function createDrivers(ctx: ViewContext): View {
     );
   }
 
+  /** Firmware releases pile up; show the newest few and offer the rest. */
+  const VISIBLE_FIRMWARE = 4;
+  const expanded = new Set<DriverRow["kind"]>();
+
   function group(kind: DriverRow["kind"], rows: DriverRow[]): HTMLElement | null {
     if (rows.length === 0) return null;
+
+    const collapsible = kind === "bios" && rows.length > VISIBLE_FIRMWARE && !expanded.has(kind);
+    const shown = collapsible ? rows.slice(0, VISIBLE_FIRMWARE) : rows;
+
+    const body = el(
+      "table",
+      { class: "data-table" },
+      el("thead", {}, el("tr", {}, el("th", {}, KIND_LABELS[kind]), el("th", {}, ""))),
+      el("tbody", {}, ...shown.map(rowElement)),
+    );
+
+    if (collapsible) {
+      body.append(
+        el(
+          "tbody",
+          {},
+          el(
+            "tr",
+            {},
+            el(
+              "td",
+              { colspan: "2", class: "driver-more" },
+              button(`Show all ${rows.length} firmware releases`, {
+                variant: "quiet",
+                size: "sm",
+                onClick: () => {
+                  expanded.add(kind);
+                  render();
+                },
+              }),
+            ),
+          ),
+        ),
+      );
+    }
+
     return panel({
       className: "drivers-panel",
       title: KIND_LABELS[kind],
       subtitle: `${rows.length} file${rows.length === 1 ? "" : "s"}`,
-      body: [
-        el(
-          "table",
-          { class: "data-table" },
-          el("thead", {}, el("tr", {}, el("th", {}, KIND_LABELS[kind]), el("th", {}, ""))),
-          el("tbody", {}, ...rows.map(rowElement)),
-        ),
-      ],
+      body: [body],
     });
   }
 
@@ -245,6 +294,24 @@ export function createDrivers(ctx: ViewContext): View {
       el("span", {}, `${files.length} files`),
     );
 
+    if (catalogue.fetched_at_ms) {
+      const when = new Date(catalogue.fetched_at_ms).toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      status.append(
+        el("span", { class: "screen-sub-sep" }, " · "),
+        el("span", { class: refreshing ? "is-stale" : "" }, `${refreshing ? "refreshing" : "as of"} ${when}`),
+      );
+    }
+
+    if (catalogue.warning) {
+      body.append(inlineNote(`Could not reach the vendor: ${catalogue.warning} — showing the cached list.`, "warn"));
+    }
+
     const newer = files.filter((f) => f.newer);
     if (newer.length > 0) {
       body.append(
@@ -266,7 +333,10 @@ export function createDrivers(ctx: ViewContext): View {
 
   root.append(head, status, body);
   render();
-  void load();
+  void load().then(() => {
+    // A cached answer is rendered immediately; the network copy replaces it.
+    if (catalogue?.cached) void load(true, true);
+  });
 
   void onDriverProgress((p) => {
     progress.set(p.file, p);

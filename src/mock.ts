@@ -469,6 +469,9 @@ export function createDemoBackend(): DemoBackend {
           product_id: 880,
           installed_bios: "1015",
           files,
+          fetched_at_ms: Date.now(),
+          cached: false,
+          warning: null,
         } as T;
       }
 

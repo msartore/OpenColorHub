@@ -58,6 +58,35 @@ name) is taken.
   build number beats the installed one — and the note says flashing happens in
   the BIOS, not here.
 
+## Caching
+
+The catalogue is cached in the app's data directory as `drivers-cache.json`
+(one JSON record, not SQLite: it is a single list keyed by board, read only as
+"the last copy", and a database would add a dependency and a migration story
+for no gain).
+
+- The screen renders the cached copy **immediately** — 1 ms versus ~1.2 s for a
+  network round-trip — then refreshes in the background and replaces it.
+- The cache remembers which SMBIOS board it belongs to, so swapping hardware
+  invalidates it instead of showing the previous board's files.
+- A failed refresh with a cached copy shows the list plus a warning; a failed
+  refresh with no cache shows the error and nothing else.
+- The cache holds **metadata only**: titles, kinds, URLs, dates. Driver files are
+  never stored — those are downloaded only when you ask for one.
+
+## What Colorful publishes
+
+The catalogue is not BIOS-only. For this board it returns 21 entries in four
+groups, classified from the vendor's own folder names (`/bios/`, `/drivers/`,
+`/manual/`) before falling back to title keywords:
+
+| Group | Count | Examples |
+|---|---|---|
+| Firmware | 13 | BIOS 1003 → 1016 |
+| Drivers | 6 | AMD chipset 2026-03, B550 chipset, Win11 chipset + integrated graphics, audio, LAN (`RLNetwork`, `19.10.16_19H1_WHQL`) |
+| Utilities | 1 | iGameCenter installer |
+| Manuals | 1 | board manual (PDF) |
+
 ## Files
 
 Downloads land in the app's data directory:

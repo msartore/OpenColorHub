@@ -2783,3 +2783,8 @@ select {
   gap: 12px;
   flex-wrap: wrap;
 }
+
+.is-stale {
+  color: var(--text-faint);
+  font-style: italic;
+}

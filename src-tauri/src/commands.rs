@@ -330,22 +330,48 @@ pub struct DriverList {
     /// BIOS version reported by SMBIOS, for context in the UI.
     pub installed_bios: String,
     pub files: Vec<DriverRow>,
+    /// When the vendor was last asked, in milliseconds since the epoch.
+    pub fetched_at_ms: u64,
+    /// True when this came from the local copy rather than the network.
+    pub cached: bool,
+    /// Set when a refresh failed but a cached copy could still be served.
+    pub warning: Option<String>,
 }
 
-#[derive(Clone, serde::Serialize)]
-struct DriverProgress {
-    file: String,
-    received: u64,
-    total: Option<u64>,
+fn driver_list(
+    cache: colorctl_core::drivers::CachedCatalogue,
+    bios: &str,
+    cached: bool,
+    warning: Option<String>,
+) -> DriverList {
+    let files = cache
+        .files
+        .into_iter()
+        .map(|file| DriverRow {
+            newer: file.kind == DriverKind::Bios && drivers::is_newer_firmware(&file.title, bios),
+            file,
+        })
+        .collect();
+
+    DriverList {
+        board: cache.board,
+        product_id: cache.product_id,
+        installed_bios: bios.to_string(),
+        files,
+        fetched_at_ms: cache.fetched_at_ms,
+        cached,
+        warning,
+    }
 }
 
 /// Lists the vendor's downloads for the detected board.
 ///
-/// Two HTTP round-trips, so it runs off the UI thread. The board name and BIOS
-/// version are copied out of the guarded state before awaiting: a `MutexGuard`
-/// must not cross an await point.
+/// The copy on disk is served immediately — the catalogue changes a few times a
+/// year, and a network round-trip should not sit in front of the screen. Pass
+/// `refresh` to ask the vendor again; if that fails the cached copy is returned
+/// with a warning rather than an empty screen.
 #[tauri::command]
-pub async fn get_drivers(state: State<'_, AppState>) -> Result<DriverList, String> {
+pub async fn get_drivers(state: State<'_, AppState>, refresh: bool) -> Result<DriverList, String> {
     let (board, bios) = {
         let inner = state.lock()?;
         let identity = inner.service()?.board().identity.clone();
@@ -358,27 +384,33 @@ pub async fn get_drivers(state: State<'_, AppState>) -> Result<DriverList, Strin
         return Err("this machine did not report a motherboard model".to_string());
     }
 
+    let cache_path = state.data_dir().join("drivers-cache.json");
+
+    if !refresh && let Some(cache) = drivers::load_cache_for(&cache_path, &board) {
+        return Ok(driver_list(cache, &bios, true, None));
+    }
+
     let lookup = board.clone();
-    let catalogue = tauri::async_runtime::spawn_blocking(move || drivers::fetch_catalogue(&lookup))
-        .await
-        .map_err(|e| format!("driver lookup panicked: {e}"))?
-        .map_err(|e| e.to_string())?;
+    let path = cache_path.clone();
+    let fetched =
+        tauri::async_runtime::spawn_blocking(move || drivers::fetch_and_cache(&lookup, &path))
+            .await
+            .map_err(|e| format!("driver lookup panicked: {e}"))?;
 
-    let files = catalogue
-        .files
-        .into_iter()
-        .map(|file| DriverRow {
-            newer: file.kind == DriverKind::Bios && drivers::is_newer_firmware(&file.title, &bios),
-            file,
-        })
-        .collect();
+    match fetched {
+        Ok(cache) => Ok(driver_list(cache, &bios, false, None)),
+        Err(error) => match drivers::load_cache_for(&cache_path, &board) {
+            Some(cache) => Ok(driver_list(cache, &bios, true, Some(error.to_string()))),
+            None => Err(error.to_string()),
+        },
+    }
+}
 
-    Ok(DriverList {
-        board: catalogue.board,
-        product_id: catalogue.product_id,
-        installed_bios: bios,
-        files,
-    })
+#[derive(Clone, serde::Serialize)]
+struct DriverProgress {
+    file: String,
+    received: u64,
+    total: Option<u64>,
 }
 
 /// Downloads one catalogue entry into the app's data directory.
