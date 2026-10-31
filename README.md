@@ -25,7 +25,6 @@ losing its lighting state.
 | --- | --- | --- |
 | **Linux** | ✅ `/dev/port` — root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` |
 | **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO without it | ✅ SetupAPI + `hid.dll`, no driver |
-| **macOS** | ⛔ not supported, not shipped | ⛔ |
 
 Windows needs a signed driver to broker `IN`/`OUT`; PawnIO is **not bundled**,
 and without it the app falls back to HWiNFO telemetry and then the simulator.

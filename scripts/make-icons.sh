@@ -52,8 +52,8 @@ for s in 30 44 71 89 107 142 150 284 310; do
   cp "$TMP/$s.png" "$OUT/Square${s}x${s}Logo.png"
 done
 
-# .icns and the Android/iOS sets come from the Tauri CLI, which needs its own
-# run; it also rewrites the PNGs above, so it goes first in a clean run.
+# The Android/iOS sets come from the Tauri CLI, which needs its own run; it
+# also rewrites the PNGs above, so it goes first in a clean run.
 if command -v npx >/dev/null; then
   npx tauri icon "$SRC" >/dev/null 2>&1 || true
   # Re-apply the ffmpeg renders that the CLI just overwrote.

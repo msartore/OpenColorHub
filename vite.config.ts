@@ -9,7 +9,7 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   build: {
-    // Tauri uses WebView2 on Windows, WebKit on macOS and WebKitGTK on Linux.
+    // Tauri uses WebView2 on Windows and WebKitGTK on Linux.
     target: ["chrome105", "safari13"],
     minify: process.env.TAURI_ENV_DEBUG ? false : "esbuild",
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),

@@ -6,7 +6,6 @@
 | --- | --- | --- |
 | **Linux** | ✅ `/dev/port`, needs root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` for `2F4C:1000` |
 | **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO when PawnIO is absent | ✅ SetupAPI + `hid.dll`, no driver |
-| **macOS** | ⛔ not supported, not shipped | ⛔ |
 
 ## Why Windows needs a driver at all
 

@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -70,15 +70,11 @@ jobs:
             args: "--bundles deb,appimage"
           - os: windows-latest
             args: "--bundles nsis,msi"
-          - os: macos-latest
-            args: "--target universal-apple-darwin --bundles app,dmg"
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: Swatinem/rust-cache@v2
 
