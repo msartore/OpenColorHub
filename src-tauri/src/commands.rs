@@ -15,6 +15,7 @@ use colorctl_core::model::{Channel, ChannelConfig, FanHeader, Snapshot};
 use colorctl_core::platform::{self, Elevation};
 use colorctl_core::service::{ActionResult, Activity};
 use colorctl_core::settings::{Settings, SettingsPatch};
+use colorctl_core::setups::SetupKind;
 use colorctl_core::{CURVE_POINTS, CurvePoint, FanCurve, FanProfile};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -488,43 +489,46 @@ fn setup_store(state: &State<'_, AppState>) -> Result<colorctl_core::SetupStore,
     ))
 }
 
-fn setup_list(store: colorctl_core::SetupStore) -> SetupList {
+/// Only the presets of one kind: the Fan control and Lighting screens each keep
+/// their own list.
+fn setup_list(store: colorctl_core::SetupStore, kind: SetupKind) -> SetupList {
     SetupList {
         warning: store.warning.clone(),
-        setups: store.all().to_vec(),
+        setups: store.of_kind(kind),
     }
 }
 
 #[tauri::command]
-pub fn list_setups(state: State<'_, AppState>) -> Result<SetupList, String> {
-    Ok(setup_list(setup_store(&state)?))
+pub fn list_setups(state: State<'_, AppState>, kind: SetupKind) -> Result<SetupList, String> {
+    Ok(setup_list(setup_store(&state)?, kind))
 }
 
-/// Saves the current fan and lighting state under `name`.
+/// Saves the current state of the half `kind` covers under `name`.
 ///
-/// Passing an `id` overwrites that setup instead of creating a new one, which is
+/// Passing an `id` overwrites that preset instead of creating a new one, which is
 /// what the "Update" action uses.
 #[tauri::command]
 pub fn save_setup(
     state: State<'_, AppState>,
+    kind: SetupKind,
     name: String,
     id: Option<String>,
 ) -> Result<SetupList, String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("a setup needs a name".to_string());
+        return Err("a preset needs a name".to_string());
     }
 
     let mut store = setup_store(&state)?;
     let mut inner = state.lock()?;
-    let mut setup = colorctl_core::Setup::capture(inner.service_mut()?, name);
+    let mut setup = colorctl_core::Setup::capture(inner.service_mut()?, kind, name);
     if let Some(id) = id {
         setup.id = id;
     }
     drop(inner);
 
     store.upsert(setup).map_err(|e| e.to_string())?;
-    Ok(setup_list(store))
+    Ok(setup_list(store, kind))
 }
 
 #[tauri::command]
@@ -546,10 +550,14 @@ pub fn apply_setup(state: State<'_, AppState>, id: String) -> Result<ActionResul
 }
 
 #[tauri::command]
-pub fn delete_setup(state: State<'_, AppState>, id: String) -> Result<SetupList, String> {
+pub fn delete_setup(
+    state: State<'_, AppState>,
+    kind: SetupKind,
+    id: String,
+) -> Result<SetupList, String> {
     let mut store = setup_store(&state)?;
     store.remove(&id).map_err(|e| e.to_string())?;
-    Ok(setup_list(store))
+    Ok(setup_list(store, kind))
 }
 
 /// Whether fan control can reach PawnIO right now.

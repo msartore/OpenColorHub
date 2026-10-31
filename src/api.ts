@@ -22,6 +22,7 @@ import type {
   DownloadedFile,
   DriverProgress,
   SetupList,
+  SetupKind,
   PawnioStatus,
   PawnioProgress,
   Snapshot,
@@ -83,11 +84,11 @@ export const api = {
   pawnioStatus: () => call<PawnioStatus>("pawnio_status"),
   installPawnio: () => call<PawnioStatus>("install_pawnio"),
 
-  setups: () => call<SetupList>("list_setups"),
-  saveSetup: (name: string, id?: string) =>
-    call<SetupList>("save_setup", { name, id: id ?? null }),
+  setups: (kind: SetupKind) => call<SetupList>("list_setups", { kind }),
+  saveSetup: (kind: SetupKind, name: string, id?: string) =>
+    call<SetupList>("save_setup", { kind, name, id: id ?? null }),
   applySetup: (id: string) => call<Result>("apply_setup", { id }),
-  deleteSetup: (id: string) => call<SetupList>("delete_setup", { id }),
+  deleteSetup: (kind: SetupKind, id: string) => call<SetupList>("delete_setup", { kind, id }),
 };
 
 /** Subscribes to telemetry ticks; returns an unsubscribe function. */

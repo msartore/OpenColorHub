@@ -208,7 +208,7 @@ export function createLeds(ctx: ViewContext): View {
         el("h1", { class: "screen-title" }, "Lighting"),
       ),
     ),
-    setupsPanel(ctx, { focus: "lighting" }).el,
+    setupsPanel(ctx, { kind: "lighting" }).el,
     panel({
       title: "Global colour",
       subtitle: "Every channel, one colour",

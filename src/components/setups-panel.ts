@@ -1,15 +1,15 @@
 /**
- * Saved setups, embedded where the state lives.
+ * Saved presets, embedded where the state lives.
  *
- * A setup spans both fans and lighting, so the same panel appears on the Fan
- * control and Lighting screens rather than on a screen of its own: from either
- * one you can save what is running, or apply a saved combination (which writes
- * both halves — that is what a setup is).
+ * A preset covers one half — fans or lighting — so the Fan control screen hosts
+ * the fan list and the Lighting screen hosts the lighting list. Keeping them
+ * apart means recalling a fan curve cannot change the colour, and picking a
+ * colour cannot change the fans.
  */
 
 import { api } from "../api";
 import { el } from "../dom";
-import type { Setup, SetupList } from "../types";
+import type { Setup, SetupKind, SetupList } from "../types";
 import type { ViewContext } from "../view";
 import { button, emptyState, inlineNote, panel } from "./ui";
 
@@ -17,17 +17,15 @@ const hexOf = (channel: Setup["channels"][number]): string =>
   `#${channel.color.map((part) => part.toString(16).padStart(2, "0")).join("")}`;
 
 function summarise(setup: Setup): string {
-  const curves = setup.fans.filter((fan) => fan.curve !== null).length;
-  const manual = setup.fans.length - curves;
+  if (setup.kind === "fans") {
+    const curves = setup.fans.filter((fan) => fan.curve !== null).length;
+    const manual = setup.fans.length - curves;
+    return `${manual} manual · ${curves} curve · ${setup.fans.length} headers`;
+  }
   const lit = setup.channels.filter((channel) => channel.enabled);
   const colours = [...new Set(lit.map(hexOf))];
-  const colourText =
-    colours.length === 0
-      ? "all channels off"
-      : colours.length === 1
-        ? colours[0].toUpperCase()
-        : `${colours.length} colours`;
-  return `${manual} manual · ${curves} curve · ${lit.length}/${setup.channels.length} lit · ${colourText}`;
+  const colour = colours.length === 0 ? "all off" : colours.length === 1 ? colours[0].toUpperCase() : `${colours.length} colours`;
+  return `${lit.length}/${setup.channels.length} lit · ${colour}`;
 }
 
 function stamp(ms: number): string {
@@ -42,8 +40,8 @@ function stamp(ms: number): string {
 }
 
 export interface SetupsPanelOptions {
-  /** Emphasised half, used in the subtitle so the panel reads as local. */
-  focus: "fans" | "lighting";
+  /** Which half this panel saves and applies. */
+  kind: SetupKind;
 }
 
 /** Builds the panel; the caller appends `el` to its screen. */
@@ -55,12 +53,15 @@ export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el
   const nameInput = el("input", {
     class: "input setups-name",
     type: "text",
-    placeholder: "Name this setup — e.g. Night, Bench, Silent",
+    placeholder:
+      options.kind === "fans"
+        ? "Name this preset — e.g. Silent, Bench"
+        : "Name this preset — e.g. Night, Amber",
     maxlength: 48,
     "aria-label": "Setup name",
   }) as HTMLInputElement;
 
-  const saveButton = button("Save current", {
+  const saveButton = button(options.kind === "fans" ? "Save fan preset" : "Save lighting preset", {
     variant: "primary",
     size: "sm",
     onClick: () => void save(null),
@@ -81,7 +82,7 @@ export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el
 
   async function refresh(): Promise<void> {
     try {
-      applyList(await api.setups());
+      applyList(await api.setups(options.kind));
     } catch (error) {
       ctx.toast(`Could not load setups: ${String(error)}`, "danger");
     }
@@ -99,7 +100,7 @@ export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el
     busy = id ?? "new";
     render();
     try {
-      const list = await api.saveSetup(name, id ?? undefined);
+      const list = await api.saveSetup(options.kind, name, id ?? undefined);
       applyList(list);
       if (!id) nameInput.value = "";
       ctx.toast(id ? `“${name}” updated` : `“${name}” saved`, "ok");
@@ -130,7 +131,7 @@ export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el
     busy = setup.id;
     render();
     try {
-      applyList(await api.deleteSetup(setup.id));
+      applyList(await api.deleteSetup(options.kind, setup.id));
       ctx.toast(`“${setup.name}” deleted`, "ok");
     } catch (error) {
       ctx.toast(`Could not delete: ${String(error)}`, "danger");
@@ -156,7 +157,10 @@ export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el
           "div",
           {
             class: "setup-summary",
-            title: "Manual headers · curve-driven headers · lighting channels on · colour",
+            title:
+            setup.kind === "fans"
+              ? "Manual headers · curve-driven headers · total headers"
+              : "Channels lit · colour",
           },
           summarise(setup),
         ),
@@ -219,14 +223,14 @@ export function setupsPanel(ctx: ViewContext, options: SetupsPanelOptions): { el
   }
 
   const subtitle =
-    options.focus === "fans"
-      ? "Save or recall fan and lighting state together"
-      : "Save or recall lighting and fan state together";
+    options.kind === "fans"
+      ? "Fan settings only — lighting is left alone"
+      : "Colour and brightness only — fans are left alone";
 
   root.append(
     panel({
       className: "setups-list",
-      title: "Setups",
+      title: options.kind === "fans" ? "Fan presets" : "Lighting presets",
       subtitle,
       body: [
         notes,

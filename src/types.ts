@@ -239,9 +239,13 @@ export interface ChannelSetting {
   enabled: boolean;
 }
 
+/** A preset covers one half of the machine, never both. */
+export type SetupKind = "fans" | "lighting";
+
 export interface Setup {
   id: string;
   name: string;
+  kind: SetupKind;
   saved_at_ms: number;
   fans: FanSetting[];
   channels: ChannelSetting[];

@@ -488,23 +488,30 @@ export function createDemoBackend(): DemoBackend {
       case "reveal_driver":
         return undefined as T;
 
-      case "list_setups":
+      case "list_setups": {
+        const kind = (args.kind as "fans" | "lighting") ?? "fans";
+        const fans = [
+          { header: "cpu" as const, percent: 40, curve: null },
+          { header: "cha_fan1" as const, percent: 30, curve: null },
+          { header: "pump" as const, percent: 80, curve: null },
+        ];
+        const channels = [
+          { channel: "led" as const, color: [251, 191, 36] as [number, number, number], brightness: 40, enabled: true },
+        ];
         return {
           setups: [
             {
-              id: "s1",
-              name: "Night",
+              id: kind === "fans" ? "s1-f" : "s1-l",
+              name: kind === "fans" ? "Night" : "Amber",
+              kind,
               saved_at_ms: Date.now() - 86_400_000,
-              fans: [
-                { header: "cpu", percent: 40, curve: null },
-                { header: "cha_fan1", percent: 30, curve: null },
-                { header: "pump", percent: 80, curve: null },
-              ],
-              channels: [{ channel: "onboard", color: [251, 191, 36], brightness: 40, enabled: true }],
+              fans: kind === "fans" ? fans : [],
+              channels: kind === "lighting" ? channels : [],
             },
           ],
           warning: null,
         } as T;
+      }
 
       case "save_setup":
       case "delete_setup":

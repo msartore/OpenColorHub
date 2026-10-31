@@ -211,7 +211,7 @@ export function createFans(ctx: ViewContext): View {
     ),
     warningSlot,
     pawnioSlot,
-    setupsPanel(ctx, { focus: "fans" }).el,
+    setupsPanel(ctx, { kind: "fans" }).el,
     panel({
       title: "Curve presets",
       subtitle: "Quiet, standard or full tilt",

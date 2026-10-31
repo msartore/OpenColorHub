@@ -81,7 +81,7 @@ sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
 | [Board detection](docs/BOARD-DETECTION.md) | Confidence levels, sources, the hardware guard |
 | [Updates](docs/UPDATES.md) | Self-updater, release process, integrity caveats |
 | [Drivers](docs/DRIVERS.md) | Board download catalogue, URL rules, why nothing is executed |
-| [Setups](docs/SETUPS.md) | Saved fan + lighting combinations (on the Fan control and Lighting screens) |
+| [Presets](docs/SETUPS.md) | Saved fan and lighting presets, on the screens that own them |
 | [NOTICE.md](NOTICE.md) | Licensing of this project and everything it embeds |
 
 ## Safety
