@@ -2557,3 +2557,9 @@ select {
     margin-left: 55%;
   }
 }
+
+.about-credit {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}

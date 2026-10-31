@@ -5,7 +5,7 @@ import { el } from "../dom";
 import logoUrl from "../assets/logo.png";
 import type { AboutInfo, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
-import { badge, button, inlineNote, kv, panel } from "../components/ui";
+import { badge, inlineNote, kv, panel } from "../components/ui";
 
 function boardBadge(board: AboutInfo["board"]): HTMLElement {
   const tone = board.confidence === "verified"
@@ -54,6 +54,8 @@ export function createAbout(_ctx: ViewContext): View {
     ],
   });
 
+  const credit = el("p", { class: "about-credit" });
+
   const root = el(
     "div",
     { class: "screen" },
@@ -65,18 +67,10 @@ export function createAbout(_ctx: ViewContext): View {
         {},
         el("h1", { class: "screen-title" }, "About"),
       ),
-      el(
-        "div",
-        { class: "screen-actions" },
-        button("Upstream colorctl", {
-          variant: "quiet",
-          size: "sm",
-          onClick: () => void api.openExternal("https://github.com/Curstantine/colorctl"),
-        }),
-      ),
     ),
     hero,
     detail,
+    credit,
   );
 
   const render = (about: AboutInfo) => {
@@ -121,6 +115,13 @@ export function createAbout(_ctx: ViewContext): View {
     .about()
     .then((about) => {
       render(about);
+      credit.replaceChildren(
+        el(
+          "span",
+          {},
+          `Register programming and state format derived from ${about.upstream.name} by ${about.upstream.author}, ${about.upstream.license} licensed.`,
+        ),
+      );
       const version = root.querySelector(".chip.mono");
       if (version) version.textContent = `v${about.version}`;
     })
