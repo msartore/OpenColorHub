@@ -445,6 +445,46 @@ pub async fn download_driver(
     .map_err(|e| format!("download panicked: {e}"))?
 }
 
+/// A file already sitting in the download folder.
+#[derive(serde::Serialize)]
+pub struct StoredFile {
+    pub file_name: String,
+    pub path: String,
+    pub bytes: u64,
+}
+
+/// Lists what is already downloaded, so a restart does not lose the button.
+#[tauri::command]
+pub fn downloaded_drivers(state: State<'_, AppState>) -> Result<Vec<StoredFile>, String> {
+    let dir = state.data_dir().join("drivers");
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Ok(Vec::new());
+    };
+
+    let mut files: Vec<StoredFile> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let meta = entry.metadata().ok()?;
+            if !meta.is_file() {
+                return None;
+            }
+            let name = path.file_name()?.to_string_lossy().to_string();
+            // A partial download is not something to reveal.
+            if name.ends_with(".part") {
+                return None;
+            }
+            Some(StoredFile {
+                file_name: name,
+                path: path.to_string_lossy().to_string(),
+                bytes: meta.len(),
+            })
+        })
+        .collect();
+    files.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+    Ok(files)
+}
+
 /// Opens the folder a downloaded file landed in, selecting the file itself.
 #[tauri::command]
 pub fn reveal_driver(path: String) -> Result<(), String> {
@@ -455,8 +495,15 @@ pub fn reveal_driver(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+
+        // Explorer parses its own command line and rejects a quoted token that
+        // starts with `/select,`: `arg()` quotes the whole argument whenever the
+        // path contains a space, so every real download name broke. `raw_arg`
+        // keeps the switch bare and quotes only the path, the form Explorer
+        // documents.
         Command::new("explorer")
-            .arg(format!("/select,{}", target.display()))
+            .raw_arg(format!("/select,\"{}\"", target.display()))
             .spawn()
             .map_err(|e| format!("could not open Explorer: {e}"))?;
         return Ok(());

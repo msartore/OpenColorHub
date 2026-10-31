@@ -223,6 +223,13 @@ export interface DownloadedFile {
   sha256: string;
 }
 
+/** A file already sitting in the download folder. */
+export interface StoredFile {
+  file_name: string;
+  path: string;
+  bytes: number;
+}
+
 export interface DriverProgress {
   file: string;
   received: number;

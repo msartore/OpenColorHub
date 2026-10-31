@@ -159,6 +159,7 @@ pub fn run() {
             commands::open_external,
             commands::get_drivers,
             commands::download_driver,
+            commands::downloaded_drivers,
             commands::reveal_driver,
             commands::pawnio_status,
             commands::install_pawnio,

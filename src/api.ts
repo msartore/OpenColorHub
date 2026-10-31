@@ -20,6 +20,7 @@ import type {
   DriverFile,
   DriverList,
   DownloadedFile,
+  StoredFile,
   DriverProgress,
   SetupList,
   SetupKind,
@@ -80,6 +81,7 @@ export const api = {
   downloadDriver: (file: DriverFile) =>
     call<DownloadedFile>("download_driver", { file }),
   revealDriver: (path: string) => call<void>("reveal_driver", { path }),
+  downloadedDrivers: () => call<StoredFile[]>("downloaded_drivers"),
 
   pawnioStatus: () => call<PawnioStatus>("pawnio_status"),
   installPawnio: () => call<PawnioStatus>("install_pawnio"),

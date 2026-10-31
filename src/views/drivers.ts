@@ -2,7 +2,7 @@
 
 import { api, onDriverProgress } from "../api";
 import { el } from "../dom";
-import type { DriverList, DriverProgress, DriverRow, DownloadedFile, Snapshot } from "../types";
+import type { DriverList, DriverProgress, DriverRow, Snapshot } from "../types";
 import type { View, ViewContext } from "../view";
 import { badge, button, inlineNote, panel } from "../components/ui";
 import { stateView } from "../components/state";
@@ -69,8 +69,8 @@ export function createDrivers(ctx: ViewContext): View {
   const rowButtons = new Map<string, HTMLButtonElement>();
   /** Files downloading right now; several may run at once, none blocks another. */
   const active = new Set<string>();
-  /** Completed downloads, keyed by url, kept for the session. */
-  const done = new Map<string, DownloadedFile>();
+  /** Completed downloads keyed by file name, so a restart keeps the button. */
+  const done = new Map<string, { path: string; bytes: number; sha256?: string }>();
 
   function paintProgress(name: string, p: DriverProgress): void {
     const nodes = progressNodes.get(name);
@@ -136,7 +136,7 @@ export function createDrivers(ctx: ViewContext): View {
 
     try {
       const saved = await api.downloadDriver(row);
-      done.set(row.url, saved);
+      done.set(saved.path.split(/[\/]/).pop() ?? row.file_name, saved);
       ctx.toast(`${name} saved`, "ok");
     } catch (e) {
       ctx.toast(`Download failed: ${String(e)}`, "danger");
@@ -149,7 +149,7 @@ export function createDrivers(ctx: ViewContext): View {
   }
 
   function rowElement(row: DriverRow): HTMLElement {
-    const saved = done.get(row.url);
+    const saved = done.get(row.file_name);
     const name = row.file_name;
 
     const fill = el("div", { class: "bar-fill" });
@@ -345,6 +345,22 @@ export function createDrivers(ctx: ViewContext): View {
 
   root.append(head, status, body);
   render();
+
+  // Files downloaded in an earlier run are still there; say so instead of
+  // offering "Download" again and overwriting them.
+  void api
+    .downloadedDrivers()
+    .then((files) => {
+      let added = false;
+      for (const file of files) {
+        if (!done.has(file.file_name)) {
+          done.set(file.file_name, { path: file.path, bytes: file.bytes });
+          added = true;
+        }
+      }
+      if (added) render();
+    })
+    .catch(() => undefined);
   void load().then(() => {
     // A cached answer is rendered immediately; the network copy replaces it.
     if (catalogue?.cached) void load(true, true);
