@@ -442,3 +442,80 @@ pub fn reveal_driver(path: String) -> Result<(), String> {
     #[allow(unreachable_code)]
     Err("revealing files is not supported on this platform".to_string())
 }
+
+/// Saved setups plus any problem reading the file, so the UI can say so.
+#[derive(serde::Serialize)]
+pub struct SetupList {
+    pub setups: Vec<colorctl_core::Setup>,
+    pub warning: Option<String>,
+}
+
+fn setup_store(state: &State<'_, AppState>) -> Result<colorctl_core::SetupStore, String> {
+    Ok(colorctl_core::SetupStore::load(
+        state.data_dir().join("setups.json"),
+    ))
+}
+
+fn setup_list(store: colorctl_core::SetupStore) -> SetupList {
+    SetupList {
+        warning: store.warning.clone(),
+        setups: store.all().to_vec(),
+    }
+}
+
+#[tauri::command]
+pub fn list_setups(state: State<'_, AppState>) -> Result<SetupList, String> {
+    Ok(setup_list(setup_store(&state)?))
+}
+
+/// Saves the current fan and lighting state under `name`.
+///
+/// Passing an `id` overwrites that setup instead of creating a new one, which is
+/// what the "Update" action uses.
+#[tauri::command]
+pub fn save_setup(
+    state: State<'_, AppState>,
+    name: String,
+    id: Option<String>,
+) -> Result<SetupList, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("a setup needs a name".to_string());
+    }
+
+    let mut store = setup_store(&state)?;
+    let mut inner = state.lock()?;
+    let mut setup = colorctl_core::Setup::capture(inner.service_mut()?, name);
+    if let Some(id) = id {
+        setup.id = id;
+    }
+    drop(inner);
+
+    store.upsert(setup).map_err(|e| e.to_string())?;
+    Ok(setup_list(store))
+}
+
+#[tauri::command]
+pub fn apply_setup(state: State<'_, AppState>, id: String) -> Result<ActionResult, String> {
+    let store = setup_store(&state)?;
+    let setup = store
+        .all()
+        .iter()
+        .find(|entry| entry.id == id)
+        .cloned()
+        .ok_or_else(|| "that setup no longer exists".to_string())?;
+
+    let mut inner = state.lock()?;
+    let message = setup
+        .apply(inner.service_mut()?)
+        .map_err(|e| e.to_string())?;
+    let snapshot = inner.service_mut()?.snapshot();
+    Ok(ActionResult { snapshot, message })
+}
+
+#[tauri::command]
+pub fn delete_setup(state: State<'_, AppState>, id: String) -> Result<SetupList, String> {
+    let mut store = setup_store(&state)?;
+    store.remove(&id).map_err(|e| e.to_string())?;
+    Ok(setup_list(store))
+}

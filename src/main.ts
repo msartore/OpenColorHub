@@ -15,12 +15,14 @@ import { createDrivers } from "./views/drivers";
 import { createFans } from "./views/fans";
 import { createLeds } from "./views/leds";
 import { createSettings } from "./views/settings";
+import { createSetups } from "./views/setups";
 
 const VIEWS: Record<ScreenId, ViewFactory> = {
   dashboard: createDashboard,
   fans: createFans,
   leds: createLeds,
   drivers: createDrivers,
+  setups: createSetups,
   settings: createSettings,
   about: createAbout,
 };
@@ -30,6 +32,7 @@ const SCREEN_ORDER: ScreenId[] = [
   "fans",
   "leds",
   "drivers",
+  "setups",
   "settings",
   "about",
 ];

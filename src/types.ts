@@ -15,6 +15,7 @@ export type ScreenId =
   | "fans"
   | "leds"
   | "drivers"
+  | "setups"
   | "settings"
   | "about";
 
@@ -217,4 +218,31 @@ export interface DriverProgress {
   file: string;
   received: number;
   total: number | null;
+}
+
+/** One saved combination of fan and lighting settings. */
+export interface FanSetting {
+  header: FanHeaderId;
+  percent: number;
+  curve: CurvePoint[] | null;
+}
+
+export interface ChannelSetting {
+  channel: ChannelId;
+  color: [number, number, number];
+  brightness: number;
+  enabled: boolean;
+}
+
+export interface Setup {
+  id: string;
+  name: string;
+  saved_at_ms: number;
+  fans: FanSetting[];
+  channels: ChannelSetting[];
+}
+
+export interface SetupList {
+  setups: Setup[];
+  warning: string | null;
 }

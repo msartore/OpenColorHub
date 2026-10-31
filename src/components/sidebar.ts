@@ -20,6 +20,7 @@ const NAV: { id: ScreenId; label: string; hint: string }[] = [
   { id: "fans", label: "Fan control", hint: "Headers & curves" },
   { id: "leds", label: "Lighting", hint: "Channels & colour" },
   { id: "drivers", label: "Drivers", hint: "Board downloads" },
+  { id: "setups", label: "Setups", hint: "Saved fan & light" },
   { id: "settings", label: "Settings", hint: "Backend & display" },
   { id: "about", label: "About", hint: "Board detection" },
 ];

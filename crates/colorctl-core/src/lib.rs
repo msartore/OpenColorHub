@@ -26,6 +26,7 @@ pub mod model;
 pub mod platform;
 pub mod service;
 pub mod settings;
+pub mod setups;
 pub mod state;
 pub mod units;
 
@@ -41,6 +42,7 @@ pub use model::{
 pub use platform::Elevation;
 pub use service::Service;
 pub use settings::{BackendMode, Settings, SettingsPatch, TempUnit};
+pub use setups::{ChannelSetting, FanSetting, Setup, SetupStore};
 pub use state::RgbState;
 pub use units::{pct, pwm_to_pct};
 

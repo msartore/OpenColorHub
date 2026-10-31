@@ -21,6 +21,7 @@ import type {
   DriverList,
   DownloadedFile,
   DriverProgress,
+  SetupList,
   Snapshot,
   ActivityEntry,
 } from "./types";
@@ -76,6 +77,12 @@ export const api = {
   downloadDriver: (file: DriverFile) =>
     call<DownloadedFile>("download_driver", { file }),
   revealDriver: (path: string) => call<void>("reveal_driver", { path }),
+
+  setups: () => call<SetupList>("list_setups"),
+  saveSetup: (name: string, id?: string) =>
+    call<SetupList>("save_setup", { name, id: id ?? null }),
+  applySetup: (id: string) => call<Result>("apply_setup", { id }),
+  deleteSetup: (id: string) => call<SetupList>("delete_setup", { id }),
 };
 
 /** Subscribes to telemetry ticks; returns an unsubscribe function. */

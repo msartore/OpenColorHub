@@ -38,8 +38,8 @@ Both are labelled, never disguised. → [Platform notes](docs/PLATFORM.md)
 | **Dashboard** — gauge with session history, six live metrics, fan and channel detail | **Fan control** — per-header curves, presets, pump floor |
 | ![Lighting](docs/screenshots/leds.png) | ![Drivers](docs/screenshots/drivers.png) |
 | **Lighting** — six channels, 200-LED frame | **Drivers** — vendor downloads, nothing executed |
-| ![About](docs/screenshots/about.png) | |
-| **About** — the board this build detected | |
+| ![Setups](docs/screenshots/setups.png) | ![About](docs/screenshots/about.png) |
+| **Setups** — saved fan + lighting combinations | **About** — the board this build detected |
 
 Settings covers backend selection, elevation, units, safety confirmations, poll
 interval, startup with the OS and updates. The app lives in the tray: closing the
@@ -78,6 +78,7 @@ sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
 | [Board detection](docs/BOARD-DETECTION.md) | Confidence levels, sources, the hardware guard |
 | [Updates](docs/UPDATES.md) | Self-updater, release process, integrity caveats |
 | [Drivers](docs/DRIVERS.md) | Board download catalogue, URL rules, why nothing is executed |
+| [Setups](docs/SETUPS.md) | Saved fan + lighting combinations, file format, limits |
 | [NOTICE.md](NOTICE.md) | Licensing of this project and everything it embeds |
 
 ## Safety

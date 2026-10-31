@@ -485,6 +485,31 @@ export function createDemoBackend(): DemoBackend {
       case "reveal_driver":
         return undefined as T;
 
+      case "list_setups":
+        return {
+          setups: [
+            {
+              id: "s1",
+              name: "Night",
+              saved_at_ms: Date.now() - 86_400_000,
+              fans: [
+                { header: "cpu", percent: 40, curve: null },
+                { header: "cha_fan1", percent: 30, curve: null },
+                { header: "pump", percent: 80, curve: null },
+              ],
+              channels: [{ channel: "onboard", color: [251, 191, 36], brightness: 40, enabled: true }],
+            },
+          ],
+          warning: null,
+        } as T;
+
+      case "save_setup":
+      case "delete_setup":
+        return { setups: [], warning: null } as T;
+
+      case "apply_setup":
+        return result("Setup applied") as T;
+
       case "get_about": {
         const about: AboutInfo = {
           name: "OpenColorHub",
