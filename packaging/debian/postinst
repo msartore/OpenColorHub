@@ -1,0 +1,25 @@
+#!/bin/sh
+# Debian postinst shared by the CLI package and the desktop bundle.
+#
+# The CLI ships a tmpfiles entry for /var/lib/colorctl; the desktop bundle only
+# ships the udev rule, so the tmpfiles step is conditional.
+set -e
+
+if [ -f /usr/lib/tmpfiles.d/colorctl.conf ]; then
+    if command -v systemd-tmpfiles >/dev/null 2>&1; then
+        systemd-tmpfiles --create /usr/lib/tmpfiles.d/colorctl.conf || true
+    else
+        # No systemd-tmpfiles (non-systemd system): create the directory with
+        # the same ownership and mode the tmpfiles entry declares.
+        install -d -m 0755 -o root -g root /var/lib/colorctl
+    fi
+fi
+
+# Pick up the hidraw rule now rather than at the next reboot, and apply it to
+# controllers that are already plugged in.
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules || true
+    udevadm trigger --subsystem-match=hidraw || true
+fi
+
+exit 0

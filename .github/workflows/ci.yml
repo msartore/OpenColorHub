@@ -57,6 +57,51 @@ jobs:
       - name: Frontend build (tsc + vite)
         run: npm run build
 
+  # The release job only runs on a tag, so the CLI packaging is exercised here
+  # on every push: a broken asset path or maintainer-script reference should
+  # fail the PR, not the release.
+  cli-package:
+    name: cli deb (ubuntu-22.04)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cli
+
+      - name: Build CLI
+        run: cargo build --release -p opencolorhub-cli
+
+      - name: Shell completions
+        run: |
+          mkdir -p completions
+          ./target/release/colorctl completions bash > completions/colorctl.bash
+          ./target/release/colorctl completions zsh > completions/_colorctl
+          ./target/release/colorctl completions fish > completions/colorctl.fish
+
+      - uses: taiki-e/install-action@cargo-deb
+
+      - name: Debian package
+        run: cargo deb -p opencolorhub-cli --no-build
+
+      - name: Validate package contents
+        run: |
+          deb=$(ls target/debian/opencolorhub-cli_*_amd64.deb)
+          dpkg-deb -I "$deb"
+          dpkg-deb -c "$deb" | awk '{print $6}' | sort > contents.txt
+          for path in ./usr/bin/colorctl \
+                      ./usr/lib/udev/rules.d/99-colorctl.rules \
+                      ./usr/lib/tmpfiles.d/colorctl.conf; do
+            grep -qxF "$path" contents.txt || {
+              echo "::error::$path is missing from $(basename "$deb")"
+              exit 1
+            }
+          done
+          echo "package contents verified"
+
   desktop:
     name: desktop build (${{ matrix.os }})
     needs: check

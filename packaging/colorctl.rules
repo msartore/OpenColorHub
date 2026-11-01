@@ -1,0 +1,10 @@
+# Colorful motherboard RGB controller (USB HID 2F4C:1000).
+#
+# TAG+="uaccess" gives the user at the seat an ACL on the controller's hidraw
+# nodes, so the desktop app and `colorctl rgb` work without root. It is
+# deliberately not MODE="0666": lighting is unprivileged for one logged-in
+# user, not for every account on the machine.
+#
+# Fan control is unaffected — it goes through /dev/port and still needs root or
+# CAP_SYS_RAWIO.
+KERNEL=="hidraw*", ATTRS{idVendor}=="2f4c", ATTRS{idProduct}=="1000", TAG+="uaccess"

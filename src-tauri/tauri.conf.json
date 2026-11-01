@@ -52,7 +52,12 @@
     },
     "linux": {
       "deb": {
-        "depends": []
+        "depends": [],
+        "files": {
+          "/usr/lib/udev/rules.d/99-opencolorhub.rules": "../packaging/colorctl.rules"
+        },
+        "postInstallScript": "../packaging/debian/postinst",
+        "postRemoveScript": "../packaging/debian/postrm"
       }
     }
   }

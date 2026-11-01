@@ -120,11 +120,17 @@ jobs:
           mkdir -p "pkg/$name"
           cp target/release/opencolorhub "pkg/$name/"
           cp LICENSE.md NOTICE.md "pkg/$name/"
+          # The AppImage and the tarball cannot install a udev rule themselves;
+          # shipping the file lets the user drop it in with one command.
+          cp packaging/colorctl.rules "pkg/$name/"
           {
             echo "opencolorhub $version - portable build"
             echo
             echo "Run ./opencolorhub from this directory. Fan control needs root or CAP_SYS_RAWIO"
-            echo "for /dev/port; lighting uses /dev/hidraw and needs access to the device node."
+            echo "for /dev/port. Lighting uses /dev/hidraw: the .deb installs the udev rule,"
+            echo "here install it yourself if lighting reports the device as unavailable:"
+            echo "  sudo cp colorctl.rules /etc/udev/rules.d/99-opencolorhub.rules"
+            echo "  sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=hidraw"
             echo "Licensed GPL-3.0-only - see LICENSE.md and NOTICE.md."
           } > "pkg/$name/README.txt"
           tar -C pkg -czf "pkg/$name.tar.gz" "$name"
@@ -144,9 +150,92 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The desktop bundles above are the app; this job packages the CLI that shares
+  # the same core. It runs on its own because it needs cargo-deb and a release
+  # build of a different binary, and because a CLI packaging failure should not
+  # hold back the desktop bundles — the release job waits for both, so a partial
+  # release cannot be published.
+  cli:
+    name: cli + deb (linux-x64)
+    needs: guard
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cli
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The tag is the version here too: the .deb and the tarball are named from
+      # the manifest, so it has to be rewritten before cargo-deb reads it.
+      - name: Set version from tag
+        run: node scripts/set-version.mjs "${GITHUB_REF_NAME}"
+
+      - name: Build CLI
+        run: cargo build --release -p opencolorhub-cli
+
+      # Generated from the binary itself so the completions can never describe
+      # commands the release does not have.
+      - name: Shell completions
+        run: |
+          mkdir -p completions
+          ./target/release/colorctl completions bash > completions/colorctl.bash
+          ./target/release/colorctl completions zsh > completions/_colorctl
+          ./target/release/colorctl completions fish > completions/colorctl.fish
+
+      - name: Install cargo-deb
+        uses: taiki-e/install-action@cargo-deb
+
+      - name: Debian package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Packaging metadata lives in crates/colorctl-cli/Cargo.toml, with
+          # paths relative to that crate; the completions it packages were
+          # generated above, in the repository root.
+          cargo deb -p opencolorhub-cli --no-build
+          mkdir -p pkg
+          cp target/debian/opencolorhub-cli_*_amd64.deb "pkg/opencolorhub-cli_${version}_amd64.deb"
+
+      - name: Portable package (Linux)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="opencolorhub-cli-$version-linux-x64"
+          mkdir -p "pkg/$name"
+          cp target/release/colorctl "pkg/$name/"
+          cp -r completions "pkg/$name/"
+          cp LICENSE.md NOTICE.md "pkg/$name/"
+          cp packaging/colorctl.rules "pkg/$name/"
+          {
+            echo "colorctl $version - command line build"
+            echo
+            echo "Put colorctl on your PATH. Shell completions are in completions/."
+            echo "Lighting needs access to the controller's /dev/hidraw node: the .deb"
+            echo "installs the udev rule, here install it yourself if the device is refused:"
+            echo "  sudo cp colorctl.rules /etc/udev/rules.d/99-colorctl.rules"
+            echo "  sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=hidraw"
+            echo "Fan control needs root or CAP_SYS_RAWIO for /dev/port."
+            echo "Licensed GPL-3.0-only - see LICENSE.md and NOTICE.md."
+          } > "pkg/$name/README.txt"
+          tar -C pkg -czf "pkg/$name.tar.gz" "$name"
+          tar -czf "pkg/opencolorhub-cli-$version-completions.tar.gz" completions
+          rm -rf "pkg/$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-linux-x64
+          path: pkg/*
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: publish release
-    needs: build
+    needs: [build, cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -204,9 +293,15 @@ jobs:
             | `opencolorhub_*_amd64.deb` | `sudo apt install ./opencolorhub_*_amd64.deb` |
             | `opencolorhub_*.AppImage` | `chmod +x` then run |
             | `opencolorhub-*-linux-x64.tar.gz` | portable, unpack and run |
+            | `opencolorhub-cli_*_amd64.deb` | `sudo apt install …` — the `colorctl` CLI, completions and the udev rule |
+            | `opencolorhub-cli-*-linux-x64.tar.gz` | portable `colorctl` + completions |
+            | `opencolorhub-cli-*-completions.tar.gz` | bash/zsh/fish completions only |
 
-            Fan control reads `/dev/port` and needs root or `CAP_SYS_RAWIO`. Lighting needs
-            access to the controller's `/dev/hidraw` node.
+            Both `.deb` packages install the udev rule that grants the logged-in user
+            access to the controller's `/dev/hidraw` node, so lighting needs no root.
+            Fan control reads `/dev/port` and still needs root or `CAP_SYS_RAWIO`; the
+            AppImage and tarballs do not install the rule — copy `packaging/colorctl.rules`
+            to `/etc/udev/rules.d/` and reload udev.
 
             ### Verifying
 

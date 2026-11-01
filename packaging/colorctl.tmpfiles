@@ -1,0 +1,6 @@
+# State directory that root-owned runs use for the CCTL lighting state.
+#
+# Root-owned and 0755 on purpose: every unprivileged run falls back to
+# $XDG_STATE_HOME/colorctl, so nothing here is shared with, or writable by,
+# other local users. The CLI checks writability before choosing it.
+d /var/lib/colorctl 0755 root root -

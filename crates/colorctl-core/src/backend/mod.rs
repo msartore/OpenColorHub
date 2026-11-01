@@ -534,24 +534,49 @@ pub fn state_path(override_path: Option<&Path>, data_dir: &Path) -> PathBuf {
     #[cfg(target_os = "linux")]
     {
         let sys = Path::new("/var/lib/colorctl/rgb.state");
-        if sys.is_file() {
-            return sys.to_path_buf();
+        match sys.metadata() {
+            // A root-owned state file is only usable by root. Non-root runs
+            // (the desktop app, `colorctl rgb` as a user) must not inherit it:
+            // the write at the end of the frame would fail with EACCES.
+            Ok(meta) if meta.is_file() && writable(sys) => return sys.to_path_buf(),
+            _ => {}
         }
     }
     data_dir.join("rgb.state")
 }
 
+/// Whether `path` can be opened for writing by this process.
+///
+/// `access(2)` answers the same question the eventual `open()` will, without
+/// creating or truncating anything first. Used to decide between the shared
+/// `/var/lib/colorctl` and a user-owned directory.
+#[cfg(target_os = "linux")]
+fn writable(path: &Path) -> bool {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `c_path` is a valid NUL-terminated string for the duration of
+    // the call; access(2) only reads it.
+    unsafe { libc::access(c_path.as_ptr(), libc::W_OK) == 0 }
+}
+
 /// Default per-user data directory when the caller has no better idea.
 ///
-/// On Linux the system path `/var/lib/colorctl` wins when it exists or we are
-/// root (matching upstream); everywhere else a conventional user directory is
-/// used so the simulator and the CLI work without privileges.
+/// On Linux the system path `/var/lib/colorctl` wins when we are root, or when
+/// it exists and is writable by this user; everywhere else a conventional user
+/// directory is used so the simulator and the CLI work without privileges.
 pub fn default_data_dir() -> PathBuf {
     #[cfg(target_os = "linux")]
     {
         let sys = Path::new("/var/lib/colorctl");
         let is_root = unsafe { libc::geteuid() == 0 };
-        if is_root || sys.is_dir() {
+        // The packaged install creates this directory root-owned. Picking it
+        // merely because it exists sends every unprivileged run into a write
+        // it cannot complete, so ask whether we can actually use it.
+        if is_root || (sys.is_dir() && writable(sys)) {
             return sys.to_path_buf();
         }
         if let Ok(xdg) = std::env::var("XDG_STATE_HOME") {
@@ -650,6 +675,21 @@ mod tests {
         let explicit = dir.join("custom.state");
         assert_eq!(state_path(Some(&explicit), &dir), explicit);
         assert_eq!(state_path(None, &dir), dir.join("rgb.state"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The packaged install creates `/var/lib/colorctl` root-owned; an
+    /// unprivileged run has to notice it cannot write there and fall back to
+    /// its own directory instead of failing at the end of the first frame.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn writable_rejects_paths_that_cannot_be_opened() {
+        let dir = data_dir("writable");
+        let file = dir.join("rgb.state");
+        std::fs::write(&file, b"CCTL").unwrap();
+        assert!(writable(&file));
+        assert!(writable(&dir));
+        assert!(!writable(&dir.join("missing.state")));
         std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -18,3 +18,45 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 serde_json = { workspace = true }
+
+# Debian packaging for the CLI.
+#
+# Run it from the repository root, after building the binary:
+#
+#   cargo build --release -p opencolorhub-cli
+#   cargo deb -p opencolorhub-cli --no-build
+#
+# Every path below is relative to this crate's directory (`crates/colorctl-cli`),
+# not to the workspace root — that is how cargo-deb resolves assets,
+# maintainer-scripts and license-file.
+#
+# The udev rule is installed as `99-colorctl.rules`; the desktop bundle ships
+# the same source file as `99-opencolorhub.rules` so both packages can be
+# installed at once without a dpkg file conflict.
+[package.metadata.deb]
+name = "opencolorhub-cli"
+maintainer = "Massimiliano Sartore <me@msartore.dev>"
+copyright = "2026, Massimiliano Sartore"
+license-file = ["../../LICENSE.md", "0"]
+extended-description = """\
+Command line interface for the Colorful motherboards supported by OpenColorHub. \
+It drives the Nuvoton Super I/O (4-point fan curves, manual duty, tachometers, \
+board temperature) and the onboard USB RGB controller (2F4C:1000), covering the \
+onboard shroud, two 12V RGB headers and three 5V ARGB headers as one 200-LED \
+frame. Command syntax is compatible with the original colorctl.
+
+The package installs the colorctl binary, bash/zsh/fish completions, and a udev \
+rule that lets the logged-in user drive the lighting controller without root. \
+Fan control still requires root because it accesses /dev/port directly."""
+depends = "$auto"
+section = "utils"
+priority = "optional"
+maintainer-scripts = "../../packaging/debian"
+assets = [
+    ["target/release/colorctl", "usr/bin/", "755"],
+    ["../../completions/colorctl.bash", "usr/share/bash-completion/completions/colorctl", "644"],
+    ["../../completions/_colorctl", "usr/share/zsh/vendor-completions/_colorctl", "644"],
+    ["../../completions/colorctl.fish", "usr/share/fish/vendor_completions.d/colorctl.fish", "644"],
+    ["../../packaging/colorctl.rules", "usr/lib/udev/rules.d/99-colorctl.rules", "644"],
+    ["../../packaging/colorctl.tmpfiles", "usr/lib/tmpfiles.d/colorctl.conf", "644"],
+]

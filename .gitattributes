@@ -1,0 +1,4 @@
+# Debian maintainer scripts and udev/tmpfiles rules are consumed by Linux
+# tools. A CRLF checkout turns postinst into "bad interpreter: /bin/sh^M", so
+# these paths are pinned to LF regardless of the platform.
+packaging/** text eol=lf

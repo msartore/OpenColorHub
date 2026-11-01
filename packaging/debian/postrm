@@ -1,0 +1,17 @@
+#!/bin/sh
+# Debian postrm shared by the CLI package and the desktop bundle.
+set -e
+
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules || true
+    udevadm trigger --subsystem-match=hidraw || true
+fi
+
+# The state directory is only removed when it is empty: root-owned runs of the
+# CLI may share it, and a purge of one package must not take the other's
+# lighting state with it.
+if [ "$1" = "purge" ]; then
+    rmdir /var/lib/colorctl 2>/dev/null || true
+fi
+
+exit 0
