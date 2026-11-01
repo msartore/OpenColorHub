@@ -58,4 +58,7 @@ pwsh scripts/build-release.ps1 -Tag v0.3.0 -Portable
 
 Both platforms build, `dist/` is staged flat, and the release carries the NSIS
 installer, MSI, portable zip, Linux packages, the bare `OpenColorHub.exe` the
-updater downloads, and `SHA256SUMS.txt` covering all of it.
+updater downloads, and `SHA256SUMS.txt` covering all of it. A separate job
+packages the CLI: `opencolorhub-cli_<version>_amd64.deb` (binary, completions,
+udev rule and the `/var/lib/colorctl` tmpfiles entry), a portable tarball, and a
+completions-only tarball.

@@ -7,6 +7,40 @@
 | **Linux** | ✅ `/dev/port`, needs root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` for `2F4C:1000` |
 | **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO when PawnIO is absent | ✅ SetupAPI + `hid.dll`, no driver |
 
+## Lighting without root
+
+`/dev/hidraw*` is root-owned and mode `0600` by default, so a freshly unpacked
+build can *find* the controller and still be refused when it opens it. Both
+`.deb` packages ship a udev rule that grants the user at the seat an ACL on the
+controller's nodes:
+
+```udev
+KERNEL=="hidraw*", ATTRS{idVendor}=="2f4c", ATTRS{idProduct}=="1000", TAG+="uaccess"
+```
+
+It is `uaccess`, not `MODE="0666"`: lighting becomes unprivileged for the
+logged-in user, not for every account on the machine. Root is unaffected, and
+fan control is untouched — `/dev/port` is a different device with different
+stakes.
+
+The `.deb` installs it as `/usr/lib/udev/rules.d/99-opencolorhub.rules` (desktop)
+or `99-colorctl.rules` (CLI) and reloads udev from `postinst`, so the rule
+applies without a reboot. The portable tarballs ship the same file as
+`colorctl.rules` (in the repository it is
+[`packaging/colorctl.rules`](../packaging/colorctl.rules)); for the AppImage or a
+source build, install it by hand:
+
+```bash
+sudo cp colorctl.rules /etc/udev/rules.d/99-opencolorhub.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=hidraw
+```
+
+Without the rule an unprivileged run is refused when it opens the controller:
+`--backend hardware` reports the lighting backend as unavailable, and `auto`
+falls back to the simulator with a note that names the error. Adding the rule is
+the whole fix.
+
 ## Why Windows needs a driver at all
 
 `IN`/`OUT` are ring-0 instructions. Windows exposes no user-mode port broker

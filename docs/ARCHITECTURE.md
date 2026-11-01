@@ -89,7 +89,9 @@ or more steps. Consequences worth knowing, and documented in the README:
 * **Lighting** — 35-byte `CCTL` blob: magic, version, then 6 × (R, G, B,
   brightness, enabled). Identical to upstream, so an existing
   `/var/lib/colorctl/rgb.state` keeps working, and the CLI and GUI can share a
-  file. `RgbState::to_leds()` expands it to the 200-LED frame.
+  file. The system path is only adopted when this process can write it, so a
+  root-owned state file never strands an unprivileged run.
+  `RgbState::to_leds()` expands it to the 200-LED frame.
 * **Settings** — JSON at `<app config>/settings.json`, written atomically
   (temp file + rename). Unknown/corrupt files degrade to defaults with a
   warning instead of blocking startup.

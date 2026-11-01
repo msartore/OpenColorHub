@@ -54,6 +54,20 @@ Windows installers, a portable zip and Linux packages are on the
 [releases page](https://github.com/msartore/OpenColorHub/releases). The portable
 zip keeps settings and state in `config/` and `data/` beside the executable.
 
+### The `colorctl` CLI
+
+The same hardware core also ships as a command line tool. On Debian/Ubuntu:
+
+```bash
+sudo apt install ./opencolorhub-cli_*_amd64.deb
+```
+
+That installs `colorctl`, bash/zsh/fish completions and the udev rule that lets
+the logged-in user drive the RGB controller without root. Portable tarballs
+(binary + completions) are on the same release page. The syntax is compatible
+with upstream `colorctl` — `rgb`, `fan`, `board`, plus `--backend auto|hardware|simulated`
+and `--json` for scripting.
+
 From source:
 
 ```bash
@@ -78,6 +92,7 @@ sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
 | --- | --- |
 | [Architecture](docs/ARCHITECTURE.md) | Crates, backend boundary, protocols, verification |
 | [Platform notes](docs/PLATFORM.md) | Driver rationale, fallbacks, elevation, startup, tray |
+| [RGB compatibility](docs/RGB-COMPATIBILITY.md) | ODM families, USB PIDs, the 200-LED frame, OpenRGB comparison |
 | [Board detection](docs/BOARD-DETECTION.md) | Confidence levels, sources, the hardware guard |
 | [Updates](docs/UPDATES.md) | Self-updater, release process, integrity caveats |
 | [Drivers](docs/DRIVERS.md) | Board download catalogue, URL rules, why nothing is executed |
