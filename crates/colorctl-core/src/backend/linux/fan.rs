@@ -70,6 +70,7 @@ impl FanBackend for LinuxFan {
             let curve = self.curve_for(header, mode);
             fans.push(FanSample {
                 header,
+                bank: crate::chipmap::bank(header),
                 rpm,
                 pwm,
                 mode,
@@ -78,7 +79,8 @@ impl FanBackend for LinuxFan {
         }
 
         Ok(Telemetry {
-            temperature_source: Some("hwmon".to_string()),
+            temperature_source: Some("hwmon sysfs".to_string()),
+            temperature_register: None,
             temperature_c,
             fans,
         })
