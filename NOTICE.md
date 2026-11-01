@@ -25,6 +25,12 @@ licence. Portions of this work derive from it — the CLI surface, the `CCTL`
 state format, the fan-curve model and the Linux Super I/O register sequence —
 and are used here under the terms below, as the MIT licence requires.
 
+The upstream repository is tracked as a git submodule at
+[`upstream/colorctl`](upstream/colorctl), pinned to the release whose changes
+were integrated. It is a reference copy for diffing provenance, not a build
+dependency: `cargo build` never reads it, and `git clone` works without
+initialising it.
+
 Copyright © 2026 Curstantine
 
 > Permission is hereby granted, free of charge, to any person obtaining a copy

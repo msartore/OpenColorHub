@@ -1,0 +1,3 @@
+[submodule "upstream/colorctl"]
+	path = upstream/colorctl
+	url = https://github.com/Curstantine/colorctl.git
