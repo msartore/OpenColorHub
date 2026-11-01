@@ -426,7 +426,8 @@ fn handle_fan(action: FanAction, service: &mut Service, json: bool) -> Result<Ex
                     } else {
                         println!("{}", outcome.message);
                         for header in headers {
-                            let programmed = selected.points_for(header.is_pump());
+                            let programmed =
+                                selected.points_for(service.settings().is_pump(*header));
                             println!(" {}: {}", header.label(), curve::format(&programmed));
                         }
                     }

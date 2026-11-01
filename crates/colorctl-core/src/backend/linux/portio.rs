@@ -171,7 +171,7 @@ impl SuperIo {
 
     /// Reads the 16-bit tachometer; values ≥ 50000 mean "no fan attached".
     pub fn fan_rpm(&mut self, header: crate::model::FanHeader) -> Result<u16> {
-        let base = header.rpm_reg();
+        let base = crate::chipmap::tach_register(header);
         let hi = self.read_hwm_reg(4, base)?;
         let lo = self.read_hwm_reg(4, base.wrapping_add(1))?;
         let rpm = ((hi as u16) << 8) | lo as u16;
@@ -186,7 +186,7 @@ impl SuperIo {
 
     /// Manual duty cycle (bank per header).
     pub fn set_manual_pwm(&mut self, header: crate::model::FanHeader, pwm: u8) -> Result<()> {
-        let bank = header.bank();
+        let bank = crate::chipmap::bank(header);
         // Register 2: 0x00 = manual mode.
         self.write_hwm_reg(bank, 0x02, 0x00)?;
         // Register 9: PWM duty.
@@ -200,7 +200,7 @@ impl SuperIo {
         header: crate::model::FanHeader,
         points: &[(u8, u8); 4],
     ) -> Result<()> {
-        let bank = header.bank();
+        let bank = crate::chipmap::bank(header);
 
         // SmartFan configuration straight from NCT5584D_Service.cs.
         self.write_hwm_reg(bank, 0x66, 0xAA)?; // unlock curve registers
@@ -219,7 +219,7 @@ impl SuperIo {
 
     /// Reads back the programmed curve (temps 0x21..0x24, duty 0x27..0x2A).
     pub fn read_curve(&mut self, header: crate::model::FanHeader) -> Result<[(u8, u8); 4]> {
-        let bank = header.bank();
+        let bank = crate::chipmap::bank(header);
         let mut points = [(0u8, 0u8); 4];
         for i in 0..4u8 {
             points[i as usize].0 = self.read_hwm_reg(bank, 0x21 + i)?;
@@ -232,11 +232,11 @@ impl SuperIo {
 
     /// Reads back the manual duty register.
     pub fn read_pwm(&mut self, header: crate::model::FanHeader) -> Result<u8> {
-        self.read_hwm_reg(header.bank(), 0x09)
+        self.read_hwm_reg(crate::chipmap::bank(header), 0x09)
     }
 
     /// Reads back the control mode register.
     pub fn read_mode(&mut self, header: crate::model::FanHeader) -> Result<u8> {
-        self.read_hwm_reg(header.bank(), 0x02)
+        self.read_hwm_reg(crate::chipmap::bank(header), 0x02)
     }
 }

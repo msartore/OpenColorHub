@@ -19,6 +19,7 @@ pub mod about;
 pub mod autostart;
 pub mod backend;
 pub mod board;
+pub mod chipmap;
 pub mod curve;
 pub mod drivers;
 pub mod error;

@@ -407,6 +407,7 @@ impl FanBackend for HwinfoFan {
 
         Ok(Telemetry {
             temperature_source: Some("HWiNFO shared memory".to_string()),
+            temperature_register: None,
             temperature_c,
             fans,
         })
@@ -450,29 +451,30 @@ pub fn pick_temperature(readings: &[Reading]) -> Option<f64> {
 pub fn pick_fan(readings: &[Reading], header: FanHeader) -> Option<&Reading> {
     let fans: Vec<&Reading> = readings.iter().filter(|r| r.is_fan()).collect();
     let wanted = match header {
+        FanHeader::Sys => &["sys fan", "sysfan", "sys_fan", "system fan"][..],
         FanHeader::Cpu => &["cpu fan", "cpufan", "cpu_fan", "cpu opt"][..],
-        FanHeader::ChaFan1 => &[
+        FanHeader::Aux0 => &[
             "cha fan 1",
             "chafan1",
             "cha_fan1",
             "sys fan 1",
             "system fan 1",
         ],
-        FanHeader::ChaFan2 => &[
+        FanHeader::Aux1 => &[
             "cha fan 2",
             "chafan2",
             "cha_fan2",
             "sys fan 2",
             "system fan 2",
         ],
-        FanHeader::ChaFan3 => &[
+        FanHeader::Aux2 => &[
             "cha fan 3",
             "chafan3",
             "cha_fan3",
             "sys fan 3",
             "system fan 3",
         ],
-        FanHeader::Pump => &["pump", "aio"],
+        FanHeader::Aux3 => &["aux3", "fan 4", "fan4", "pump", "aio"],
     };
     for needle in wanted {
         if let Some(found) = fans.iter().find(|r| label_matches(&r.label, needle)) {
@@ -597,11 +599,11 @@ mod tests {
 
         let cpu = pick_fan(&readings, FanHeader::Cpu).unwrap();
         assert_eq!(cpu.value, 1180.0);
-        let cha1 = pick_fan(&readings, FanHeader::ChaFan1).unwrap();
+        let cha1 = pick_fan(&readings, FanHeader::Aux0).unwrap();
         assert_eq!(cha1.value, 890.0);
-        let cha2 = pick_fan(&readings, FanHeader::ChaFan2).unwrap();
+        let cha2 = pick_fan(&readings, FanHeader::Aux1).unwrap();
         assert_eq!(cha2.value, 0.0, "a stopped fan is still a reading");
-        let pump = pick_fan(&readings, FanHeader::Pump).unwrap();
+        let pump = pick_fan(&readings, FanHeader::Aux3).unwrap();
         assert_eq!(pump.value, 2100.0);
     }
 
@@ -619,7 +621,7 @@ mod tests {
         let header = parse_header(&buf).unwrap();
         let mut readings = parse_readings(&buf, &header);
         readings.retain(|r| !label_matches(&r.label, "cha fan 3"));
-        assert!(pick_fan(&readings, FanHeader::ChaFan3).is_none());
+        assert!(pick_fan(&readings, FanHeader::Aux2).is_none());
     }
 
     /// End-to-end: create a real shared-memory section, publish a synthetic
@@ -699,7 +701,7 @@ mod tests {
         let pump = telemetry
             .fans
             .iter()
-            .find(|f| f.header == FanHeader::Pump)
+            .find(|f| f.header == FanHeader::Aux3)
             .expect("pump");
         assert_eq!(pump.rpm, 2100);
 

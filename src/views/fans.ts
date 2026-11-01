@@ -12,12 +12,13 @@ import { showPawnioDialog } from "../pawnio";
 import { presetsButton } from "../components/setups-panel";
 import { stateSlot } from "../components/state";
 
-const HEADERS: { id: FanHeaderId; label: string; description: string; floor: number }[] = [
-  { id: "cpu", label: "CPU_FAN", description: "CPU cooler / AIO radiator", floor: 0 },
-  { id: "cha_fan1", label: "CHA_FAN1", description: "Chassis intake", floor: 0 },
-  { id: "cha_fan2", label: "CHA_FAN2", description: "Chassis exhaust", floor: 0 },
-  { id: "cha_fan3", label: "CHA_FAN3", description: "Chassis auxiliary", floor: 0 },
-  { id: "pump", label: "AIO_PUMP", description: "AIO pump — never below 60%", floor: 60 },
+const HEADERS: { id: FanHeaderId; label: string; description: string }[] = [
+  { id: "sys", label: "SYS_FAN", description: "System fan / rear exhaust" },
+  { id: "cpu", label: "CPU_FAN", description: "CPU cooler or AIO radiator" },
+  { id: "aux0", label: "AUX0", description: "Auxiliary header" },
+  { id: "aux1", label: "AUX1", description: "Auxiliary header" },
+  { id: "aux2", label: "AUX2", description: "Auxiliary header" },
+  { id: "aux3", label: "AUX3", description: "Auxiliary header" },
 ];
 
 const DEFAULT_CURVE: CurvePoint[] = [
@@ -37,6 +38,7 @@ interface FanCard {
   fill: HTMLElement;
   slider: Slider;
   editor: CurveEditor;
+  hint: HTMLElement;
   dirty: HTMLElement;
   appliedCurve: CurvePoint[];
   lastSignature: string;
@@ -61,6 +63,7 @@ export function createFans(ctx: ViewContext): View {
     stallChip.hidden = true;
     const fill = el("span", { class: "bar-fill" });
     const dirty = el("span", { class: "dirty-flag" }, "unsaved");
+    const hint = el("span", { class: "curve-hint" }, "drag points");
 
     const ref: { card?: FanCard } = {};
 
@@ -152,7 +155,7 @@ export function createFans(ctx: ViewContext): View {
             { class: "curve-actions" },
             applyBtn,
             revertBtn,
-            el("span", { class: "curve-hint" }, `min ${meta.floor}% · drag points`),
+            hint,
           ),
         ),
       ),
@@ -168,6 +171,7 @@ export function createFans(ctx: ViewContext): View {
       stallChip,
       slider: manual,
       editor,
+      hint,
       dirty,
       appliedCurve: DEFAULT_CURVE.map((p) => ({ ...p })),
       lastSignature: "",
@@ -186,7 +190,7 @@ export function createFans(ctx: ViewContext): View {
     button(profile.label, {
       variant: "ghost",
       onClick: async () => {
-        if (!ctx.confirmWrite(`Apply the ${profile.label} profile to all five headers?`)) return;
+        if (!ctx.confirmWrite(`Apply the ${profile.label} profile to all six channels?`)) return;
         try {
           const result = await api.applyProfile(HEADERS.map((h) => h.id), profile.id);
           ctx.applySnapshot(result.snapshot);
@@ -236,6 +240,8 @@ export function createFans(ctx: ViewContext): View {
     if (!card) return;
 
     card.root.classList.toggle("is-undetected", !fan.detected);
+    card.root.classList.toggle("is-pump", fan.pump);
+    card.hint.textContent = fan.pump ? "min 60% · pump" : "drag points";
     card.rpm.textContent = formatRpm(fan.rpm);
     card.pct.textContent = `${fan.percent}%`;
     card.fill.style.width = `${fan.percent}%`;
@@ -294,7 +300,7 @@ export function createFans(ctx: ViewContext): View {
 
     const stalled = present.filter((fan) => fan.stalled);
     const lowDuty = present.filter(
-      (fan) => fan.header !== "pump" && fan.percent < settings.low_duty_warning,
+      (fan) => fan.header !== "aux3" && fan.percent < settings.low_duty_warning,
     );
 
     if (stalled.length) {
@@ -343,7 +349,7 @@ export function createFans(ctx: ViewContext): View {
       // Only the headers that exist decide whether a profile is "running".
       const active =
         present.length > 0 &&
-        present.every((fan) => sameCurve(fan.curve, curveFor(profile.id, fan.header === "pump")));
+        present.every((fan) => sameCurve(fan.curve, curveFor(profile.id, fan.header === "aux3")));
       presetButtons[index].classList.toggle("is-active", active);
     });
 

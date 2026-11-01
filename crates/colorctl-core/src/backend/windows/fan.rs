@@ -18,11 +18,11 @@
 //! Writes go to the PWM command register (`0x09`) of a control bank, after
 //! clearing the mode bit (`0x02`), and are verified by reading the duty back.
 //!
-//! Which bank drives which physical header is **not** settled: this module uses
-//! `[1, 2, 3, 8, 9]`, while Colorful's own NCT5567D_B service assigns SYS=1,
-//! CPU=2, AUX0=3, AUX1=8, AUX2=9, AUX3=10 and reads tachometers from bank 4 at
-//! `0xC0` rather than bank 6 at `0x56`. `dump_registers()` reads both layouts so
-//! the disagreement can be measured on hardware before a write is trusted.
+//! The bank behind each header comes from [`crate::chipmap`], which is
+//! Colorful's own NCT5567D_B assignment: SYS=1, CPU=2, AUX0=3, AUX1=8, AUX2=9,
+//! AUX3=10. Tachometers are read from bank 6 at `0x56` because that layout was
+//! measured here; `dump_registers()` also prints the vendor's bank 4 layout so
+//! the two can be compared on hardware.
 
 use crate::backend::windows::pawnio::LpcIo;
 use crate::backend::{FanBackend, FanHeader};
@@ -35,19 +35,15 @@ const DATA_OFFSET: u16 = 0x06;
 /// Bank-select register, written through the index/data pair.
 const BANK_REGISTER: u8 = 0x4E;
 
-/// PWM duty readback, bank 0 (NCT677x family layout).
-const PWM_OUT_REGISTERS: [u8; TACH_SLOTS] = [0x01, 0x03, 0x11, 0x13, 0x15];
+/// PWM duty readback, bank 0 (NCT677x family layout), one per channel.
+const PWM_OUT_REGISTERS: [u8; TACH_SLOTS] = [0x01, 0x03, 0x11, 0x13, 0x15, 0x17];
 /// Register holding the manual/automatic mode bit, per fan bank.
 const REG_CONTROL_MODE: u8 = 0x02;
 /// Register holding the PWM command value, per fan bank.
 const REG_PWM_COMMAND: u8 = 0x09;
-/// One control bank per fan: CPU in bank 1, then 2, 3, 8, 9.
-const CONTROL_BANKS: [u8; TACH_SLOTS] = [1, 2, 3, 8, 9];
-
-/// Fan tachometer registers: bank 6, `0x56 + 2*i`.
-const TACH_BANK: u8 = 6;
-const TACH_BASE: u8 = 0x56;
-const TACH_SLOTS: usize = 5;
+/// One slot per Super I/O channel; the bank behind each comes from
+/// [`crate::chipmap`].
+const TACH_SLOTS: usize = 6;
 
 /// Temperature registers, in the order Colorful's own client reads them.
 ///
@@ -59,8 +55,11 @@ const TACH_SLOTS: usize = 5;
 const PWM_BANK: u8 = 0;
 const TEMP_SOURCES: [(u8, u8); 5] = [(1, 0x50), (0, 0x27), (0, 0x73), (0, 0x75), (0, 0x77)];
 
-/// Below this a tach reading is noise rather than a stopped fan.
-const MIN_RPM: u16 = 200;
+/// Below this a tach word is bus noise or a coasting fan, not a header with
+/// something plugged into it. Deliberately lower than the old 200: a 140 mm
+/// fan at 15% duty reports ~170 rpm and was being dropped from the screen
+/// entirely.
+const MIN_RPM: u16 = 100;
 /// An unwired tach reads all-ones.
 const NO_FAN: u16 = 0xFFFF;
 
@@ -157,8 +156,8 @@ impl PawnIoFan {
     fn tachometers(&self) -> Result<Vec<(usize, u16)>> {
         let mut out = Vec::new();
         for slot in 0..TACH_SLOTS {
-            let register = TACH_BASE + (slot as u8) * 2;
-            let rpm = self.read_word(TACH_BANK, register)?;
+            let register = crate::chipmap::TACH_BASE + (slot as u8) * 2;
+            let rpm = self.read_word(crate::chipmap::TACH_BANK, register)?;
             if !is_live_tach(rpm) {
                 continue;
             }
@@ -242,7 +241,7 @@ impl PawnIoFan {
 
         // Tachometers from both candidate layouts. The vendor reads words from
         // bank 4 at 0xC0, MSB first; this app used bank 6 at 0x56.
-        for (index, register) in (0xC0u8..0xCC).step_by(2).enumerate() {
+        for (index, register) in (0xC0u8..0xD0).step_by(2).take(TACH_SLOTS).enumerate() {
             let value = self.read_word(4, register).unwrap_or(0xFFFF);
             out.push(RegisterRead {
                 label: format!("tach bank4 slot {index}"),
@@ -251,7 +250,7 @@ impl PawnIoFan {
                 value,
             });
         }
-        for (index, register) in (0x56u8..0x60).step_by(2).enumerate() {
+        for (index, register) in (0x56u8..0x64).step_by(2).take(TACH_SLOTS).enumerate() {
             let value = self.read_word(6, register).unwrap_or(0xFFFF);
             out.push(RegisterRead {
                 label: format!("tach bank6 slot {index}"),
@@ -264,9 +263,15 @@ impl PawnIoFan {
         Ok(out)
     }
 
-    /// Writes a raw duty to one header and verifies it against the readback.
-    fn write_duty(&mut self, slot: usize, pwm: u8) -> Result<()> {
-        let bank = CONTROL_BANKS[slot.min(CONTROL_BANKS.len() - 1)];
+    /// Writes a raw duty to one header and verifies it in place.
+    ///
+    /// The readback is the command register of the bank just written, not the
+    /// bank-0 table: verifying against `PWM_OUT_REGISTERS[slot]` assumed the
+    /// same slot order that the write itself assumes, so it could only ever
+    /// confirm that two guesses agreed. This confirms the register took the
+    /// value; which physical header that bank drives is the probe's job.
+    fn write_duty(&mut self, header: FanHeader, pwm: u8) -> Result<()> {
+        let bank = crate::chipmap::bank(header);
 
         // Manual mode first: leaving the chip automatic while writing the
         // command register means SmartFan overwrites the value immediately.
@@ -274,12 +279,11 @@ impl PawnIoFan {
         self.write_hwm(REG_CONTROL_MODE, 0x00)?;
         self.write_hwm(REG_PWM_COMMAND, pwm)?;
 
-        // Verify against the independent duty readback. A silent refusal would
-        // otherwise be indistinguishable from success.
-        let applied = self.read_byte(PWM_BANK, PWM_OUT_REGISTERS[slot])?;
-        if applied.abs_diff(pwm) > 8 {
+        let applied = self.read_byte(bank, REG_PWM_COMMAND)?;
+        if applied.abs_diff(pwm) > 2 {
             return Err(Error::backend(format!(
-                "Wrote {pwm} to fan {slot}, but the chip reports {applied}. The register                  map may not match this board, so fan control is not trusted here."
+                "Wrote {pwm} to {header}, but bank {bank} still reports {applied}. The chip \
+                 refused the write; fan control is not trusted here."
             )));
         }
         Ok(())
@@ -303,7 +307,8 @@ impl PawnIoFan {
             {
                 continue;
             }
-            self.write_duty(slot, duty)?;
+            let header = FanHeader::all()[slot];
+            self.write_duty(header, duty)?;
             self.last_duty[slot] = Some(duty);
         }
         Ok(())
@@ -353,8 +358,10 @@ impl FanBackend for PawnIoFan {
             let pwm = self
                 .read_byte(PWM_BANK, PWM_OUT_REGISTERS[slot])
                 .unwrap_or(0);
+            let header = FanHeader::all()[slot.min(TACH_SLOTS - 1)];
             fans.push(FanSample {
-                header: FanHeader::all()[slot.min(TACH_SLOTS - 1)],
+                header,
+                bank: crate::chipmap::bank(header),
                 rpm,
                 pwm,
                 mode: if self.curves[slot].is_some() {
@@ -368,34 +375,19 @@ impl FanBackend for PawnIoFan {
 
         Ok(Telemetry {
             temperature_c: temperature.map(|(value, _, _)| value),
-            temperature_source: temperature
+            temperature_source: temperature.map(|_| "board thermistor".to_string()),
+            temperature_register: temperature
                 .map(|(_, bank, register)| format!("bank {bank} · 0x{register:02X}")),
             fans,
         })
     }
 
     fn set_pwm(&mut self, header: FanHeader, pwm: u8) -> std::result::Result<(), Error> {
-        let slot = FanHeader::all()
-            .iter()
-            .position(|h| *h == header)
-            .ok_or_else(|| Error::backend("unknown fan header"))?;
-        let bank = CONTROL_BANKS[slot.min(CONTROL_BANKS.len() - 1)];
-
-        // Manual mode first: leaving the chip automatic while writing the
-        // command register means SmartFan overwrites the value immediately.
-        self.select_bank(bank)?;
-        self.write_hwm(REG_CONTROL_MODE, 0x00)?;
-        self.write_hwm(REG_PWM_COMMAND, pwm)?;
-
-        // Verify against the independent duty readback. A silent refusal would
-        // otherwise be indistinguishable from success.
-        let applied = self.read_byte(PWM_BANK, PWM_OUT_REGISTERS[slot])?;
-        if applied.abs_diff(pwm) > 8 {
-            return Err(Error::backend(format!(
-                "Wrote {pwm} to fan {slot}, but the chip reports {applied}. The register \
-                 map may not match this board, so fan control is not trusted here."
-            )));
-        }
+        let slot = slot_of(header)?;
+        self.write_duty(header, pwm)?;
+        // Remembered so the exit handshake knows which channels this session
+        // took over, and so the next curve tick does not rewrite the same value.
+        self.last_duty[slot] = Some(pwm);
         Ok(())
     }
 
@@ -414,7 +406,7 @@ impl FanBackend for PawnIoFan {
 
         if let Some((temp, _, _)) = self.temperature()? {
             let duty = crate::units::pct(crate::curve::eval(curve, temp));
-            self.write_duty(slot, duty)?;
+            self.write_duty(header, duty)?;
             self.last_duty[slot] = Some(duty);
         }
         Ok(())
@@ -424,6 +416,24 @@ impl FanBackend for PawnIoFan {
     /// but the caller's contract is the same: a curve is in force afterwards.
     fn supports_curves(&self) -> bool {
         true
+    }
+
+    /// Hands every channel this session put in manual mode back to the chip's
+    /// own SmartFan control, so quitting does not leave a fan pinned at the
+    /// last duty the app happened to write.
+    ///
+    /// Errors are deliberately dropped: this runs on the way out, there is
+    /// nothing to report to and nothing to retry.
+    fn release(&mut self) {
+        for slot in 0..TACH_SLOTS {
+            if self.last_duty[slot].is_none() {
+                continue;
+            }
+            let bank = crate::chipmap::bank(FanHeader::all()[slot]);
+            if self.select_bank(bank).is_ok() {
+                let _ = self.write_hwm(REG_CONTROL_MODE, 0x40);
+            }
+        }
     }
 }
 

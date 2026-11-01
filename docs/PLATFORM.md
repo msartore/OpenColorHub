@@ -24,14 +24,15 @@ and passed to the driver at runtime.
 NCT5567D-B (`0xD121`) iGC.Lite calls `GetTemp(1, 80)` — bank 1, register `0x50` —
 and uses that value as the X axis of its fan curves. OpenColorHub reads the same
 one first, then falls back to the bank-0 Nuvoton sensors (`0x27`, `0x73`, `0x75`,
-`0x77`) for boards that leave `0x50` unwired. The Dashboard names the register in
-use ("temp sensor" in System facts, and in the gauge's tooltip), so a reading can
-always be traced to the sensor behind it. Values outside 5–110 °C are rejected
-rather than shown.
+`0x77`) for boards that leave `0x50` unwired. The Dashboard says which kind of
+sensor the number came from ("board thermistor", "HWiNFO shared memory",
+"synthetic") and keeps the register — `bank 1 · 0x50` — in the gauge's tooltip,
+so a reading can always be traced without putting hex on the screen. Values
+outside 5–110 °C are rejected rather than shown.
 
 **Headers with nothing plugged in are hidden.** A header that never reports a
 tach is an empty socket, not a fan at 0 rpm, so its card is dropped and the
-screen says *"No more fans detected — N of 5 headers are in use."* The check is
+screen says *"No more fans detected — N of 6 headers are in use."* The check is
 latched: once a header has spun, it keeps its card even when a 0% curve stops it.
 Average duty and the total rpm on the Dashboard count only the headers that
 exist.
@@ -159,18 +160,28 @@ Two Super I/O families are in play, which is why nothing promises a single chip:
 Lighting is the common denominator: all of these expose the same Colorful RGB
 controller as HID `2F4C:1000` on usage page `0xFF01`.
 
-## Settling the bank map
+## Settling the channel map
 
-Which Super I/O bank drives which physical header is not settled on this board,
-and a wrong bank means commanding the wrong fan. Two readings disagree:
+The bank numbers are settled: `chipmap.rs` uses Colorful's own assignment —
+SYS 1, CPU 2, AUX0 3, AUX1 8, AUX2 9, AUX3 10 — and the headers are named after
+those channels rather than after a silkscreen guess. Earlier versions shipped a
+five-header list (CPU, CHA_FAN1-3, AIO_PUMP) whose labels were one row early:
+"CPU_FAN" wrote bank 1, which the vendor calls SYS, and bank 10 was never
+touched. That is now four labels fixed and one channel recovered.
 
-| | This app | Colorful's NCT5567D_B service |
+A pump is a setting (Settings → Safety), because nothing in the vendor table
+says which channel a cooler's pump is on. The bound channel is floored at 60%
+for both manual duty and curves; none is bound by default.
+
+What is still open is which *physical* header answers to each channel on this
+board, and which tachometer window is the real one:
+
+| | Windows (measured here) | Vendor's service |
 |---|---|---|
-| Fan banks | 1, 2, 3, 8, 9 | SYS=1, CPU=2, AUX0=3, AUX1=8, AUX2=9, AUX3=10 |
 | Tachometers | bank 6, `0x56 + 2i` | bank 4, `0xC0 + 2i`, MSB first |
-| Temperature | bank 1 `0x50` first, then bank 0 | bank 1, `0x50` |
+| Temperature | bank 1 `0x50`, then bank 0 | bank 1, `0x50` |
 
-`colorctl fan probe` prints every register either layout depends on, from an
+`colorctl fan probe` prints every register both layouts depend on, from an
 elevated shell:
 
 ```
@@ -178,7 +189,8 @@ colorctl.exe fan probe          # table
 colorctl.exe fan probe --json   # machine-readable
 ```
 
-It writes nothing. Run it twice — once idle, once with a fan curve or a manual
-duty applied — and the registers that move are the ones that belong to a fan.
-Until that is done, treat fan writes as unverified and RGB as the only fully
+It writes nothing. Run it twice — once idle, once with a manual duty applied to
+one channel — and the registers that move belong to that channel's fan. Label
+the slots from what moved, never from the channel order. Until that is done,
+treat the channel-to-silkscreen mapping as unverified and RGB as the only fully
 tested path.

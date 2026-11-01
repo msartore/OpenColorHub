@@ -2,7 +2,16 @@
 
 import { api, isDemo } from "../api";
 import { el } from "../dom";
-import type { AutostartState, BackendMode, ElevationState, Settings, SettingsPatch, Snapshot, TempUnit } from "../types";
+import type {
+  AutostartState,
+  BackendMode,
+  ElevationState,
+  FanHeaderId,
+  Settings,
+  SettingsPatch,
+  Snapshot,
+  TempUnit,
+} from "../types";
 import type { View, ViewContext } from "../view";
 import { checkForUpdate, showUpdateDialog } from "../update";
 import {
@@ -14,6 +23,7 @@ import {
   panel,
   pill,
   segmented,
+  select,
   slider,
   toggle,
   type Slider,
@@ -40,6 +50,9 @@ export function createSettings(ctx: ViewContext): View {
 
   const persist = async (patch: SettingsPatch) => {
     draft = { ...draft, ...patch } as Settings;
+    if (patch.pump_header !== undefined) {
+      draft.pump_header = patch.pump_header === "none" ? null : patch.pump_header;
+    }
     await ctx.saveSettings(patch);
   };
 
@@ -193,6 +206,21 @@ export function createSettings(ctx: ViewContext): View {
     onChange: (checked) => void persist({ reapply_led_on_launch: checked }),
   });
 
+  const pumpSelect = select<FanHeaderId | "none">({
+    value: draft.pump_header ?? "none",
+    label: "Pump channel",
+    options: [
+      { value: "none", label: "None" },
+      { value: "sys", label: "SYS_FAN" },
+      { value: "cpu", label: "CPU_FAN" },
+      { value: "aux0", label: "AUX0" },
+      { value: "aux1", label: "AUX1" },
+      { value: "aux2", label: "AUX2" },
+      { value: "aux3", label: "AUX3" },
+    ],
+    onChange: (value) => void persist({ pump_header: value }),
+  });
+
   const lowDuty = slider({
     min: 0,
     max: 60,
@@ -231,6 +259,7 @@ export function createSettings(ctx: ViewContext): View {
         reapply_led_on_launch: false,
         accent: "#4ade80",
         low_duty_warning: 20,
+        pump_header: "none",
       });
       await ctx.refresh();
       ctx.toast("Settings reset", "ok");
@@ -394,7 +423,13 @@ export function createSettings(ctx: ViewContext): View {
         className: "area-safety",
         title: "Safety",
         subtitle: "Guard rails for real hardware",
-        body: [confirmToggle.el, reapplyToggle.el, lowDuty.el],
+        body: [
+          confirmToggle.el,
+          reapplyToggle.el,
+          lowDuty.el,
+          pumpSelect.el,
+          inlineNote("A channel bound as a pump is floored at 60%, so a stopped pump cannot be commanded."),
+        ],
       }),
       panel({
         className: "area-paths",
@@ -475,6 +510,7 @@ export function createSettings(ctx: ViewContext): View {
     confirmToggle.setChecked(settings.confirm_writes);
     reapplyToggle.setChecked(settings.reapply_led_on_launch);
     lowDuty.setValue(settings.low_duty_warning);
+    pumpSelect.setValue(settings.pump_header ?? "none");
     unitSwitch.setValue(settings.temp_unit);
     backendSwitch.setValue(settings.backend);
     accentInput.value = settings.accent;

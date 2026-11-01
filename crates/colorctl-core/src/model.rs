@@ -27,27 +27,39 @@ pub const COLORFUL_PID: u16 = 0x1000;
 /// Usage page the RGB controller advertises (HID report descriptor).
 pub const COLORFUL_USAGE_PAGE: u16 = 0xFF01;
 
-/// Fan headers exposed by the NCT5584D firmware on supported Colorful boards.
+/// Fan channels of the board's Super I/O.
+///
+/// Named after Colorful's own `NCT5567D_B_Service.GetBank()` — SYS, CPU, then
+/// four auxiliary channels — because that service is the only authoritative
+/// naming for this chip. The bank behind each name lives in [`crate::chipmap`],
+/// not here: a header must not carry a register map that belongs to one
+/// platform's backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FanHeader {
+    Sys,
     Cpu,
-    ChaFan1,
-    ChaFan2,
-    ChaFan3,
-    Pump,
+    #[serde(alias = "cha_fan1")]
+    Aux0,
+    #[serde(alias = "cha_fan2")]
+    Aux1,
+    #[serde(alias = "cha_fan3")]
+    Aux2,
+    #[serde(alias = "pump")]
+    Aux3,
 }
 
-pub const FAN_HEADERS: [FanHeader; 5] = [
+pub const FAN_HEADERS: [FanHeader; 6] = [
+    FanHeader::Sys,
     FanHeader::Cpu,
-    FanHeader::ChaFan1,
-    FanHeader::ChaFan2,
-    FanHeader::ChaFan3,
-    FanHeader::Pump,
+    FanHeader::Aux0,
+    FanHeader::Aux1,
+    FanHeader::Aux2,
+    FanHeader::Aux3,
 ];
 
 impl FanHeader {
-    /// Stable iteration order — must not change: it defines register layout.
+    /// Stable iteration order — must not change: it indexes [`crate::chipmap`].
     pub fn all() -> &'static [FanHeader] {
         &FAN_HEADERS
     }
@@ -55,75 +67,61 @@ impl FanHeader {
     /// Serialized identifier (matches `FanHeaderId` in the frontend).
     pub fn id(&self) -> &'static str {
         match self {
+            FanHeader::Sys => "sys",
             FanHeader::Cpu => "cpu",
-            FanHeader::ChaFan1 => "cha_fan1",
-            FanHeader::ChaFan2 => "cha_fan2",
-            FanHeader::ChaFan3 => "cha_fan3",
-            FanHeader::Pump => "pump",
+            FanHeader::Aux0 => "aux0",
+            FanHeader::Aux1 => "aux1",
+            FanHeader::Aux2 => "aux2",
+            FanHeader::Aux3 => "aux3",
         }
     }
 
-    /// Silkscreen label printed on the motherboard.
+    /// The name the vendor's own service uses for this channel.
     pub fn label(&self) -> &'static str {
         match self {
+            FanHeader::Sys => "SYS_FAN",
             FanHeader::Cpu => "CPU_FAN",
-            FanHeader::ChaFan1 => "CHA_FAN1",
-            FanHeader::ChaFan2 => "CHA_FAN2",
-            FanHeader::ChaFan3 => "CHA_FAN3",
-            FanHeader::Pump => "AIO_PUMP",
+            FanHeader::Aux0 => "AUX0",
+            FanHeader::Aux1 => "AUX1",
+            FanHeader::Aux2 => "AUX2",
+            FanHeader::Aux3 => "AUX3",
         }
     }
 
     /// Human description shown on the fan screen.
     pub fn description(&self) -> &'static str {
         match self {
-            FanHeader::Cpu => "CPU cooler / AIO radiator",
-            FanHeader::ChaFan1 => "Chassis intake",
-            FanHeader::ChaFan2 => "Chassis exhaust",
-            FanHeader::ChaFan3 => "Chassis auxiliary",
-            FanHeader::Pump => "AIO pump (keep ≥ 80%)",
+            FanHeader::Sys => "System fan / rear exhaust",
+            FanHeader::Cpu => "CPU cooler or AIO radiator",
+            FanHeader::Aux0 => "Auxiliary header",
+            FanHeader::Aux1 => "Auxiliary header",
+            FanHeader::Aux2 => "Auxiliary header",
+            FanHeader::Aux3 => "Auxiliary header",
         }
-    }
-
-    /// HWM bank the header is wired to.
-    pub fn bank(&self) -> u8 {
-        match self {
-            FanHeader::Cpu => 2,
-            FanHeader::ChaFan1 => 1,
-            FanHeader::ChaFan2 => 10,
-            FanHeader::ChaFan3 => 3,
-            FanHeader::Pump => 11,
-        }
-    }
-
-    /// Register holding the 16-bit tachometer value (bank 4).
-    pub fn rpm_reg(&self) -> u8 {
-        match self {
-            FanHeader::ChaFan1 => 0xC0,
-            FanHeader::Cpu => 0xC2,
-            FanHeader::ChaFan3 => 0xC4,
-            FanHeader::ChaFan2 => 0xCA,
-            FanHeader::Pump => 0xCE,
-        }
-    }
-
-    /// Pumps must never be stopped — the UI enforces a floor.
-    pub fn is_pump(&self) -> bool {
-        matches!(self, FanHeader::Pump)
     }
 
     /// Index inside [`FAN_HEADERS`]; used by per-header state arrays.
     pub fn index(&self) -> usize {
         match self {
-            FanHeader::Cpu => 0,
-            FanHeader::ChaFan1 => 1,
-            FanHeader::ChaFan2 => 2,
-            FanHeader::ChaFan3 => 3,
-            FanHeader::Pump => 4,
+            FanHeader::Sys => 0,
+            FanHeader::Cpu => 1,
+            FanHeader::Aux0 => 2,
+            FanHeader::Aux1 => 3,
+            FanHeader::Aux2 => 4,
+            FanHeader::Aux3 => 5,
         }
     }
 
     pub fn from_id(id: &str) -> Option<Self> {
+        // Ids from before the channels were renamed to the vendor's names.
+        let lower = id.to_ascii_lowercase();
+        let id = match lower.as_str() {
+            "cha_fan1" => "aux0",
+            "cha_fan2" => "aux1",
+            "cha_fan3" => "aux2",
+            "pump" | "aio_pump" => "aux3",
+            other => other,
+        };
         FAN_HEADERS
             .into_iter()
             .find(|h| h.id() == id || h.label().eq_ignore_ascii_case(id))
@@ -346,6 +344,10 @@ pub fn scale_color(color: [u8; 3], brightness: u8) -> [u8; 3] {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FanSample {
     pub header: FanHeader,
+    /// The Super I/O bank this sample came from. Published so the UI and the
+    /// CLI report what the backend actually read, never a second copy of the
+    /// map kept elsewhere.
+    pub bank: u8,
     pub rpm: u16,
     pub pwm: u8,
     pub mode: FanMode,
@@ -358,6 +360,7 @@ impl FanSample {
     pub fn new(header: FanHeader, rpm: u16, pwm: u8, mode: FanMode) -> Self {
         Self {
             header,
+            bank: crate::chipmap::bank(header),
             rpm,
             pwm,
             mode,
@@ -378,6 +381,11 @@ pub struct Telemetry {
     /// `synthetic`. A number nobody can trace is a number nobody should trust.
     #[serde(default)]
     pub temperature_source: Option<String>,
+    /// The register behind the reading, e.g. `bank 1 · 0x50`. Kept apart from
+    /// the label so the screen can say "board thermistor" and the tooltip can
+    /// say where it was read.
+    #[serde(default)]
+    pub temperature_register: Option<String>,
     pub fans: Vec<FanSample>,
 }
 
@@ -386,6 +394,7 @@ impl Telemetry {
         Self {
             temperature_c: None,
             temperature_source: None,
+            temperature_register: None,
             fans: Vec::new(),
         }
     }
@@ -477,6 +486,8 @@ pub struct FanStatus {
     pub label: String,
     pub description: String,
     pub bank: u8,
+    /// True when the channel is bound as a pump, which floors its duty.
+    pub pump: bool,
     pub rpm: u16,
     pub pwm: u8,
     pub percent: u8,
@@ -524,9 +535,14 @@ pub struct ChannelStatus {
 pub struct Snapshot {
     pub timestamp_ms: u64,
     pub temperature_c: Option<f32>,
-    /// Which sensor the temperature came from, e.g. `bank 1 · 0x50`.
+    /// Which sensor the temperature came from, in words: `board thermistor`,
+    /// `HWiNFO shared memory`, `synthetic`.
     #[serde(default)]
     pub temperature_source: Option<String>,
+    /// The register behind the reading, for the tooltip and the CLI. Never a
+    /// standing row on screen.
+    #[serde(default)]
+    pub temperature_register: Option<String>,
     pub fans: Vec<FanStatus>,
     pub channels: Vec<ChannelStatus>,
     pub fan_device: DeviceInfo,
@@ -547,6 +563,7 @@ impl Snapshot {
             timestamp_ms: 0,
             temperature_c: None,
             temperature_source: None,
+            temperature_register: None,
             fans: Vec::new(),
             channels: Vec::new(),
             fan_device: DeviceInfo::unavailable("No fan backend", "none", "not initialised"),
@@ -574,6 +591,34 @@ pub fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn header_channels_are_distinct_and_ordered() {
+        assert_eq!(FAN_HEADERS.len(), 6);
+        for (index, header) in FAN_HEADERS.iter().enumerate() {
+            assert_eq!(header.index(), index);
+            let same_id = FAN_HEADERS.iter().filter(|h| h.id() == header.id()).count();
+            assert_eq!(same_id, 1, "id {} is not unique", header.id());
+        }
+    }
+
+    #[test]
+    fn legacy_header_ids_still_resolve() {
+        assert_eq!(FanHeader::from_id("cpu"), Some(FanHeader::Cpu));
+        assert_eq!(FanHeader::from_id("cha_fan1"), Some(FanHeader::Aux0));
+        assert_eq!(FanHeader::from_id("cha_fan2"), Some(FanHeader::Aux1));
+        assert_eq!(FanHeader::from_id("cha_fan3"), Some(FanHeader::Aux2));
+        assert_eq!(FanHeader::from_id("pump"), Some(FanHeader::Aux3));
+        assert_eq!(FanHeader::from_id("SYS_FAN"), Some(FanHeader::Sys));
+    }
+
+    #[test]
+    fn a_legacy_preset_header_deserializes_to_its_channel() {
+        let header: FanHeader = serde_json::from_str("\"cha_fan2\"").unwrap();
+        assert_eq!(header, FanHeader::Aux1);
+        let header: FanHeader = serde_json::from_str("\"pump\"").unwrap();
+        assert_eq!(header, FanHeader::Aux3);
+    }
 
     #[test]
     fn channel_ids_round_trip() {

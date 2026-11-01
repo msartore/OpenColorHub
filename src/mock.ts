@@ -37,11 +37,12 @@ const HEADERS: {
   span: number;
   base: number;
 }[] = [
-  { id: "cpu", label: "CPU_FAN", description: "CPU cooler / AIO radiator", bank: 2, span: 2100, base: 210 },
-  { id: "cha_fan1", label: "CHA_FAN1", description: "Chassis intake", bank: 1, span: 1350, base: 210 },
-  { id: "cha_fan2", label: "CHA_FAN2", description: "Chassis exhaust", bank: 10, span: 1350, base: 210 },
-  { id: "cha_fan3", label: "CHA_FAN3", description: "Chassis auxiliary", bank: 3, span: 1350, base: 210 },
-  { id: "pump", label: "AIO_PUMP", description: "AIO pump (keep ≥ 80%)", bank: 11, span: 2900, base: 750 },
+  { id: "sys", label: "SYS_FAN", description: "System fan / rear exhaust", bank: 1, span: 1350, base: 210 },
+  { id: "cpu", label: "CPU_FAN", description: "CPU cooler or AIO radiator", bank: 2, span: 2100, base: 210 },
+  { id: "aux0", label: "AUX0", description: "Auxiliary header", bank: 3, span: 1350, base: 210 },
+  { id: "aux1", label: "AUX1", description: "Auxiliary header", bank: 8, span: 1350, base: 210 },
+  { id: "aux2", label: "AUX2", description: "Auxiliary header", bank: 9, span: 1350, base: 210 },
+  { id: "aux3", label: "AUX3", description: "Auxiliary header", bank: 10, span: 2900, base: 750 },
 ];
 
 const CHANNELS: {
@@ -120,6 +121,7 @@ const DEFAULT_SETTINGS: Settings = {
   state_file: null,
   last_screen: "dashboard",
   low_duty_warning: 20,
+  pump_header: null,
 };
 
 function defaultState(): DemoState {
@@ -208,6 +210,7 @@ export function createDemoBackend(): DemoBackend {
         label: header.label,
         description: header.description,
         bank: header.bank,
+        pump: state.settings.pump_header === header.id,
         rpm: rpmFor(header, pwm),
         pwm,
         percent: pwmToPct(pwm),
@@ -248,6 +251,7 @@ export function createDemoBackend(): DemoBackend {
       timestamp_ms: Date.now(),
       temperature_c: tempC,
       temperature_source: "synthetic",
+      temperature_register: null,
       fans,
       channels: channelStatuses(),
       fan_device: {
@@ -288,7 +292,7 @@ export function createDemoBackend(): DemoBackend {
   const result = (message: string): ActionResult => ({ snapshot: snapshot(), message });
 
   const clampDuty = (header: FanHeaderId, percent: number): number =>
-    Math.min(100, Math.max(header === "pump" ? 60 : 0, percent));
+    Math.min(100, Math.max(header === "aux3" ? 60 : 0, percent));
 
   const invoke = async <T,>(cmd: string, args: Record<string, unknown>): Promise<T> => {
     switch (cmd) {
@@ -369,7 +373,7 @@ export function createDemoBackend(): DemoBackend {
           state.fans[header] = {
             pwm: state.fans[header].pwm,
             mode: "smart_fan",
-            curve: curveFor(profile as FanProfileId, header === "pump"),
+            curve: curveFor(profile as FanProfileId, header === "aux3"),
           };
         }
         persist();
@@ -496,8 +500,8 @@ export function createDemoBackend(): DemoBackend {
         const kind = (args.kind as "fans" | "lighting") ?? "fans";
         const fans = [
           { header: "cpu" as const, percent: 40, curve: null },
-          { header: "cha_fan1" as const, percent: 30, curve: null },
-          { header: "pump" as const, percent: 80, curve: null },
+          { header: "aux0" as const, percent: 30, curve: null },
+          { header: "aux3" as const, percent: 80, curve: null },
         ];
         const channels = [
           { channel: "led" as const, color: [251, 191, 36] as [number, number, number], brightness: 40, enabled: true },
@@ -574,7 +578,7 @@ export function createDemoBackend(): DemoBackend {
             description: c.description,
           })),
           capabilities: [
-            "5 PWM fan headers with 4-point SmartFan curves",
+            "6 PWM fan channels with 4-point curves",
             "6 lighting channels across 200 LEDs",
             "Manual duty, built-in profiles, live tachometers",
             "State compatible with upstream colorctl (CCTL v1)",

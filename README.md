@@ -38,7 +38,7 @@ simulator, both labelled. → [Platform notes](docs/PLATFORM.md)
 | | |
 | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Fan control](docs/screenshots/fans.png) |
-| **Dashboard** — gauge with session history, six live metrics, fan and channel detail | **Fan control** — per-header curves, presets, pump floor |
+| **Dashboard** — gauge with session history, six live metrics, fan and channel detail | **Fan control** — per-channel curves, presets |
 | ![Lighting](docs/screenshots/leds.png) | ![Drivers](docs/screenshots/drivers.png) |
 | **Lighting** — six channels, 200-LED frame | **Drivers** — vendor downloads, nothing executed |
 | ![About](docs/screenshots/about.png) | |

@@ -3,7 +3,7 @@
  * `crates/colorctl-core/src/model.rs` — keep both sides in sync.
  */
 
-export type FanHeaderId = "cpu" | "cha_fan1" | "cha_fan2" | "cha_fan3" | "pump";
+export type FanHeaderId = "sys" | "cpu" | "aux0" | "aux1" | "aux2" | "aux3";
 export type ChannelId = "led" | "rgb1" | "rgb2" | "argb1" | "argb2" | "argb3";
 export type FanModeId = "manual" | "smart_fan" | "unknown";
 export type BackendMode = "auto" | "hardware" | "simulated";
@@ -53,6 +53,8 @@ export interface FanStatus {
   label: string;
   description: string;
   bank: number;
+  /** Bound as a pump in settings; its duty is floored. */
+  pump: boolean;
   rpm: number;
   pwm: number;
   percent: number;
@@ -114,8 +116,10 @@ export interface BoardInfo {
 export interface Snapshot {
   timestamp_ms: number;
   temperature_c: number | null;
-  /** Which sensor the number came from, e.g. "bank 1 · 0x50". */
+  /** Which sensor the number came from, in words: "board thermistor". */
   temperature_source: string | null;
+  /** The register behind it, for the tooltip. Never a standing row. */
+  temperature_register: string | null;
   fans: FanStatus[];
   channels: ChannelStatus[];
   fan_device: DeviceInfo;
@@ -143,9 +147,14 @@ export interface Settings {
   state_file: string | null;
   last_screen: string;
   low_duty_warning: number;
+  /** Channel bound as an AIO pump, or null when none is. */
+  pump_header: FanHeaderId | null;
 }
 
-export type SettingsPatch = Partial<Settings>;
+export type SettingsPatch = Partial<Omit<Settings, "pump_header">> & {
+  /** `"none"` clears the binding; absent leaves it alone. */
+  pump_header?: FanHeaderId | "none";
+};
 
 export interface BuildMeta {
   version: string;

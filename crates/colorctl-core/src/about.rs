@@ -154,7 +154,7 @@ impl AboutInfo {
                 .map(|h| HeaderInfo {
                     id: h.id().to_string(),
                     label: h.label().to_string(),
-                    bank: h.bank(),
+                    bank: crate::chipmap::bank(*h),
                     description: h.description().to_string(),
                 })
                 .collect(),

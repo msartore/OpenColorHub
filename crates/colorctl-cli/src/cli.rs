@@ -157,27 +157,30 @@ pub struct FanArgs {
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FanTarget {
     All,
+    #[value(name = "sys", alias = "sys_fan", alias = "sys-fan")]
+    Sys,
     #[value(name = "cpu", alias = "cpu_fan", alias = "cpu-fan")]
     Cpu,
-    #[value(name = "cha_fan1", alias = "cha-fan1")]
-    ChaFan1,
-    #[value(name = "cha_fan2", alias = "cha-fan2")]
-    ChaFan2,
-    #[value(name = "cha_fan3", alias = "cha-fan3")]
-    ChaFan3,
-    #[value(name = "pump", alias = "aio_pump", alias = "aio-pump")]
-    Pump,
+    #[value(name = "aux0")]
+    Aux0,
+    #[value(name = "aux1")]
+    Aux1,
+    #[value(name = "aux2")]
+    Aux2,
+    #[value(name = "aux3")]
+    Aux3,
 }
 
 impl FanTarget {
     pub fn headers(&self) -> &'static [FanHeader] {
         match self {
             FanTarget::All => FanHeader::all(),
+            FanTarget::Sys => &[FanHeader::Sys],
             FanTarget::Cpu => &[FanHeader::Cpu],
-            FanTarget::ChaFan1 => &[FanHeader::ChaFan1],
-            FanTarget::ChaFan2 => &[FanHeader::ChaFan2],
-            FanTarget::ChaFan3 => &[FanHeader::ChaFan3],
-            FanTarget::Pump => &[FanHeader::Pump],
+            FanTarget::Aux0 => &[FanHeader::Aux0],
+            FanTarget::Aux1 => &[FanHeader::Aux1],
+            FanTarget::Aux2 => &[FanHeader::Aux2],
+            FanTarget::Aux3 => &[FanHeader::Aux3],
         }
     }
 }

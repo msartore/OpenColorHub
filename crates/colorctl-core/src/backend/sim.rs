@@ -67,7 +67,16 @@ impl SimFan {
             .ok()
             .and_then(|raw| serde_json::from_str::<SimFanFile>(&raw).ok())
             .map(|mut f| {
-                f.fans.resize(FAN_HEADERS.len(), SimFanConfig::default());
+                // Channels are only ever added at the front of the list, so a
+                // shorter file maps to the tail. Padding at the end put a CPU
+                // curve on the new SYS channel and shifted every other channel.
+                if f.fans.len() < FAN_HEADERS.len() {
+                    let mut padded =
+                        vec![SimFanConfig::default(); FAN_HEADERS.len() - f.fans.len()];
+                    padded.append(&mut f.fans);
+                    f.fans = padded;
+                }
+                f.fans.truncate(FAN_HEADERS.len());
                 f
             })
             .unwrap_or_default();
@@ -113,11 +122,11 @@ impl SimFan {
     fn rpm_for(&self, header: FanHeader, pwm: u8) -> u16 {
         let span = match header {
             FanHeader::Cpu => 2100.0,
-            FanHeader::Pump => 2900.0,
+            FanHeader::Aux3 => 2900.0,
             _ => 1350.0,
         };
         let base = match header {
-            FanHeader::Pump => 750.0,
+            FanHeader::Aux3 => 750.0,
             _ => 210.0,
         };
         let duty = pwm as f32 / 255.0;
@@ -152,6 +161,7 @@ impl FanBackend for SimFan {
                 let pwm = self.effective_pwm(*header, temp);
                 FanSample {
                     header: *header,
+                    bank: crate::chipmap::bank(*header),
                     rpm: self.rpm_for(*header, pwm),
                     pwm,
                     mode: self.config(*header).mode,
@@ -162,6 +172,7 @@ impl FanBackend for SimFan {
         Ok(Telemetry {
             temperature_c: Some(temp),
             temperature_source: Some("synthetic".to_string()),
+            temperature_register: None,
             fans,
         })
     }
@@ -281,12 +292,28 @@ mod tests {
     fn manual_duty_drives_rpm() {
         let d = dir("rpm");
         let mut fan = SimFan::new(&d);
+        let rpm_of = |fan: &mut SimFan| {
+            fan.read()
+                .unwrap()
+                .fans
+                .into_iter()
+                .find(|f| f.header == FanHeader::Cpu)
+                .unwrap()
+                .rpm
+        };
         fan.set_pwm(FanHeader::Cpu, 0).unwrap();
-        let idle = fan.read().unwrap().fans[0].rpm;
+        let idle = rpm_of(&mut fan);
         fan.set_pwm(FanHeader::Cpu, 255).unwrap();
-        let full = fan.read().unwrap().fans[0].rpm;
+        let full = rpm_of(&mut fan);
         assert!(full > idle, "expected {full} > {idle}");
-        assert_eq!(fan.read().unwrap().fans[0].mode, FanMode::Manual);
+        let sample = fan
+            .read()
+            .unwrap()
+            .fans
+            .into_iter()
+            .find(|f| f.header == FanHeader::Cpu)
+            .unwrap();
+        assert_eq!(sample.mode, FanMode::Manual);
         std::fs::remove_dir_all(&d).ok();
     }
 
@@ -295,8 +322,14 @@ mod tests {
         let d = dir("curve");
         let mut fan = SimFan::new(&d);
         let curve = crate::curve::FanProfile::Standard.points_for(true);
-        fan.set_curve(FanHeader::Pump, &curve).unwrap();
-        let sample = fan.read().unwrap().fans[4].clone();
+        fan.set_curve(FanHeader::Aux3, &curve).unwrap();
+        let sample = fan
+            .read()
+            .unwrap()
+            .fans
+            .into_iter()
+            .find(|f| f.header == FanHeader::Aux3)
+            .unwrap();
         assert_eq!(sample.mode, FanMode::SmartFan);
         assert_eq!(sample.curve, Some(curve));
         // Pump profile is 80%..100%, so the duty must never fall to zero.
@@ -305,18 +338,51 @@ mod tests {
     }
 
     #[test]
+    fn a_five_channel_state_file_maps_to_the_tail() {
+        let d = dir("migrate");
+        // The pre-rename file had CPU first; the channel list now starts at SYS.
+        let raw = r#"{"fans":[
+            {"pwm":11,"mode":"manual","curve":null},
+            {"pwm":22,"mode":"manual","curve":null},
+            {"pwm":33,"mode":"manual","curve":null},
+            {"pwm":44,"mode":"manual","curve":null},
+            {"pwm":55,"mode":"manual","curve":null}]}"#;
+        std::fs::write(d.join("sim-fan.json"), raw).unwrap();
+
+        let mut fan = SimFan::new(&d);
+        let sample = fan.read().unwrap();
+        let pwm = |header: FanHeader| {
+            sample
+                .fans
+                .iter()
+                .find(|f| f.header == header)
+                .unwrap_or_else(|| panic!("{header} missing"))
+                .pwm
+        };
+        assert_eq!(
+            pwm(FanHeader::Sys),
+            128,
+            "the new channel starts at the default"
+        );
+        assert_eq!(pwm(FanHeader::Cpu), 11, "the old first channel stays CPU");
+        assert_eq!(pwm(FanHeader::Aux0), 22);
+        assert_eq!(pwm(FanHeader::Aux3), 55, "the last channel keeps its value");
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
     fn config_survives_a_restart() {
         let d = dir("persist");
         {
             let mut fan = SimFan::new(&d);
-            fan.set_pwm(FanHeader::ChaFan2, 42).unwrap();
+            fan.set_pwm(FanHeader::Aux1, 42).unwrap();
         }
         let mut reopened = SimFan::new(&d);
         let sample = reopened.read().unwrap();
         let cha2 = sample
             .fans
             .iter()
-            .find(|f| f.header == FanHeader::ChaFan2)
+            .find(|f| f.header == FanHeader::Aux1)
             .unwrap();
         assert_eq!(cha2.pwm, 42);
         std::fs::remove_dir_all(&d).ok();

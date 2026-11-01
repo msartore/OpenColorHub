@@ -152,6 +152,7 @@ const fallbackSettings: Settings = {
   state_file: null,
   last_screen: "dashboard",
   low_duty_warning: 20,
+  pump_header: null,
 };
 
 function updateStatusbar(): void {

@@ -411,7 +411,7 @@ mod tests {
     fn a_lighting_preset_captures_only_lighting() {
         let (mut svc, _dir) = service("capture-light");
         svc.set_all_channels([15, 200, 90], 60, true).unwrap();
-        svc.set_fan_percent(FanHeader::Pump, 90).unwrap();
+        svc.set_fan_percent(FanHeader::Aux3, 90).unwrap();
 
         let setup = Setup::capture(&mut svc, SetupKind::Lighting, "Night");
         assert!(
@@ -425,21 +425,21 @@ mod tests {
     #[test]
     fn a_fan_preset_leaves_the_lighting_alone() {
         let (mut source, _dir_a) = service("fans-source");
-        source.set_fan_percent(FanHeader::Pump, 90).unwrap();
+        source.set_fan_percent(FanHeader::Aux3, 90).unwrap();
         let preset = Setup::capture(&mut source, SetupKind::Fans, "Cooling");
 
         let (mut target, _dir_b) = service("fans-target");
         target.set_all_channels([200, 30, 30], 40, true).unwrap();
-        target.set_fan_percent(FanHeader::Pump, 30).unwrap();
+        target.set_fan_percent(FanHeader::Aux3, 30).unwrap();
 
         let message = preset.apply(&mut target).expect("apply");
-        assert_eq!(message, "“Cooling” applied — 5 headers");
+        assert_eq!(message, "“Cooling” applied — 6 headers");
 
         let snapshot = target.snapshot();
         let pump = snapshot
             .fans
             .iter()
-            .find(|fan| fan.header == FanHeader::Pump)
+            .find(|fan| fan.header == FanHeader::Aux3)
             .unwrap();
         assert_eq!(pump.percent, 90);
         assert_eq!(
@@ -482,7 +482,7 @@ mod tests {
             CurvePoint::new(70, 70),
             CurvePoint::new(90, 100),
         ];
-        svc.set_fan_curve(FanHeader::ChaFan1, &curve).unwrap();
+        svc.set_fan_curve(FanHeader::Aux0, &curve).unwrap();
         let setup = Setup::capture(&mut svc, SetupKind::Fans, "Curved");
 
         let (mut target, _dir_b) = service("curve-target");
@@ -491,7 +491,7 @@ mod tests {
         let fan = snapshot
             .fans
             .iter()
-            .find(|fan| fan.header == FanHeader::ChaFan1)
+            .find(|fan| fan.header == FanHeader::Aux0)
             .unwrap();
         assert_eq!(fan.mode, crate::model::FanMode::SmartFan);
         assert!(fan.curve.is_some());
@@ -503,7 +503,7 @@ mod tests {
         svc.set_all_channels([255, 136, 0], 80, true).unwrap();
 
         let fans = Setup::capture(&mut svc, SetupKind::Fans, "F");
-        assert!(fans.summary().ends_with("5 headers"));
+        assert!(fans.summary().ends_with("6 headers"));
 
         let light = Setup::capture(&mut svc, SetupKind::Lighting, "L");
         assert_eq!(light.summary(), "6/6 lit · #FF8800");

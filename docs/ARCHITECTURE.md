@@ -225,25 +225,38 @@ CLI's `--backend simulated` path to inject a known identity.
 
 ## Hardware protocol notes
 
+**Fan channels.** One table, `crates/colorctl-core/src/chipmap.rs`, names and
+numbers the six channels: SYS 1, CPU 2, AUX0 3, AUX1 8, AUX2 9, AUX3 10 — the
+assignment in Colorful's own `NCT5567D_B_Service`. Both backends read that table;
+no backend keeps a second copy, which is how the two used to disagree about
+which header a write would reach. The headers are named after those channels,
+not after a silkscreen guess: this board's vendor service never calls one of
+them `AIO_PUMP`.
+
+* HWM base `0x0A30` on this board, index/data at `base+0x05` / `base+0x06`;
+* bank select is register `0x4E` written *through* the index/data pair
+  (`base+0x4E` is not the bank register and is denied by the sandbox);
+* PWM command at register `0x09` of that bank, mode bit at `0x02`;
+* duty read-back in bank 0 at `0x01, 0x03, 0x11, 0x13, 0x15, 0x17`;
+* tachometers: bank 6 at `0x56 + 2i` on Windows (measured here — 3640 rpm idle,
+  4426 under load), bank 4 at `0xC0 + 2i` on Linux (the vendor's layout, not yet
+  measured on that chip);
+* a duty write is verified against the same bank's `0x09`, not against the bank-0
+  table, so the check does not reuse the slot order it is meant to check;
+* on exit the desktop app writes `0x02 = 0x40` for every channel it put in manual
+  mode, handing control back to the chip's own SmartFan curve. The CLI does not:
+  it writes a duty and exits on purpose;
+* a channel bound as a pump in Settings is floored at 60% for duty and curves.
+  None is bound by default, because this board's table names no pump channel.
+
 **Fans, Linux (NCT5584D, chip `0xD42A`).** Super I/O index/data pairs are probed
 at 0x4E/0x4F then 0x2E/0x2F; the chip ID is validated before any write. The
 hardware-monitor base comes from LDN 0x0B, giving index = base+5 and data =
-base+6. Per-header banks: CPU 2, CHA_FAN1 1, CHA_FAN2 10, CHA_FAN3 3, AIO_PUMP 11.
-Manual mode is register `0x02 = 0x00` plus duty in `0x09`; SmartFan writes
-`0x66 = 0xAA`, `0x03 = 0x01`, `0x04 = 0x01`, `0x02 = 0x40`, then four
-temperatures in `0x21..0x24` and four duties in `0x27..0x2A`. Tachometers live in
-bank 4 at 0xC0/0xC2/0xC4/0xCA/0xCE.
-
-**Fans, Windows (NCT6793D / NCT5567D-B family, chip `0xD121`).** Measured, not
-assumed — the register map came from an elevated probe written for this board:
-
-* HWM base `0x0A30`, index/data at `base+0x05` / `base+0x06`;
-* bank select is register `0x4E` written *through* the index/data pair
-  (`base+0x4E` is not the bank register and is denied by the sandbox);
-* tachometer bank 6, registers `0x56 + 2i`;
-* PWM duty read-back in bank 0 at `0x01, 0x03, 0x11, 0x13, 0x15`;
-* PWM command banks 1, 2, 3, 8, 9 at register `0x09`;
-* manual-mode bit at register `0x02`.
+base+6. Manual mode is register `0x02 = 0x00` plus duty in `0x09`; the Linux
+backend can also program the chip's SmartFan points (`0x66 = 0xAA`,
+`0x03 = 0x01`, `0x04 = 0x01`, `0x02 = 0x40`, then four temperatures in
+`0x21..0x24` and four duties in `0x27..0x2A`). The Windows backend evaluates
+curves in software and hands them back on exit.
 
 Traps that cost time: bank 0 registers `0x00`/`0x02` masquerade as RPM
 (`0x04A0` = reserved byte + duty `0xA0` = 63%), and every bank reads identically

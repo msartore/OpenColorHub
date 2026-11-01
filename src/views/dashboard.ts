@@ -46,7 +46,7 @@ export function createDashboard(ctx: ViewContext): View {
   const forEachHeader = () => {
     fanList.replaceChildren();
     fanRows.clear();
-    for (const header of ["cpu", "cha_fan1", "cha_fan2", "cha_fan3", "pump"] as FanHeaderId[]) {
+    for (const header of ["sys", "cpu", "aux0", "aux1", "aux2", "aux3"] as FanHeaderId[]) {
       const rpm = el("span", { class: "fan-mini-rpm mono" }, "0");
       const pct = el("span", { class: "fan-mini-pct mono" }, "0%");
       const mode = el("span", { class: "fan-mini-mode" }, "—");
@@ -196,12 +196,16 @@ export function createDashboard(ctx: ViewContext): View {
   const renderSystem = (snapshot: Snapshot) => {
     const board = snapshot.board;
     const name = board.identity?.name?.trim() || board.identity?.vendor?.trim() || "unknown board";
-    const row = (key: string, value: string, tone?: string) =>
+    const row = (key: string, value: string, tone?: string, title?: string) =>
       el(
         "div",
         { class: "kv" },
         el("span", { class: "kv-key" }, key),
-        el("span", { class: `kv-value mono${tone ? ` kv-value--${tone}` : ""}`, title: value }, value),
+        el(
+          "span",
+          { class: `kv-value mono${tone ? ` kv-value--${tone}` : ""}`, title: title ?? value },
+          value,
+        ),
       );
 
     const backend = (device: Snapshot["fan_device"]) =>
@@ -225,7 +229,12 @@ export function createDashboard(ctx: ViewContext): View {
       row("fan backend", backend(snapshot.fan_device)),
       row("lighting backend", backend(snapshot.led_device)),
       row("bios", board.identity?.bios_version?.trim() || "—"),
-      row("temp sensor", snapshot.temperature_source ?? "—"),
+      row(
+        "temp sensor",
+        snapshot.temperature_source ?? "—",
+        undefined,
+        snapshot.temperature_register ?? undefined,
+      ),
       row("polling", `${ctx.settings().poll_interval_ms} ms`),
       row("privileges", privileges, elevation?.elevated ? "ok" : undefined),
       row("last sample", formatClock(snapshot.timestamp_ms)),
@@ -241,9 +250,10 @@ export function createDashboard(ctx: ViewContext): View {
     // inventing a reason the app cannot know.
     const why = snapshot.capabilities.notes.find((note) => /PawnIO|HWiNFO|telemetry/i.test(note));
     const sensor = snapshot.temperature_source ?? "unknown sensor";
+    const register = snapshot.temperature_register ? ` (${snapshot.temperature_register})` : "";
     gaugeBadge.title = simulated
-      ? `${why ?? "Synthetic value: no sensor is being read."} (${sensor})`
-      : `Read from ${sensor}.`;
+      ? `${why ?? "Synthetic value: no sensor is being read."} (${sensor}${register})`
+      : `Read from ${sensor}${register}.`;
 
     if (snapshot.temperature_c !== null) {
       history.push(snapshot.temperature_c);

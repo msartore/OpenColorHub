@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::model::FanHeader;
 
 /// Which backend to talk to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -109,6 +110,11 @@ pub struct Settings {
     pub last_screen: String,
     /// Warn when a fan is configured below this duty (percent).
     pub low_duty_warning: u8,
+    /// Channel that drives an AIO pump, when the user has one.
+    ///
+    /// No channel is a pump until this says so: this board's vendor table names
+    /// none, and assuming one put a 60% floor on a chassis header.
+    pub pump_header: Option<FanHeader>,
 }
 
 impl Default for Settings {
@@ -124,6 +130,7 @@ impl Default for Settings {
             state_file: None,
             last_screen: "dashboard".to_string(),
             low_duty_warning: 20,
+            pump_header: crate::chipmap::PUMP_CHANNEL,
         }
     }
 }
@@ -211,7 +218,21 @@ impl Settings {
         if let Some(v) = patch.low_duty_warning {
             self.low_duty_warning = v;
         }
+        if let Some(v) = patch.pump_header {
+            // `"none"` clears the binding; an id binds it; anything else is
+            // ignored rather than silently clearing the user's choice.
+            if v.eq_ignore_ascii_case("none") {
+                self.pump_header = None;
+            } else if let Some(header) = FanHeader::from_id(&v) {
+                self.pump_header = Some(header);
+            }
+        }
         self.sanitize();
+    }
+
+    /// Whether `header` is the channel the user bound as a pump.
+    pub fn is_pump(&self, header: FanHeader) -> bool {
+        self.pump_header == Some(header)
     }
 
     /// Clamp a requested duty for a header, protecting the pump.
@@ -235,6 +256,9 @@ pub struct SettingsPatch {
     pub state_file: Option<Option<PathBuf>>,
     pub last_screen: Option<String>,
     pub low_duty_warning: Option<u8>,
+    /// `"none"` clears the binding, a header id (`"aux3"`) binds it, absent
+    /// leaves it alone.
+    pub pump_header: Option<String>,
 }
 
 /// `#rgb` / `#rrggbb`, case-insensitive.
@@ -340,6 +364,53 @@ mod tests {
         s.poll_interval_ms = 999_999;
         s.sanitize();
         assert_eq!(s.poll_interval_ms, POLL_MAX_MS);
+    }
+
+    #[test]
+    fn a_pump_binding_round_trips_through_a_patch() {
+        let mut s = Settings::default();
+        assert!(!s.is_pump(FanHeader::Cpu));
+
+        s.apply_patch(SettingsPatch {
+            pump_header: Some("aux3".to_string()),
+            ..Default::default()
+        });
+        assert!(s.is_pump(FanHeader::Aux3));
+        assert_eq!(s.pump_header, Some(FanHeader::Aux3));
+
+        s.apply_patch(SettingsPatch {
+            pump_header: Some("none".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(s.pump_header, None);
+
+        s.apply_patch(SettingsPatch {
+            pump_header: Some("aux1".to_string()),
+            ..Default::default()
+        });
+        s.apply_patch(SettingsPatch {
+            pump_header: Some("not a header".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(
+            s.pump_header,
+            Some(FanHeader::Aux1),
+            "an unknown id must not clear the user's choice"
+        );
+    }
+
+    #[test]
+    fn the_pump_binding_survives_a_disk_round_trip() {
+        let dir = temp_dir("pump");
+        let path = dir.join("settings.json");
+        let s = Settings {
+            pump_header: Some(FanHeader::Sys),
+            ..Settings::default()
+        };
+        s.save(&path).expect("save");
+        let loaded = Settings::load(&path).expect("load");
+        assert_eq!(loaded.pump_header, Some(FanHeader::Sys));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

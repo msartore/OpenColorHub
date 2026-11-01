@@ -172,8 +172,19 @@ pub fn run() {
             update_ipc::update_check,
             update_ipc::update_install,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running opencolorhub");
+        .build(tauri::generate_context!())
+        .expect("error while building opencolorhub")
+        .run(|handle, event| {
+            // Hand every fan this session took over back to the chip's own
+            // SmartFan control. Only `ExitRequested` runs while the driver is
+            // still open, so that is where the handshake belongs.
+            if matches!(event, tauri::RunEvent::ExitRequested { .. })
+                && let Ok(mut inner) = handle.state::<AppState>().lock()
+                && let Ok(service) = inner.service_mut()
+            {
+                service.shutdown();
+            }
+        });
 }
 
 /// Emits a snapshot on the configured interval.

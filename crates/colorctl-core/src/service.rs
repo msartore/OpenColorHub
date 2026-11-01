@@ -60,9 +60,11 @@ pub struct Service {
     /// fan stopped by a 0% curve or a 0 rpm reading does not lose its card.
     seen_fans: u8,
     /// When each header first reported 0 rpm while being asked to spin.
-    stall_since: [Option<u64>; 5],
+    stall_since: [Option<u64>; crate::model::FAN_HEADERS.len()],
     /// Whether the current stall episode has already been logged.
-    stall_alerted: [bool; 5],
+    stall_alerted: [bool; crate::model::FAN_HEADERS.len()],
+    /// Set once the fans have been handed back to the firmware.
+    released: bool,
     last_read_error: Option<String>,
     activity: Vec<Activity>,
 }
@@ -111,8 +113,9 @@ impl Service {
             data_dir,
             smoothed: None,
             seen_fans: 0,
-            stall_since: [None; 5],
-            stall_alerted: [false; 5],
+            stall_since: [None; crate::model::FAN_HEADERS.len()],
+            stall_alerted: [false; crate::model::FAN_HEADERS.len()],
+            released: false,
             last_read_error: None,
             activity: Vec::new(),
         }
@@ -121,6 +124,20 @@ impl Service {
     /// Raw Super I/O dump, when the active backend can produce one.
     pub fn register_dump(&self) -> Option<Result<Vec<crate::model::RegisterRead>>> {
         self.fan.register_dump()
+    }
+
+    /// Hands the fans back to the chip's own control before the process exits.
+    ///
+    /// Explicit rather than `Drop`: the CLI writes a duty and exits on purpose,
+    /// and releasing on drop would immediately undo what it was asked to do.
+    /// The desktop app calls this from its exit event. A killed process cannot
+    /// run it, and the UI does not pretend otherwise.
+    pub fn shutdown(&mut self) {
+        if self.released {
+            return;
+        }
+        self.released = true;
+        self.fan.release();
     }
 
     pub fn settings(&self) -> &Settings {
@@ -248,6 +265,7 @@ impl Service {
 
         Telemetry {
             temperature_source: fresh.temperature_source.clone(),
+            temperature_register: fresh.temperature_register.clone(),
             temperature_c,
             fans,
         }
@@ -316,6 +334,9 @@ impl Service {
         let temp_source = telemetry
             .as_ref()
             .and_then(|t| t.temperature_source.clone());
+        let temp_register = telemetry
+            .as_ref()
+            .and_then(|t| t.temperature_register.clone());
         let samples = telemetry.map(|t| t.fans).unwrap_or_default();
 
         let mut fans: Vec<FanStatus> = samples
@@ -329,7 +350,8 @@ impl Service {
                     header: s.header,
                     label: s.header.label().to_string(),
                     description: s.header.description().to_string(),
-                    bank: s.header.bank(),
+                    bank: s.bank,
+                    pump: self.settings.is_pump(s.header),
                     rpm: s.rpm,
                     pwm: s.pwm,
                     percent: s.percent(),
@@ -350,7 +372,8 @@ impl Service {
                     header: *header,
                     label: header.label().to_string(),
                     description: header.description().to_string(),
-                    bank: header.bank(),
+                    bank: crate::chipmap::bank(*header),
+                    pump: self.settings.is_pump(*header),
                     rpm: 0,
                     pwm: 0,
                     percent: 0,
@@ -384,6 +407,7 @@ impl Service {
             timestamp_ms: now_ms(),
             temperature_c: temp,
             temperature_source: temp_source,
+            temperature_register: temp_register,
             fans,
             channels: self.led.state().statuses(),
             fan_device: self.fan_info(),
@@ -410,7 +434,9 @@ impl Service {
     /// Sets a raw duty cycle (0-255) on one header.
     pub fn set_fan_pwm(&mut self, header: FanHeader, pwm: u8) -> Result<ActionResult> {
         let percent = crate::units::pwm_to_pct(pwm);
-        let clamped = self.settings.clamp_duty(header.is_pump(), percent);
+        let clamped = self
+            .settings
+            .clamp_duty(self.settings.is_pump(header), percent);
         let effective = if clamped != percent {
             crate::units::pct(clamped)
         } else {
@@ -433,14 +459,16 @@ impl Service {
 
     /// Sets a duty cycle in percent (0-100), honouring the pump floor.
     pub fn set_fan_percent(&mut self, header: FanHeader, percent: u8) -> Result<ActionResult> {
-        let clamped = self.settings.clamp_duty(header.is_pump(), percent.min(100));
+        let clamped = self
+            .settings
+            .clamp_duty(self.settings.is_pump(header), percent.min(100));
         self.set_fan_pwm(header, crate::units::pct(clamped))
     }
 
     /// Programs a 4-point curve on one header.
     pub fn set_fan_curve(&mut self, header: FanHeader, curve: &FanCurve) -> Result<ActionResult> {
         curve::validate(curve)?;
-        if curve.iter().any(|p| p.percent < 60) && header.is_pump() {
+        if curve.iter().any(|p| p.percent < 60) && self.settings.is_pump(header) {
             return Err(Error::invalid(
                 "AIO pump curves must stay at or above 60% — refusing to stall the pump",
             ));
@@ -468,7 +496,7 @@ impl Service {
         let mut applied = 0;
         let mut last_error = None;
         for header in headers {
-            let curve = profile.points_for(header.is_pump());
+            let curve = profile.points_for(self.settings.is_pump(*header));
             match self.fan.set_curve(*header, &curve) {
                 Ok(()) => applied += 1,
                 Err(e) => last_error = Some(e),
@@ -638,7 +666,8 @@ mod tests {
             header,
             label: header.label().to_string(),
             description: header.description().to_string(),
-            bank: header.bank(),
+            bank: crate::chipmap::bank(header),
+            pump: false,
             rpm,
             pwm: 0,
             percent: 50,
@@ -655,7 +684,7 @@ mod tests {
         let (mut svc, _dir) = service("detect");
         let mut fans = vec![
             fan_status(FanHeader::Cpu, 900),
-            fan_status(FanHeader::ChaFan2, 0),
+            fan_status(FanHeader::Aux1, 0),
         ];
 
         svc.latch_detection(&mut fans);
@@ -676,15 +705,15 @@ mod tests {
         let mut spinning = fan_status(FanHeader::Cpu, 900);
         spinning.detected = true;
         spinning.percent = 50;
-        let mut silent = fan_status(FanHeader::ChaFan1, 0);
+        let mut silent = fan_status(FanHeader::Aux0, 0);
         silent.detected = true;
         silent.percent = 50;
         // Duty too low to prove anything: a fan parked at 0% is not stalled.
-        let mut parked = fan_status(FanHeader::ChaFan2, 0);
+        let mut parked = fan_status(FanHeader::Aux1, 0);
         parked.detected = true;
         parked.percent = 0;
         // Never seen spinning: an empty socket, not a stalled fan.
-        let mut empty = fan_status(FanHeader::ChaFan3, 0);
+        let mut empty = fan_status(FanHeader::Aux2, 0);
         empty.detected = false;
         empty.percent = 50;
 
@@ -696,7 +725,7 @@ mod tests {
         );
 
         // Backdate the episode past the alarm window.
-        svc.stall_since[FanHeader::ChaFan1.index()] =
+        svc.stall_since[FanHeader::Aux0.index()] =
             Some(now_ms().saturating_sub(STALL_ALARM_MS + 1));
         svc.check_stalls(&mut fans);
 
@@ -750,16 +779,61 @@ mod tests {
     }
 
     #[test]
-    fn pump_floor_is_enforced_end_to_end() {
-        let (mut svc, dir) = service("pump");
-        let outcome = svc.set_fan_percent(FanHeader::Pump, 5).unwrap();
+    fn a_bound_pump_channel_is_floored() {
+        let (mut svc, dir) = service("pump-bound");
+        svc.settings.pump_header = Some(FanHeader::Aux3);
+
+        let outcome = svc.set_fan_percent(FanHeader::Aux3, 5).unwrap();
         let pump = outcome
             .snapshot
             .fans
             .iter()
-            .find(|f| f.header == FanHeader::Pump)
+            .find(|f| f.header == FanHeader::Aux3)
             .unwrap();
-        assert!(pump.percent >= 60, "pump dropped to {}%", pump.percent);
+        assert_eq!(pump.percent, 60, "a bound pump must not fall below 60%");
+        assert!(pump.pump);
+
+        let outcome = svc.set_fan_percent(FanHeader::Cpu, 5).unwrap();
+        let cpu = outcome
+            .snapshot
+            .fans
+            .iter()
+            .find(|f| f.header == FanHeader::Cpu)
+            .unwrap();
+        assert_eq!(cpu.percent, 5, "an ordinary channel keeps its duty");
+        assert!(!cpu.pump);
+
+        let low = [
+            curve::CurvePoint::new(30, 20),
+            curve::CurvePoint::new(40, 30),
+            curve::CurvePoint::new(50, 40),
+            curve::CurvePoint::new(60, 50),
+        ];
+        assert!(
+            svc.set_fan_curve(FanHeader::Aux3, &low).is_err(),
+            "a pump curve below 60% must be refused"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn no_channel_claims_a_pump_floor_until_one_is_bound() {
+        // The board's channels are SYS, CPU and AUX0-AUX3; none of them is a
+        // pump under the vendor's naming, so a 5% request must survive intact.
+        let (mut svc, dir) = service("pump");
+        let outcome = svc.set_fan_percent(FanHeader::Aux3, 5).unwrap();
+        let fan = outcome
+            .snapshot
+            .fans
+            .iter()
+            .find(|f| f.header == FanHeader::Aux3)
+            .unwrap();
+        assert_eq!(fan.percent, 5, "an unbound channel must not be floored");
+
+        // The floor itself still exists for a table that does bind one.
+        let settings = crate::settings::Settings::default();
+        assert_eq!(settings.clamp_duty(true, 5), 60);
+        assert_eq!(settings.clamp_duty(false, 5), 5);
         std::fs::remove_dir_all(&dir).ok();
     }
 
