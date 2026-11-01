@@ -212,6 +212,7 @@ export function createDemoBackend(): DemoBackend {
         pwm,
         percent: pwmToPct(pwm),
         detected: true,
+        stalled: false,
         mode: cfg.mode,
         curve: cfg.curve,
         curve_percent: cfg.curve ? evalCurve(cfg.curve, tempC) : null,

@@ -48,6 +48,8 @@ export interface FanStatus {
   header: FanHeaderId;
   /** False when the header has never reported a tach — nothing is plugged in. */
   detected: boolean;
+  /** Driven but reporting nothing for long enough to rule out a slow start. */
+  stalled: boolean;
   label: string;
   description: string;
   bank: number;

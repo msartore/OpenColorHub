@@ -39,6 +39,14 @@ pub struct Activity {
     pub message: String,
 }
 
+/// Below this duty a fan reporting 0 rpm proves nothing.
+const STALL_MIN_DUTY: u8 = 25;
+/// Tach counts below this are not rotation: a stopped fan can still read a few
+/// counts from bus noise, and smoothing delays the fall to zero.
+const STALL_RPM: u16 = 50;
+/// How long a fan may report nothing before it is called stalled.
+const STALL_ALARM_MS: u64 = 5_000;
+
 pub struct Service {
     fan: Box<dyn FanBackend>,
     led: Box<dyn LedBackend>,
@@ -51,6 +59,10 @@ pub struct Service {
     /// Bit per header index, set once that header reports a tach. Latched so a
     /// fan stopped by a 0% curve or a 0 rpm reading does not lose its card.
     seen_fans: u8,
+    /// When each header first reported 0 rpm while being asked to spin.
+    stall_since: [Option<u64>; 5],
+    /// Whether the current stall episode has already been logged.
+    stall_alerted: [bool; 5],
     last_read_error: Option<String>,
     activity: Vec<Activity>,
 }
@@ -99,6 +111,8 @@ impl Service {
             data_dir,
             smoothed: None,
             seen_fans: 0,
+            stall_since: [None; 5],
+            stall_alerted: [false; 5],
             last_read_error: None,
             activity: Vec::new(),
         }
@@ -243,6 +257,39 @@ impl Service {
     ///
     /// The bit is never cleared: a header that showed 900 rpm a minute ago is a
     /// real fan that is currently stopped, not an empty socket.
+    /// Flags fans that are being asked to spin but report nothing.
+    ///
+    /// A fan that is commanded 30% and reports 0 rpm for five seconds is either
+    /// unplugged, seized, or was never spun up — all of which need a human, and
+    /// none of which the duty register can reveal.
+    fn check_stalls(&mut self, fans: &mut [FanStatus]) {
+        let now = now_ms();
+        for fan in fans.iter_mut() {
+            let index = fan.header.index();
+            let suspect = fan.detected && fan.rpm < STALL_RPM && fan.percent >= STALL_MIN_DUTY;
+            if !suspect {
+                self.stall_since[index] = None;
+                self.stall_alerted[index] = false;
+                fan.stalled = false;
+                continue;
+            }
+            let since = *self.stall_since[index].get_or_insert(now);
+            if now.saturating_sub(since) >= STALL_ALARM_MS {
+                fan.stalled = true;
+                if !self.stall_alerted[index] {
+                    self.stall_alerted[index] = true;
+                    self.record(
+                        "fan",
+                        format!(
+                            "{} reports 0 rpm at {}% — it may be unplugged or seized",
+                            fan.label, fan.percent
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
     fn latch_detection(&mut self, fans: &mut [FanStatus]) {
         let mut seen = self.seen_fans;
         for fan in fans.iter_mut() {
@@ -290,6 +337,7 @@ impl Service {
                     curve: s.curve,
                     curve_percent,
                     detected: false,
+                    stalled: false,
                 }
             })
             .collect();
@@ -310,11 +358,13 @@ impl Service {
                     curve: None,
                     curve_percent: None,
                     detected: false,
+                    stalled: false,
                 });
             }
         }
         fans.sort_by_key(|f| f.header.index());
         self.latch_detection(&mut fans);
+        self.check_stalls(&mut fans);
 
         // Averaged over the headers that exist: empty sockets would otherwise
         // drag the figure toward zero.
@@ -593,6 +643,7 @@ mod tests {
             pwm: 0,
             percent: 50,
             detected: false,
+            stalled: false,
             mode: FanMode::Manual,
             curve: None,
             curve_percent: None,
@@ -616,6 +667,56 @@ mod tests {
         svc.latch_detection(&mut fans);
         assert!(fans[0].detected, "a stopped fan is still a fan");
         assert!(!fans[1].detected, "silence never becomes presence");
+    }
+
+    #[test]
+    fn a_fan_asked_to_spin_without_a_tach_is_flagged_as_stalled() {
+        let (mut svc, _dir) = service("stall");
+
+        let mut spinning = fan_status(FanHeader::Cpu, 900);
+        spinning.detected = true;
+        spinning.percent = 50;
+        let mut silent = fan_status(FanHeader::ChaFan1, 0);
+        silent.detected = true;
+        silent.percent = 50;
+        // Duty too low to prove anything: a fan parked at 0% is not stalled.
+        let mut parked = fan_status(FanHeader::ChaFan2, 0);
+        parked.detected = true;
+        parked.percent = 0;
+        // Never seen spinning: an empty socket, not a stalled fan.
+        let mut empty = fan_status(FanHeader::ChaFan3, 0);
+        empty.detected = false;
+        empty.percent = 50;
+
+        let mut fans = vec![spinning, silent, parked, empty];
+        svc.check_stalls(&mut fans);
+        assert!(
+            !fans[1].stalled,
+            "one sample is not a stall — a fan may be spinning up"
+        );
+
+        // Backdate the episode past the alarm window.
+        svc.stall_since[FanHeader::ChaFan1.index()] =
+            Some(now_ms().saturating_sub(STALL_ALARM_MS + 1));
+        svc.check_stalls(&mut fans);
+
+        assert!(!fans[0].stalled, "a fan reporting rpm is fine");
+        assert!(fans[1].stalled, "silent while driven is a stall");
+        assert!(!fans[2].stalled, "0% duty is not a stall");
+        assert!(!fans[3].stalled, "an empty socket is not a stall");
+
+        // A stopped fan reading a couple of counts of noise is still stopped.
+        fans[1].rpm = 3;
+        svc.check_stalls(&mut fans);
+        assert!(fans[1].stalled, "tach noise is not rotation");
+
+        // Recovery clears the flag.
+        fans[1].rpm = 700;
+        svc.check_stalls(&mut fans);
+        assert!(
+            !fans[1].stalled,
+            "a fan that starts again is no longer stalled"
+        );
     }
 
     #[test]

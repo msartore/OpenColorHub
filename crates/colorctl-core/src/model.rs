@@ -484,6 +484,10 @@ pub struct FanStatus {
     /// started. Headers nothing is plugged into read zero forever, and showing
     /// five empty cards hides the two that matter.
     pub detected: bool,
+    /// A fan that has been asked to spin and reports nothing for long enough to
+    /// rule out a slow start.
+    #[serde(default)]
+    pub stalled: bool,
     pub mode: FanMode,
     pub curve: Option<FanCurve>,
     /// Duty the curve would ask for at the current temperature.

@@ -30,6 +30,7 @@ const DEFAULT_CURVE: CurvePoint[] = [
 interface FanCard {
   header: FanHeaderId;
   root: HTMLElement;
+  stallChip: HTMLElement;
   rpm: HTMLElement;
   pct: HTMLElement;
   mode: HTMLElement;
@@ -56,6 +57,8 @@ export function createFans(ctx: ViewContext): View {
     const rpm = el("span", { class: "readout-value mono" }, "0");
     const pct = el("span", { class: "readout-sub mono" }, "0%");
     const mode = el("span", { class: "mode-chip" }, "manual");
+    const stallChip = el("span", { class: "mode-chip mode-chip--danger" }, "stalled");
+    stallChip.hidden = true;
     const fill = el("span", { class: "bar-fill" });
     const dirty = el("span", { class: "dirty-flag" }, "unsaved");
 
@@ -121,7 +124,7 @@ export function createFans(ctx: ViewContext): View {
       cardHead({
         title: meta.label,
         subtitle: meta.description,
-        right: [mode],
+        right: [stallChip, mode],
       }),
       el(
         "div",
@@ -162,6 +165,7 @@ export function createFans(ctx: ViewContext): View {
       pct,
       mode,
       fill,
+      stallChip,
       slider: manual,
       editor,
       dirty,
@@ -243,6 +247,7 @@ export function createFans(ctx: ViewContext): View {
           ? "manual"
           : "unknown";
     card.mode.className = `mode-chip${fan.mode === "smart_fan" ? " is-curve" : ""}`;
+    card.stallChip.hidden = !fan.stalled;
 
     const input = card.slider.el.querySelector("input");
     if (document.activeElement !== input) card.slider.setValue(fan.percent);
@@ -287,11 +292,30 @@ export function createFans(ctx: ViewContext): View {
       fanState.clear();
     }
 
+    const stalled = present.filter((fan) => fan.stalled);
     const lowDuty = present.filter(
       (fan) => fan.header !== "pump" && fan.percent < settings.low_duty_warning,
     );
 
-    if (lowDuty.length) {
+    if (stalled.length) {
+      warningSlot.replaceChildren(
+        el(
+          "div",
+          { class: "notice notice--danger" },
+          el("span", { class: "notice-icon" }, "!"),
+          el(
+            "div",
+            { class: "notice-copy" },
+            el(
+              "p",
+              {},
+              `${stalled.map((f) => `${f.label} (${f.percent}%)`).join(", ")} reporting no rotation while driven — check the connection or lower the duty that stalled it.`,
+            ),
+            el("p", { class: "notice-meta" }, "A fan can also be stopped by a curve that drops below its start duty."),
+          ),
+        ),
+      );
+    } else if (lowDuty.length) {
       warningSlot.replaceChildren(
         el(
           "div",

@@ -37,6 +37,12 @@
   --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 12px 30px -22px rgba(0, 0, 0, 0.9);
 }
 
+/* The `hidden` attribute loses to any author `display` rule, which is how every
+   card ended up wearing the "stalled" chip. */
+[hidden] {
+  display: none !important;
+}
+
 *,
 *::before,
 *::after {
@@ -643,6 +649,12 @@ select {
   white-space: nowrap;
 }
 
+.mode-chip--danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
 .mode-chip.is-curve {
   color: var(--info);
   border-color: color-mix(in srgb, var(--info) 30%, transparent);
@@ -678,6 +690,15 @@ select {
   font-family: var(--mono);
   color: var(--info);
   margin-top: 1px;
+}
+
+.notice--danger {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.notice--danger .notice-icon {
+  color: var(--danger);
 }
 
 .notice--warn .notice-icon {
