@@ -10,7 +10,8 @@ use std::thread;
 use std::time::Duration;
 
 use colorctl_core::Service;
-use colorctl_core::settings::{POLL_MAX_MS, POLL_MIN_MS, Settings};
+use colorctl_core::settings::{POLL_DEFAULT_MS, POLL_MAX_MS, POLL_MIN_MS, Settings};
+use colorctl_core::{ResumeWatch, WakeReport};
 use tauri::{Emitter, Manager};
 
 use crate::state::{AppState, Inner, ServiceSlot};
@@ -187,23 +188,39 @@ pub fn run() {
         });
 }
 
+/// Attempts at re-applying after a wake, and the pause between them.
+///
+/// The resume re-enumerates the USB controller, so the first frames after
+/// waking can fail while Windows reinstalls the interface; the light is usually
+/// back within a second or two.
+const WAKE_ATTEMPTS: usize = 6;
+const WAKE_RETRY_DELAY: Duration = Duration::from_millis(700);
+
 /// Emits a snapshot on the configured interval.
 ///
 /// A plain OS thread keeps this independent of the async runtime: the work is
 /// blocking port I/O, which should never sit on a tokio worker.
 fn spawn_ticker(app: tauri::AppHandle) {
     thread::spawn(move || {
+        let mut watch = ResumeWatch::new(Duration::from_millis(POLL_DEFAULT_MS));
         loop {
             let interval = {
                 let state = app.state::<AppState>();
                 match state.lock() {
                     Ok(inner) => inner.settings.poll_interval_ms,
-                    Err(_) => 1000,
+                    Err(_) => POLL_DEFAULT_MS,
                 }
             };
-            thread::sleep(Duration::from_millis(
-                interval.clamp(POLL_MIN_MS, POLL_MAX_MS),
-            ));
+            let interval = Duration::from_millis(interval.clamp(POLL_MIN_MS, POLL_MAX_MS));
+            watch.set_interval(interval);
+            thread::sleep(interval);
+
+            // The hardware does not keep its state across a suspend, and neither
+            // does the USB handle; the gap between ticks is the only signal the
+            // process gets that it has been asleep.
+            if let Some(slept) = watch.observe_now() {
+                reapply_after_wake(&app, slept);
+            }
 
             let snapshot = {
                 let state = app.state::<AppState>();
@@ -227,6 +244,60 @@ fn spawn_ticker(app: tauri::AppHandle) {
             }
         }
     });
+}
+
+/// Re-applies the lighting and fan settings the machine forgot while asleep.
+///
+/// Locks the state for one attempt at a time, so an IPC command can still get in
+/// between retries instead of waiting out the whole sequence.
+fn reapply_after_wake(app: &tauri::AppHandle, slept: Duration) {
+    let mut report = WakeReport::default();
+    for attempt in 0..WAKE_ATTEMPTS {
+        match reassert_once(app) {
+            Ok(outcome) => report = outcome,
+            Err(error) => {
+                eprintln!("opencolorhub: could not re-apply after waking: {error}");
+                return;
+            }
+        }
+        if report.errors.is_empty() {
+            break;
+        }
+        if attempt + 1 < WAKE_ATTEMPTS {
+            thread::sleep(WAKE_RETRY_DELAY);
+        }
+    }
+
+    if !report.restored_something() && report.errors.is_empty() {
+        return;
+    }
+
+    let message = if report.errors.is_empty() {
+        match (report.fans, report.lighting) {
+            (0, _) => "Re-applied lighting after wake".to_string(),
+            (fans, true) => format!("Re-applied {fans} fans and lighting after wake"),
+            (fans, false) => format!("Re-applied {fans} fans after wake"),
+        }
+    } else {
+        format!(
+            "Could not re-apply after wake — {}",
+            report.errors.join("; ")
+        )
+    };
+
+    eprintln!("opencolorhub: woke after {}s: {message}", slept.as_secs());
+    let state = app.state::<AppState>();
+    if let Ok(mut inner) = state.lock()
+        && let Ok(service) = inner.service_mut()
+    {
+        service.note("wake", message);
+    }
+}
+
+fn reassert_once(app: &tauri::AppHandle) -> Result<WakeReport, String> {
+    let state = app.state::<AppState>();
+    let mut inner = state.lock()?;
+    Ok(inner.service_mut()?.reassert_after_wake())
 }
 
 /// Directory holding `opencolorhub.portable`, when this is a portable build.

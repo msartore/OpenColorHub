@@ -184,6 +184,23 @@ impl LedBackend for LinuxLed {
         Ok(())
     }
 
+    /// Re-pushes the frame after a sleep.
+    ///
+    /// The hidraw node is re-created on resume and its number can change, so a
+    /// failed write re-discovers the controller before one retry.
+    fn reassert(&mut self) -> Result<()> {
+        let Err(first) = self.apply() else {
+            return Ok(());
+        };
+        self.dev_path = Self::find_device_path()?;
+        self.apply().map_err(|second| {
+            Error::backend(format!(
+                "the controller did not take the frame after waking — before re-discovering: \
+                 {first}; after: {second}"
+            ))
+        })
+    }
+
     fn state_path(&self) -> Option<PathBuf> {
         Some(self.state_path.clone())
     }

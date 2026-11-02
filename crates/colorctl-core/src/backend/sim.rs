@@ -58,6 +58,9 @@ pub struct SimFan {
     path: PathBuf,
     file: SimFanFile,
     started_ms: u64,
+    /// Headers this process has written, so a simulated wake reports the same
+    /// "what this session programmed" answer the hardware backends do.
+    touched: [bool; FAN_HEADERS.len()],
 }
 
 impl SimFan {
@@ -84,6 +87,7 @@ impl SimFan {
             path,
             file,
             started_ms: now_ms(),
+            touched: [false; FAN_HEADERS.len()],
         }
     }
 
@@ -181,6 +185,7 @@ impl FanBackend for SimFan {
         let cfg = self.config_mut(header);
         cfg.pwm = pwm;
         cfg.mode = FanMode::Manual;
+        self.touched[header.index()] = true;
         self.persist();
         Ok(())
     }
@@ -189,8 +194,16 @@ impl FanBackend for SimFan {
         let cfg = self.config_mut(header);
         cfg.curve = Some(*curve);
         cfg.mode = FanMode::SmartFan;
+        self.touched[header.index()] = true;
         self.persist();
         Ok(())
+    }
+
+    /// The simulator keeps its state on disk, so there is nothing to rebuild;
+    /// reporting the channels it still drives keeps the wake path exercised on
+    /// hosts without a Super I/O.
+    fn reassert(&mut self) -> Result<usize> {
+        Ok(self.touched.iter().filter(|t| **t).count())
     }
 }
 

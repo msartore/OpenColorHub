@@ -31,6 +31,27 @@ pub struct ActionResult {
     pub message: String,
 }
 
+/// What a wake-from-sleep re-application achieved.
+///
+/// Reported rather than logged inside the service: the desktop shell owns the
+/// activity feed and decides how a partial restoration is presented.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct WakeReport {
+    /// Channels whose duty or curve was written again.
+    pub fans: usize,
+    /// Whether the current lighting frame was pushed to the controller.
+    pub lighting: bool,
+    /// One line per half that could not be restored.
+    pub errors: Vec<String>,
+}
+
+impl WakeReport {
+    /// True when the wake re-applied at least one of the two halves.
+    pub fn restored_something(&self) -> bool {
+        self.fans > 0 || self.lighting
+    }
+}
+
 /// One entry in the in-memory activity feed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Activity {
@@ -65,6 +86,12 @@ pub struct Service {
     stall_alerted: [bool; crate::model::FAN_HEADERS.len()],
     /// Set once the fans have been handed back to the firmware.
     released: bool,
+    /// Whether this session pushed (or tried to push) a lighting frame.
+    ///
+    /// A sleep re-pushes that frame, but a session that never touched lighting
+    /// leaves the controller on its own pattern: the BIOS is the owner until the
+    /// user asks for something else.
+    lighting_in_use: bool,
     last_read_error: Option<String>,
     activity: Vec<Activity>,
 }
@@ -116,6 +143,7 @@ impl Service {
             stall_since: [None; crate::model::FAN_HEADERS.len()],
             stall_alerted: [false; crate::model::FAN_HEADERS.len()],
             released: false,
+            lighting_in_use: false,
             last_read_error: None,
             activity: Vec::new(),
         }
@@ -612,10 +640,44 @@ impl Service {
             ));
         }
         self.led.apply()?;
+        self.lighting_in_use = true;
         Ok(ActionResult {
             snapshot: self.snapshot(),
             message: "Lighting applied".to_string(),
         })
+    }
+
+    /// Re-asserts what this session programmed, after the machine woke up.
+    ///
+    /// A sleep power-cycles the USB bus and reloads the Super I/O's defaults, so
+    /// the frame is gone and the fans are back under firmware control — while
+    /// everything this process remembers still describes the state it left
+    /// behind. Only what the session actually applied is restored: a session
+    /// that never touched a half leaves that half alone.
+    ///
+    /// No retries and no activity entry here: the shell retries while a
+    /// re-enumerating device settles, and records one entry for the outcome.
+    pub fn reassert_after_wake(&mut self) -> WakeReport {
+        let mut report = WakeReport::default();
+
+        match self.fan.reassert() {
+            Ok(fans) => report.fans = fans,
+            Err(error) => report.errors.push(format!("fans: {error}")),
+        }
+
+        if self.lighting_in_use && self.capabilities.led_control {
+            match self.led.reassert() {
+                Ok(()) => report.lighting = true,
+                Err(error) => report.errors.push(format!("lighting: {error}")),
+            }
+        }
+
+        report
+    }
+
+    /// Adds an entry to the activity feed (the dashboard's write log).
+    pub fn note(&mut self, kind: &str, message: impl Into<String>) {
+        self.record(kind, message);
     }
 
     /// Copies the current state from another service instance (settings reload).
@@ -914,6 +976,41 @@ mod tests {
         assert!(feed.iter().any(|a| a.kind == "fan"));
         assert!(feed.iter().any(|a| a.kind == "led"));
         assert!(feed.len() <= 40);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_wake_re_applies_only_what_this_session_programmed() {
+        let (mut svc, dir) = service("wake");
+
+        let untouched = svc.reassert_after_wake();
+        assert_eq!(
+            untouched.fans, 0,
+            "a session that drove nothing has nothing to restore"
+        );
+        assert!(
+            !untouched.lighting,
+            "a session that never lit anything leaves the controller alone"
+        );
+        assert!(untouched.errors.is_empty());
+
+        svc.set_fan_percent(FanHeader::Cpu, 64).unwrap();
+        svc.set_all_channels([0x11, 0x22, 0x33], 70, true).unwrap();
+
+        let report = svc.reassert_after_wake();
+        assert_eq!(report.fans, 1, "the channel this session set is rewritten");
+        assert!(report.lighting, "the applied frame is pushed again");
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert!(report.restored_something());
+
+        // The shell owns the feed; the wake itself records nothing, so a retry
+        // cannot leave six identical entries behind.
+        let before = svc.activity().len();
+        svc.reassert_after_wake();
+        assert_eq!(svc.activity().len(), before);
+
+        svc.note("wake", "Re-applied after wake: lighting");
+        assert_eq!(svc.activity().last().unwrap().kind, "wake");
         std::fs::remove_dir_all(&dir).ok();
     }
 

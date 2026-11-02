@@ -26,6 +26,7 @@ pub mod error;
 pub mod model;
 pub mod pawnio_install;
 pub mod platform;
+pub mod power;
 pub mod service;
 pub mod settings;
 pub mod setups;
@@ -42,7 +43,8 @@ pub use model::{
     FanMode, FanSample, FanStatus, Snapshot, Telemetry,
 };
 pub use platform::{Elevation, PawnioStatus};
-pub use service::Service;
+pub use power::ResumeWatch;
+pub use service::{Service, WakeReport};
 pub use settings::{BackendMode, Settings, SettingsPatch, TempUnit};
 pub use setups::{ChannelSetting, FanSetting, Setup, SetupStore};
 pub use state::RgbState;

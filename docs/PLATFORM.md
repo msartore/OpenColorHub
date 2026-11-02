@@ -171,6 +171,29 @@ Enabling it also turns on **Re-apply lighting at launch**, so the saved `CCTL`
 state is pushed at sign-in; otherwise the app would start and leave the lighting
 dark.
 
+## Waking from sleep
+
+Suspending the machine takes the hardware state with it. The USB bus is
+power-cycled, so the RGB controller comes back on its own pattern, and the Super
+I/O is reloaded from its firmware defaults, which puts every header back under
+BIOS fan control. Nothing in either chip remembers what this app wrote.
+
+The app watches for that: a poll tick that arrives later than the interval plus a
+few seconds means the process was suspended, not merely slow, so the wall clock is
+what it measures. On that tick the lighting frame is pushed again and every duty
+or curve this session set is rewritten — including the manual-mode bit, because
+the chip returned to automatic. The controller is still re-enumerating at that
+moment, so a failed write is retried for a few seconds before it is reported.
+
+Only what the session actually applied is restored. A session that never touched
+lighting leaves the controller alone, and a header nobody set keeps its firmware
+behaviour. The re-application appears in the Dashboard's activity log as a `wake`
+entry.
+
+Waking is handled separately from **Re-apply lighting at launch**: that switch
+covers a fresh start (sign-in, or an app launched by hand), while a wake is
+always re-applied because the app itself caused the state that was lost.
+
 ## Tray
 
 The app lives in the tray. Closing the window hides it rather than quitting —

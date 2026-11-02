@@ -58,6 +58,15 @@ pub trait FanBackend: Send {
         true
     }
 
+    /// Re-asserts the duties and curves this session programmed, after the
+    /// machine woke from sleep and the chip came back on its firmware defaults.
+    ///
+    /// Returns how many channels were rewritten. A backend whose settings live
+    /// outside its own registers has nothing to redo and keeps the default.
+    fn reassert(&mut self) -> std::result::Result<usize, Error> {
+        Ok(0)
+    }
+
     /// Hands the fan back to the firmware before the process goes away.
     ///
     /// Called only by the desktop app's exit path: the CLI writes a duty and
@@ -76,6 +85,12 @@ pub trait LedBackend: Send {
 
     /// Writes the full 200-LED frame and saves state.
     fn apply(&mut self) -> std::result::Result<(), Error>;
+
+    /// Pushes the current state again after a sleep, reopening the device when
+    /// the handle did not survive it. Defaults to a plain [`LedBackend::apply`].
+    fn reassert(&mut self) -> std::result::Result<(), Error> {
+        self.apply()
+    }
 
     /// Where the state blob lives, when known.
     fn state_path(&self) -> Option<PathBuf> {

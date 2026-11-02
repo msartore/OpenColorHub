@@ -76,6 +76,10 @@ pub struct PawnIoFan {
     /// Curves evaluated in software, because this chip's SmartFan registers are
     /// not mapped. Reapplied on every poll.
     curves: [Option<crate::FanCurve>; TACH_SLOTS],
+    /// Duty each channel was explicitly set to, when it is not curve-driven.
+    /// Kept apart from `last_duty`, which is a hysteresis cache: a wake has to
+    /// rewrite what was asked for even when the cache says it is already there.
+    manual: [Option<u8>; TACH_SLOTS],
     /// Last duty written per slot, so an unchanged curve does not rewrite the
     /// register every second.
     last_duty: [Option<u8>; TACH_SLOTS],
@@ -122,6 +126,7 @@ impl PawnIoFan {
             hwm,
             chip,
             curves: [None; TACH_SLOTS],
+            manual: [None; TACH_SLOTS],
             last_duty: [None; TACH_SLOTS],
         })
     }
@@ -315,6 +320,24 @@ impl PawnIoFan {
     }
 }
 
+/// Duty this session owes a channel after a wake.
+///
+/// Manual wins over a curve, the same precedence [`PawnIoFan::set_pwm`] and
+/// [`PawnIoFan::set_curve`] keep. A curve cannot be evaluated without a
+/// temperature, so it returns `None` and the next poll writes it instead — that
+/// poll reads a temperature of its own.
+fn reassert_duty(
+    manual: Option<u8>,
+    curve: Option<&crate::FanCurve>,
+    temperature: Option<f32>,
+) -> Option<u8> {
+    match (manual, curve, temperature) {
+        (Some(duty), _, _) => Some(duty),
+        (None, Some(curve), Some(temp)) => Some(crate::units::pct(crate::curve::eval(curve, temp))),
+        _ => None,
+    }
+}
+
 fn slot_of(header: FanHeader) -> Result<usize> {
     FanHeader::all()
         .iter()
@@ -386,7 +409,11 @@ impl FanBackend for PawnIoFan {
         let slot = slot_of(header)?;
         self.write_duty(header, pwm)?;
         // Remembered so the exit handshake knows which channels this session
-        // took over, and so the next curve tick does not rewrite the same value.
+        // took over, so a wake can write the duty again, and so the next curve
+        // tick does not rewrite the same value. A manual write ends any curve
+        // on the channel, or the next poll would undo it.
+        self.curves[slot] = None;
+        self.manual[slot] = Some(pwm);
         self.last_duty[slot] = Some(pwm);
         Ok(())
     }
@@ -402,6 +429,7 @@ impl FanBackend for PawnIoFan {
         // here instead of being handed to the firmware. It is re-applied on
         // every poll, which is functionally equivalent for a 1 s interval.
         self.curves[slot] = Some(*curve);
+        self.manual[slot] = None;
         self.last_duty[slot] = None;
 
         if let Some((temp, _, _)) = self.temperature()? {
@@ -416,6 +444,29 @@ impl FanBackend for PawnIoFan {
     /// but the caller's contract is the same: a curve is in force afterwards.
     fn supports_curves(&self) -> bool {
         true
+    }
+
+    /// Rewrites every duty this session set, after a sleep reset the chip.
+    ///
+    /// The hysteresis cache still holds the values written before the sleep and
+    /// `apply_curves` treats a matching value as already applied, so it is
+    /// cleared first: without that, none of the writes below would be triggered
+    /// by the poll either.
+    fn reassert(&mut self) -> Result<usize> {
+        self.last_duty = [None; TACH_SLOTS];
+
+        let temperature = self.temperature().ok().flatten().map(|(value, _, _)| value);
+        let mut written = 0;
+        for slot in 0..TACH_SLOTS {
+            let duty = reassert_duty(self.manual[slot], self.curves[slot].as_ref(), temperature);
+            let Some(duty) = duty else {
+                continue;
+            };
+            self.write_duty(FanHeader::all()[slot], duty)?;
+            self.last_duty[slot] = Some(duty);
+            written += 1;
+        }
+        Ok(written)
     }
 
     /// Hands every channel this session put in manual mode back to the chip's
@@ -461,5 +512,31 @@ mod tests {
     #[test]
     fn every_tach_slot_maps_to_a_header() {
         assert_eq!(FanHeader::all().len(), TACH_SLOTS);
+    }
+
+    #[test]
+    fn a_wake_duty_prefers_manual_and_needs_a_temperature_for_a_curve() {
+        let curve = crate::curve::FanProfile::Standard.points_for(false);
+
+        assert_eq!(
+            reassert_duty(Some(90), Some(&curve), Some(20.0)),
+            Some(90),
+            "a manual duty is written as it was set, whatever the temperature"
+        );
+        assert_eq!(
+            reassert_duty(None, Some(&curve), None),
+            None,
+            "a curve without a temperature is left to the next poll"
+        );
+        assert_eq!(
+            reassert_duty(None, Some(&curve), Some(60.0)),
+            Some(crate::units::pct(crate::curve::eval(&curve, 60.0))),
+            "a curve is evaluated at the temperature the chip reports"
+        );
+        assert_eq!(
+            reassert_duty(None, None, Some(60.0)),
+            None,
+            "a channel nobody set keeps its firmware behaviour"
+        );
     }
 }

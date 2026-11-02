@@ -147,6 +147,27 @@ impl LedBackend for WindowsLed {
         self.save_state()
     }
 
+    /// Re-pushes the frame after a sleep.
+    ///
+    /// Suspending the machine power-cycles the USB bus, so the handle opened at
+    /// startup refers to a device that no longer exists while the controller
+    /// itself is back and enumerates at the same path. One reopen covers that;
+    /// the caller retries while the device is still settling.
+    fn reassert(&mut self) -> Result<()> {
+        let Err(first) = self.apply() else {
+            return Ok(());
+        };
+        let info = discover()?;
+        self.dev = HidDevice::open(info)?;
+        self.transport = transport_from_env();
+        self.apply().map_err(|second| {
+            Error::backend(format!(
+                "the controller did not take the frame after waking — before reopening: {first}; \
+                 after: {second}"
+            ))
+        })
+    }
+
     fn state_path(&self) -> Option<PathBuf> {
         Some(self.state_path.clone())
     }

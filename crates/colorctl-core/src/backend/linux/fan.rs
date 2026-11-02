@@ -11,6 +11,8 @@ pub struct LinuxFan {
     sio: SuperIo,
     /// Curves last read or written, indexed by [`FanHeader::index`].
     curves: [Option<FanCurve>; FAN_HEADERS.len()],
+    /// Manual duty last written per header, so a wake can write it again.
+    manual: [Option<u8>; FAN_HEADERS.len()],
 }
 
 impl LinuxFan {
@@ -19,6 +21,7 @@ impl LinuxFan {
         Ok(Self {
             sio,
             curves: [None; FAN_HEADERS.len()],
+            manual: [None; FAN_HEADERS.len()],
         })
     }
 
@@ -88,8 +91,10 @@ impl FanBackend for LinuxFan {
 
     fn set_pwm(&mut self, header: FanHeader, pwm: u8) -> Result<()> {
         self.sio.set_manual_pwm(header, pwm)?;
-        // A manual write invalidates any cached curve.
+        // A manual write invalidates any cached curve, and is remembered so a
+        // wake can write it again after the chip reloads its defaults.
         self.curves[header.index()] = None;
+        self.manual[header.index()] = Some(pwm);
         Ok(())
     }
 
@@ -98,7 +103,28 @@ impl FanBackend for LinuxFan {
         let points = curve::pwm_points(curve);
         self.sio.set_curve(header, &points)?;
         self.curves[header.index()] = Some(*curve);
+        self.manual[header.index()] = None;
         Ok(())
+    }
+
+    /// Rewrites what this session programmed, after a sleep reset the chip.
+    ///
+    /// A curve is re-sent to the firmware's SmartFan table, a manual duty to the
+    /// command register. Both live in registers the suspend/resume path reloads
+    /// from defaults, so neither survives on its own.
+    fn reassert(&mut self) -> Result<usize> {
+        let mut written = 0;
+        for header in FAN_HEADERS {
+            let slot = header.index();
+            if let Some(duty) = self.manual[slot] {
+                self.sio.set_manual_pwm(header, duty)?;
+                written += 1;
+            } else if let Some(curve) = self.curves[slot] {
+                self.sio.set_curve(header, &curve::pwm_points(&curve))?;
+                written += 1;
+            }
+        }
+        Ok(written)
     }
 }
 
