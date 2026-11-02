@@ -178,15 +178,18 @@ export function createDashboard(ctx: ViewContext): View {
         return;
       }
       activity.replaceChildren(
-        ...entries.slice(0, 6).map((entry) =>
-          el(
-            "li",
-            { class: "activity-row" },
-            el("span", { class: `activity-kind activity-kind--${entry.kind}` }, entry.kind),
-            el("span", { class: "activity-msg" }, entry.message),
-            el("span", { class: "activity-time mono" }, formatClock(entry.at_ms)),
+        ...entries
+          .slice(-6)
+          .reverse()
+          .map((entry) =>
+            el(
+              "li",
+              { class: "activity-row" },
+              el("span", { class: `activity-kind activity-kind--${entry.kind}` }, entry.kind),
+              el("span", { class: "activity-msg" }, entry.message),
+              el("span", { class: "activity-time mono" }, formatClock(entry.at_ms)),
+            ),
           ),
-        ),
       );
     } catch {
       activity.replaceChildren(el("li", { class: "activity-empty" }, "Activity unavailable."));
