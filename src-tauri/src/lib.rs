@@ -213,6 +213,9 @@ fn spawn_ticker(app: tauri::AppHandle) {
             };
             let interval = Duration::from_millis(interval.clamp(POLL_MIN_MS, POLL_MAX_MS));
             watch.set_interval(interval);
+            // Marked immediately before the sleep, so the gap the next tick
+            // measures is the sleep itself and not the snapshot work between.
+            watch.mark();
             thread::sleep(interval);
 
             // The hardware does not keep its state across a suspend, and neither

@@ -47,6 +47,19 @@ impl ResumeWatch {
         self.interval = interval;
     }
 
+    /// Re-synchronises the watch just before the loop sleeps.
+    ///
+    /// The gap the next [`ResumeWatch::observe_now`] measures then covers only
+    /// the sleep — not the work the previous tick did before calling this, which
+    /// on a slow driver read would otherwise look like a suspend every second.
+    pub fn mark(&mut self) {
+        self.mark_at(SystemTime::now());
+    }
+
+    fn mark_at(&mut self, now: SystemTime) {
+        self.last = now;
+    }
+
     /// Records a tick at `now`; returns the gap when it followed a suspend.
     pub fn observe(&mut self, now: SystemTime) -> Option<Duration> {
         let previous = std::mem::replace(&mut self.last, now);
@@ -126,6 +139,21 @@ mod tests {
         assert!(
             watch.observe(t0 + Duration::from_secs(30)).is_some(),
             "18 s after the last tick is a suspend"
+        );
+    }
+
+    #[test]
+    fn a_slow_tick_before_the_sleep_is_not_counted_in_the_gap() {
+        // The ticker marks the watch, then sleeps. Work done before the mark —
+        // a slow register read, say — must not inflate the measured gap.
+        let mut watch = ResumeWatch::new(Duration::from_secs(1));
+        let t0 = SystemTime::now();
+        watch.observe(t0);
+        watch.mark_at(t0 + Duration::from_secs(30));
+        assert_eq!(
+            watch.observe(t0 + Duration::from_secs(31)),
+            None,
+            "one second after the mark is one ordinary tick"
         );
     }
 
