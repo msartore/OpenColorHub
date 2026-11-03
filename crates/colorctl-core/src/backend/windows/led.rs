@@ -168,6 +168,12 @@ impl LedBackend for WindowsLed {
         })
     }
 
+    /// A dead handle is the surest sign the controller re-enumerated, and it
+    /// shows up earlier than any wall-clock gap a caller could measure.
+    fn device_present(&self) -> bool {
+        self.dev.is_reachable()
+    }
+
     fn state_path(&self) -> Option<PathBuf> {
         Some(self.state_path.clone())
     }

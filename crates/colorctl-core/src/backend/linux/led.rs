@@ -201,6 +201,12 @@ impl LedBackend for LinuxLed {
         })
     }
 
+    /// The hidraw node disappears while the device is re-enumerating, so its
+    /// presence is the cheapest health check available here.
+    fn device_present(&self) -> bool {
+        self.dev_path.exists()
+    }
+
     fn state_path(&self) -> Option<PathBuf> {
         Some(self.state_path.clone())
     }

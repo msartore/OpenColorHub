@@ -226,7 +226,7 @@ fn spawn_ticker(app: tauri::AppHandle) {
                 let state = app.state::<AppState>();
                 match state.lock() {
                     Ok(mut inner) => match inner.service_mut() {
-                        Ok(service) => Some(service.snapshot()),
+                        Ok(service) => Some(service.tick()),
                         Err(_) => None,
                     },
                     Err(error) => {

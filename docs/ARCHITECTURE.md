@@ -170,10 +170,11 @@ the webview for the message pump.
 One `Mutex<Inner>` guards the service, because port I/O and the HID frame are
 global resources. A dedicated OS thread ticks `Service::snapshot()` every
 `poll_interval_ms` and emits a `telemetry` event; the webview never polls. This
-keeps blocking I/O off the async runtime entirely. The same thread watches the
-wall clock: a tick that arrives well past its interval means the machine was
-suspended, and it re-applies the lighting and the fan settings that the sleep
-reset (`Service::reassert_after_wake`) before the next snapshot.
+keeps blocking I/O off the async runtime entirely. The same thread watches for
+hardware the machine forgot: a tick that arrives well past its interval means the
+machine was suspended, and a controller that stops answering means it was
+re-enumerated. Either one re-applies the lighting and the fan settings that were
+lost (`Service::reassert_after_wake`) before the next snapshot.
 
 Commands are thin: lock, call the service, map the error to a `String` that the
 UI displays verbatim. `save_settings` rebuilds the backends only when the

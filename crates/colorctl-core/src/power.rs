@@ -13,9 +13,12 @@
 use std::time::{Duration, SystemTime};
 
 /// Extra time beyond the poll interval that still counts as ordinary jitter.
-/// Long enough to absorb a stalled thread, short enough that a real sleep is
-/// noticed on the first tick after waking.
-pub const DEFAULT_GRACE: Duration = Duration::from_secs(3);
+///
+/// Deliberately short: a suspend on this hardware can be a two-second S3 blip
+/// (a wake-armed device ends it), and a threshold that ignores those misses
+/// exactly the resumes users notice. A false positive only rewrites values that
+/// are already in force.
+pub const DEFAULT_GRACE: Duration = Duration::from_millis(500);
 
 /// Watches the gap between successive ticks of a polling loop.
 #[derive(Debug, Clone)]
@@ -123,6 +126,24 @@ mod tests {
         assert!(
             watch.observe(t0 + Duration::from_secs(30)).is_some(),
             "18 s after the last tick is a suspend"
+        );
+    }
+
+    #[test]
+    fn a_two_second_sleep_is_caught_by_the_default_grace() {
+        // This board's S3 blips last about two seconds: a wake-armed device ends
+        // the sleep immediately, and that is enough to reset the controller.
+        let mut watch = ResumeWatch::new(Duration::from_secs(1));
+        let t0 = SystemTime::now();
+        watch.observe(t0);
+        assert_eq!(
+            watch.observe(t0 + Duration::from_millis(1_050)),
+            None,
+            "an ordinary tick stays ordinary"
+        );
+        assert!(
+            watch.observe(t0 + Duration::from_millis(3_050)).is_some(),
+            "2 s of sleep on top of one tick is a suspend, not a slow tick"
         );
     }
 }

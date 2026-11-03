@@ -370,6 +370,19 @@ impl HidDevice {
         }
         Ok(())
     }
+
+    /// Whether the device behind this handle still answers.
+    ///
+    /// A resume (or a hub power blip) re-enumerates the interface without
+    /// telling anyone: the handle stays a valid-looking value whose I/O now
+    /// fails. Querying the attributes is the cheapest way to notice without
+    /// writing a frame to a device that may no longer be there.
+    pub fn is_reachable(&self) -> bool {
+        let mut attrs: HIDD_ATTRIBUTES = unsafe { zeroed() };
+        attrs.Size = size_of::<HIDD_ATTRIBUTES>() as u32;
+        // SAFETY: `attrs` is a live, correctly sized local for the call.
+        unsafe { HidD_GetAttributes(self.handle, &mut attrs) }
+    }
 }
 
 impl Drop for HidDevice {
@@ -434,5 +447,19 @@ mod tests {
         for d in &devices {
             assert!(d.path.starts_with("\\\\?\\"), "unexpected path {}", d.path);
         }
+    }
+
+    #[test]
+    fn a_live_handle_answers_the_health_query() {
+        // Runs only where the controller is present; the failure path needs a
+        // real unplug, so it is covered by the resume test in the app.
+        let Ok(info) = crate::backend::windows::led::discover() else {
+            return;
+        };
+        let device = HidDevice::open(info).expect("open the controller");
+        assert!(
+            device.is_reachable(),
+            "a handle opened a moment ago must answer"
+        );
     }
 }

@@ -92,6 +92,16 @@ pub trait LedBackend: Send {
         self.apply()
     }
 
+    /// Whether the controller this backend was opened against still answers.
+    ///
+    /// A resume re-enumerates the interface and leaves the old handle dead
+    /// while the frame it held is gone, so a per-tick check is how a frontend
+    /// notices without waiting for the wall clock to show a suspend. Backends
+    /// with no handle to age answer `true`.
+    fn device_present(&self) -> bool {
+        true
+    }
+
     /// Where the state blob lives, when known.
     fn state_path(&self) -> Option<PathBuf> {
         None

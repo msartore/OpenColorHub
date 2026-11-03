@@ -68,6 +68,14 @@ const STALL_RPM: u16 = 50;
 /// How long a fan may report nothing before it is called stalled.
 const STALL_ALARM_MS: u64 = 5_000;
 
+/// Whether a tick should re-push the frame because the controller went away.
+///
+/// Only a session that lit something has a frame to restore, and a session on a
+/// backend without LED control has no controller to restore it to.
+fn should_recover(led_control: bool, lighting_in_use: bool, device_present: bool) -> bool {
+    led_control && lighting_in_use && !device_present
+}
+
 pub struct Service {
     fan: Box<dyn FanBackend>,
     led: Box<dyn LedBackend>,
@@ -665,14 +673,52 @@ impl Service {
             Err(error) => report.errors.push(format!("fans: {error}")),
         }
 
-        if self.lighting_in_use && self.capabilities.led_control {
-            match self.led.reassert() {
-                Ok(()) => report.lighting = true,
-                Err(error) => report.errors.push(format!("lighting: {error}")),
-            }
-        }
-
+        self.reassert_lighting(&mut report);
         report
+    }
+
+    /// Re-applies the frame when the controller vanished and came back.
+    ///
+    /// A resume does not always produce a wall-clock gap the ticker can see: a
+    /// two-second S3 blip, a hub power dip or a controller reset all invalidate
+    /// the HID handle and drop the frame while the process keeps running. One
+    /// attribute query per tick notices, and nothing is written unless the
+    /// handle is actually dead.
+    pub fn recover_if_needed(&mut self) -> Option<WakeReport> {
+        if !should_recover(
+            self.capabilities.led_control,
+            self.lighting_in_use,
+            self.led.device_present(),
+        ) {
+            return None;
+        }
+        let mut report = WakeReport::default();
+        self.reassert_lighting(&mut report);
+        Some(report)
+    }
+
+    fn reassert_lighting(&mut self, report: &mut WakeReport) {
+        if !(self.lighting_in_use && self.capabilities.led_control) {
+            return;
+        }
+        match self.led.reassert() {
+            Ok(()) => report.lighting = true,
+            Err(error) => report.errors.push(format!("lighting: {error}")),
+        }
+    }
+
+    /// One polling tick for the desktop shell: recover a vanished controller,
+    /// then read the snapshot. A successful recovery records one entry.
+    pub fn tick(&mut self) -> Snapshot {
+        if let Some(report) = self.recover_if_needed()
+            && report.lighting
+        {
+            self.record(
+                "wake",
+                "Re-applied lighting after the controller re-appeared",
+            );
+        }
+        self.snapshot()
     }
 
     /// Adds an entry to the activity feed (the dashboard's write log).
@@ -1011,6 +1057,45 @@ mod tests {
 
         svc.note("wake", "Re-applied after wake: lighting");
         assert_eq!(svc.activity().last().unwrap().kind, "wake");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_controller_that_went_away_is_the_only_recovery_trigger() {
+        assert!(
+            !should_recover(false, true, false),
+            "a backend without LED control has nothing to restore"
+        );
+        assert!(
+            !should_recover(true, false, false),
+            "a session that never lit anything has no frame to restore"
+        );
+        assert!(
+            !should_recover(true, true, true),
+            "a controller that still answers needs nothing"
+        );
+        assert!(
+            should_recover(true, true, false),
+            "a dead handle on a session that lit something is the case worth a write"
+        );
+    }
+
+    #[test]
+    fn a_tick_leaves_a_present_controller_alone() {
+        let (mut svc, dir) = service("recover");
+        svc.set_all_channels([9, 9, 9], 40, true).unwrap();
+
+        assert!(
+            svc.recover_if_needed().is_none(),
+            "the simulator's controller never vanishes"
+        );
+        let before = svc.activity().len();
+        svc.tick();
+        assert_eq!(
+            svc.activity().len(),
+            before,
+            "a tick with nothing to recover records nothing"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

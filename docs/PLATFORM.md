@@ -178,17 +178,25 @@ power-cycled, so the RGB controller comes back on its own pattern, and the Super
 I/O is reloaded from its firmware defaults, which puts every header back under
 BIOS fan control. Nothing in either chip remembers what this app wrote.
 
-The app watches for that: a poll tick that arrives later than the interval plus a
-few seconds means the process was suspended, not merely slow, so the wall clock is
-what it measures. On that tick the lighting frame is pushed again and every duty
-or curve this session set is rewritten — including the manual-mode bit, because
-the chip returned to automatic. The controller is still re-enumerating at that
-moment, so a failed write is retried for a few seconds before it is reported.
+Two checks catch that, because a suspend is not always visible as a long pause:
+
+* Every tick asks the open controller whether it still answers. A resume — or a
+  hub power dip, or a controller reset — invalidates the handle without telling
+  anyone, so this notices on the next second even when the machine was only
+  asleep for two.
+* A tick that arrives more than half a second beyond its poll interval means the
+  process was suspended rather than merely slow; the wall clock is what it
+  measures.
+
+Either way the lighting frame is pushed again and every duty or curve this
+session set is rewritten — including the manual-mode bit, because the chip
+returned to automatic. A controller that is still re-enumerating refuses the
+frame, so the write is retried for a few seconds before it is reported.
 
 Only what the session actually applied is restored. A session that never touched
 lighting leaves the controller alone, and a header nobody set keeps its firmware
-behaviour. The re-application appears in the Dashboard's activity log as a `wake`
-entry.
+behaviour. A successful recovery appears in the Dashboard's activity log as a
+`wake` entry.
 
 Waking is handled separately from **Re-apply lighting at launch**: that switch
 covers a fresh start (sign-in, or an app launched by hand), while a wake is
