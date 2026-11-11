@@ -212,6 +212,13 @@ only real exit.
 A launch from the autostart entry passes `--minimized`, so signing in shows no
 window at all.
 
+Starting the app again while it is already running does not create a second
+process. The new launch hands its command line to the running instance and exits;
+that instance brings its window forward, so the desktop icon behaves like
+"switch to OpenColorHub" rather than "start another copy". A `--minimized`
+hand-over asks for nothing — the autostart entry firing after a fast sign-in
+leaves the window where it is.
+
 ## Supported boards
 
 Two Super I/O families are in play, which is why nothing promises a single chip:

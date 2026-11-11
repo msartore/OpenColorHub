@@ -46,7 +46,8 @@ simulator, both labelled. → [Platform notes](docs/PLATFORM.md)
 
 Settings covers backend selection, elevation, units, safety confirmations, poll
 interval, startup with the OS and updates. The app lives in the tray: closing the
-window hides it, **Quit** is the only real exit.
+window hides it, **Quit** is the only real exit, and launching the icon again
+brings the running instance forward instead of starting a second one.
 
 ## Install
 

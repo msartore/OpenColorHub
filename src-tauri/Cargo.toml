@@ -32,3 +32,8 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 ureq = { workspace = true }
 tauri = { version = "2", features = ["tray-icon"] }
+# The second launch must hand its command line to the running instance and exit
+# before it opens the SMBus/HID ports or installs a second tray icon. Pinned
+# below 2.5 on purpose: that release requires tauri 2.12, and this crate stays on
+# 2.11 until the runtime itself is bumped.
+tauri-plugin-single-instance = "2.4"

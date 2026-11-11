@@ -161,6 +161,29 @@ the process was *not* started with `--minimized` — the flag the autostart entr
 passes. Declaring it hidden avoids the flash of an empty frame at sign-in that
 `show()`-then-`hide()` would produce.
 
+Only one process ever owns the hardware. `tauri-plugin-single-instance` is
+registered first, so a second launch — desktop icon, Start menu shortcut, or the
+autostart entry firing once more — forwards its command line to the running
+instance and exits before its own setup runs: no second tray icon, and no second
+claim on the Super I/O port or the HID interface. The running instance reads the
+hand-over as "show yourself" and calls `tray::reveal`, unless the forwarded
+command line carries `--minimized`; that is the autostart entry, and it must not
+pull a window in front of somebody.
+
+The hand-over is a `WM_COPYDATA` message to a hidden window the plugin owns, and
+Windows blocks that message between different integrity levels. Every launch path
+therefore has to start at the same elevation, which is what the
+`requireAdministrator` manifest buys: the icon and the sign-in task both run
+elevated. A build with the manifest dropped runs `asInvoker`, so clicking the
+icon while the elevated instance is up would find the mutex, fail to deliver the
+hand-over, and exit — the window would never come forward.
+
+The lock behind this is a named mutex created in the plugin's setup. Its
+`RunEvent::Exit` handler releases it, and `App::run` dispatches that event before
+`process::restart` respawns the executable, so a self-update is not mistaken for
+a rival instance. The plugin is pinned below 2.5, whose minimum Tauri (2.12) is
+newer than the one this crate builds against.
+
 This uses Tauri's built-in tray rather than the `tray-icon` + `winit` recipe
 found in guides: Tauri already runs an event loop, and a second one competes with
 the webview for the message pump.

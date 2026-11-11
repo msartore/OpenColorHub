@@ -19,9 +19,25 @@ pub const ID: &str = "main";
 /// Window label the tray controls.
 const WINDOW: &str = "main";
 
+/// Flag the autostart entry passes to keep the window out of the way.
+const HIDDEN_FLAG: &str = "--minimized";
+
+/// True when these command-line arguments ask for a background launch.
+///
+/// Takes the arguments rather than reading the process's own, because the
+/// single-instance callback receives the *second* process's command line and
+/// has to tell an icon click from the autostart entry.
+pub fn wants_hidden<I, S>(args: I) -> bool
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter().any(|arg| arg.as_ref() == HIDDEN_FLAG)
+}
+
 /// True when the process was started by the autostart entry.
 pub fn starts_hidden() -> bool {
-    std::env::args().any(|arg| arg == "--minimized")
+    wants_hidden(std::env::args())
 }
 
 /// Brings the window back, whether it was hidden or merely minimised.
@@ -98,4 +114,18 @@ pub fn show_unless_hidden(app: &AppHandle) {
         return;
     }
     reveal(app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognises_the_autostart_flag() {
+        assert!(wants_hidden(["opencolorhub.exe", "--minimized"]));
+        // Exact match only: a path or a similar-looking flag is not the entry.
+        assert!(!wants_hidden(["opencolorhub.exe"]));
+        assert!(!wants_hidden(["C:/build/--minimized/OpenColorHub.exe"]));
+        assert!(!wants_hidden(["opencolorhub.exe", "--minimised"]));
+    }
 }

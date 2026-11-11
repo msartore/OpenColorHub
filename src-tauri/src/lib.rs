@@ -24,6 +24,21 @@ pub fn run() {
     update::clean_previous();
 
     tauri::Builder::default()
+        // First plugin, so a second launch is turned away before *any* setup
+        // runs: two processes would both open the SMBus and HID ports and each
+        // would install its own tray icon. Clicking the desktop icon again
+        // therefore reaches this callback in the running instance instead of
+        // starting a rival one.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // `--minimized` means the autostart entry, not the user: when the
+            // app is already up (a fast sign-in, or Explorer restarted) that
+            // launch must not pull the window in front of anybody.
+            if tray::wants_hidden(args.iter()) {
+                return;
+            }
+            eprintln!("opencolorhub: already running, showing the existing window");
+            tray::reveal(app);
+        }))
         .setup(move |app| {
             let handle = app.handle().clone();
 
