@@ -19,12 +19,24 @@ test("fan control writes through the controller", async () => {
   expect(app.texts().some((text) => text.includes("Applied"))).toBe(true);
 });
 
+test("the colour dialog writes the selected colour", async () => {
+  const app = await open("./App.tsx");
+  app.onDialog(() => "Write");
+  await app.press("Lighting");
+  await app.waitFor("Frame preview");
+  await app.press("Change");
+  await app.press("id:color-preset-1");
+  await app.press("Done");
+  await app.press("id:lighting-apply-all");
+  await app.wait(350);
+  expect(app.texts().some((text) => text.includes("#e879f9"))).toBe(true);
+});
+
 test("the curve editor drags a point and writes the curve", async () => {
   const app = await open("./App.tsx");
   app.onDialog(() => "Write");
   await app.press("Fan control");
   await app.waitFor("Profiles");
-  await app.press("id:curve-edit-sys");
   await app.drag("id:curve-sys", { x: 24, y: -18 });
   await app.press("id:curve-apply-sys");
   await app.wait(300);

@@ -19,7 +19,13 @@ export function Panel(props: {
   children?: JSX.Element;
 }) {
   return (
-    <View class="rounded-[10px] border border-border bg-card p-4 gap-3">
+    <View
+      class="rounded-[10px] border border-border bg-card p-4 gap-3"
+      style={{
+        backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.028), transparent 55%)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02), 0 18px 40px -32px rgba(0,0,0,0.95)",
+      }}
+    >
       <If when={props.title || props.subtitle || props.actions}>
         <View class="flex-row items-start justify-between gap-3">
           <View class="gap-0.5">
@@ -46,10 +52,19 @@ export function Stat(props: {
   tone?: Tone;
 }) {
   return (
-    <View class="rounded-[10px] border border-border bg-card p-3 gap-1">
+    <View
+      class="rounded-[10px] border border-border bg-card p-3 gap-1"
+      style={{
+        backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.03), transparent 70%)",
+      }}
+    >
       <Text class="text-[11px] text-muted-foreground uppercase tracking-wide">{props.label}</Text>
       <View class="flex-row items-baseline gap-1">
-        <Text class={`text-2xl font-semibold ${TONE_CLASS[props.tone ?? "muted"]}`}>
+        <Text
+          class={`text-2xl font-semibold ${
+            props.tone ? TONE_CLASS[props.tone] : "text-foreground"
+          }`}
+        >
           {props.value}
         </Text>
         <If when={props.unit}>

@@ -114,21 +114,31 @@ the output-report write fails.
 
 ## Elevation
 
-The manifest requests `requireAdministrator`: UAC before the process starts,
-declining means the app does not run, nothing is persisted.
+The installer is per-user and does not request administrator, so the app starts
+standard and can be installed without a UAC prompt. PawnIO's driver still needs
+elevation for fan control; RGB and HWiNFO work without it.
 
-`pawnio_open` returns `ERROR_ACCESS_DENIED` unelevated, so fan control needs
-elevation; RGB and HWiNFO work without it.
+When PawnIO is installed but `pawnio_status()` reports `denied`, the app asks
+once at startup:
 
-Settings → Privileges shows the state and offers a one-shot *Restart as
-administrator*; builds carrying the manifest never show it.
+* **Continue without fan control** leaves lighting, settings and telemetry
+  working.
+* **Restart as administrator** calls `platform::request()` (`ShellExecuteExW`,
+  `lpVerb = "runas"`). Windows shows its own UAC prompt; declining is a decision,
+  not an error. On success the old process quits and the elevated copy probes
+  PawnIO again.
 
-Some vendor utilities register a hidden `RunLevel::Highest` task and rewrite
-their shortcuts. This app does not: one prompt, one decision, nothing persisted.
+Settings → Privileges shows the current state and offers the same restart. The
+autostart task runs at `RunLevel Highest`, so a sign-in launch already has the
+rights.
 
-Trade-off: the portable build also prompts for UAC. To drop it, delete
-`src-tauri/app.manifest` and revert `build.rs` to `tauri_build::build()` —
-Windows fan control then degrades to HWiNFO or the simulator.
+Because Windows blocks `WM_COPYDATA` between integrity levels, every launch path
+must use the same elevation for the single-instance hand-over to work. A normal
+double launch is unaffected; the elevated relaunch quits before the new copy
+takes over.
+
+There is no manifest and no persisted "always elevated" choice: the app asks,
+UAC answers, and nothing is written.
 
 ## Start with the OS
 

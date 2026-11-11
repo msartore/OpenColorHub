@@ -92,6 +92,10 @@ function FanCard(props: {
           ? "rounded-[10px] border border-[#4ade80]/40 bg-card p-3 gap-2"
           : "rounded-[10px] border border-border bg-card p-3 gap-2"
       }
+      style={{
+        width: "100%",
+        backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.025), transparent 50%)",
+      }}
     >
       <View class="flex-row items-start justify-between gap-2" style={{ flexWrap: "wrap" }}>
         <View class="gap-0.5">
@@ -206,8 +210,9 @@ function FanCard(props: {
             )}
           </Each>
         </View>
+      </If>
 
-        <View class="flex-row items-center gap-2">
+      <View class="flex-row items-center gap-2" style={{ flexWrap: "wrap" }}>
           <Button
             testID={`curve-apply-${props.fan().header}`}
             class="rounded-[6px] bg-primary px-3 py-1.5 disabled:opacity-40"
@@ -229,8 +234,7 @@ function FanCard(props: {
               {`A pump curve must stay at or above ${PUMP_FLOOR_PERCENT}%`}
             </Text>
           </If>
-        </View>
-      </If>
+      </View>
     </View>
   );
 }
@@ -322,7 +326,7 @@ export function Fans(props: {
     <View class="gap-4">
       <View class="flex-row items-center justify-between gap-3" style={{ flexWrap: "wrap" }}>
         <View class="gap-1">
-          <Text class="text-xl font-semibold text-foreground">Fan control</Text>
+          <Text class="text-2xl font-semibold text-foreground">Fan control</Text>
           <Text class="text-xs text-muted-foreground">
             {summary().length === 0
               ? "No header is reporting a speed."
@@ -468,3 +472,4 @@ export function Fans(props: {
     </View>
   );
 }
+

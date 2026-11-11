@@ -15,6 +15,8 @@ import {
 import type { TemperatureStats } from "../app/domain/telemetry";
 import { dutyColor, fanModeLabel, formatClock, formatRpm, formatTemp } from "../app/presentation/format";
 import { layoutSize, statWidth } from "../app/presentation/layout";
+import { Sparkline } from "../components/Sparkline";
+import { TemperatureGauge } from "../components/TemperatureGauge";
 import { Bar, Chip, KeyValue, Panel, Stat } from "../components/ui";
 
 const HISTORY = 120;
@@ -28,6 +30,7 @@ function supportTone(confidence: string): "ok" | "warn" | "danger" {
 export function Dashboard(props: { store: AppStore }) {
   const samples: number[] = [];
   const stats = signal<TemperatureStats | null>(null);
+  const history = signal<number[]>([]);
   const activity = signal<ActivityEntry[]>([]);
 
   const summary = computed(() => {
@@ -42,6 +45,7 @@ export function Dashboard(props: { store: AppStore }) {
       appendSample(samples, snapshot.temperature_c, HISTORY);
     }
     stats.set(temperatureStats(samples));
+    history.set([...samples]);
   });
 
   const loadActivity = async (): Promise<void> => {
@@ -61,7 +65,7 @@ export function Dashboard(props: { store: AppStore }) {
   return (
     <View class="gap-4">
       <View class="flex-row items-center justify-between gap-3">
-        <Text class="text-xl font-semibold text-foreground">Dashboard</Text>
+        <Text class="text-2xl font-semibold text-foreground">Dashboard</Text>
         <If when={props.store.snapshot()}>
           {(snapshot) => (
             <Chip
@@ -78,25 +82,33 @@ export function Dashboard(props: { store: AppStore }) {
             <View class="flex-row gap-3" style={{ alignItems: "stretch" }}>
               <View style={{ flex: 1 }}>
                 <Panel title="Motherboard temperature">
-                  <View class="flex-row items-baseline gap-2">
-                    <Text class="text-4xl font-semibold text-primary">
-                      {formatTemp(snapshot().temperature_c, props.store.settings().temp_unit, 0)}
-                    </Text>
-                    <If when={snapshot().fan_device.simulated}>
-                      <Chip label="simulated" tone="warn" />
-                    </If>
-                  </View>
-                  <Text class="text-xs text-muted-foreground">
-                    {snapshot().temperature_source ?? "unknown sensor"}
-                    {snapshot().temperature_register ? ` (${snapshot().temperature_register})` : ""}
-                  </Text>
-                  <If when={stats()}>
-                    {(current) => (
-                      <Text class="text-[11px] font-mono text-muted-foreground">
-                        {`session min ${tempText(current().min)} · mean ${tempText(current().mean)} · max ${tempText(current().max)} · ${current().count} samples`}
+                  <View class="flex-row items-center gap-4" style={{ flexWrap: "wrap" }}>
+                    <TemperatureGauge
+                      temperature={() => snapshot().temperature_c}
+                      unit={() => props.store.settings().temp_unit}
+                    />
+                    <View class="gap-1" style={{ flex: 1, minWidth: 200 }}>
+                      <View class="flex-row items-center gap-2">
+                        <If when={snapshot().fan_device.simulated}>
+                          <Chip label="simulated" tone="warn" />
+                        </If>
+                      </View>
+                      <Text class="text-xs text-muted-foreground">
+                        {snapshot().temperature_source ?? "unknown sensor"}
+                        {snapshot().temperature_register
+                          ? ` (${snapshot().temperature_register})`
+                          : ""}
                       </Text>
-                    )}
-                  </If>
+                      <If when={stats()}>
+                        {(current) => (
+                          <Text class="text-[11px] font-mono text-muted-foreground">
+                            {`session min ${tempText(current().min)} · mean ${tempText(current().mean)} · max ${tempText(current().max)} · ${current().count} samples`}
+                          </Text>
+                        )}
+                      </If>
+                      <Sparkline samples={history} />
+                    </View>
+                  </View>
                 </Panel>
               </View>
             </View>
@@ -248,3 +260,5 @@ export function Dashboard(props: { store: AppStore }) {
     </View>
   );
 }
+
+

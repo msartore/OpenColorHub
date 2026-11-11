@@ -1,62 +1,62 @@
 # Updates
 
-On launch the app asks GitHub for the newest release. A higher tag offers the
-update in a dialog; accepting downloads the release's `OpenColorHub.exe`, checks
-it against `SHA256SUMS.txt` from the same release, swaps it in and restarts.
-**Settings → Updates → Check now** forces a check. Nothing updates without the
-dialog being accepted.
+The app updates itself through Native Shell's updater. Settings → Updates calls
+`checkForUpdate()`; a newer release shows its version, notes and a **Download &
+install** action. `downloadUpdate()` reports bytes, then `installAndRestart()`
+replaces the app and restarts it. Nothing updates without the user pressing the
+button.
 
-## How the swap works
+## Source and manifest
 
-Windows refuses to overwrite a running image but allows *renaming* it:
+`nsh/nsh.json` names the source:
 
-1. rename `OpenColorHub.exe` → `OpenColorHub.old.exe`
-2. copy the downloaded build into place
-3. restart through Tauri's own `restart()`
-4. delete the leftover on the next launch
+```json
+"updater": { "github": "msartore/OpenColorHub" }
+```
 
-A failed copy rolls the rename back, so a broken update leaves a working app.
-`restart()` rather than a manual spawn matters: the old process holds the WebView2
-profile lock, and racing it produces a window that never appears.
+The release workflow builds the Windows zip and Linux tarball, then runs:
 
-## Why not the Tauri updater plugin
+```bash
+nsh update-manifest *-windows-x86_64.zip *-linux-x86_64.tar.gz \
+  --entry nsh \
+  --base-url "https://github.com/msartore/OpenColorHub/releases/download/vX.Y.Z/" \
+  -o pkg
+```
 
-The plugin needs signing keys, a `latest.json` on every release and an installer
-re-run. The release already publishes the bare executable, so the app fetches
-that directly.
+`latest.json` carries the app id, version and one archive per platform with
+size and SHA-256. It is published beside the archives. NSH verifies the
+manifest, the app id, the version (only newer is offered), the HTTPS URL and the
+archive's hash before replacing anything.
 
-## What that costs
-
-The download is verified against `SHA256SUMS.txt` over HTTPS, but these builds are
-**not Authenticode signed**. Integrity rests on GitHub's TLS and that checksum,
-not a vendor certificate. If that is not acceptable, sign the release binaries and
-add the check to `update_ipc.rs`.
+A development run (`nsh run`) returns `null` from the check, so the panel says
+updates need a packaged build.
 
 ## Publishing a release
 
-**The tag is the version.** Nothing is bumped by hand: the build job runs
-`scripts/set-version.mjs` with the tag and rewrites `Cargo.toml`,
-`tauri.conf.json`, `package.json` and the lock before compiling, so installer
-metadata, runtime version and the updater's idea of "current" agree.
+**The tag is the version.** `scripts/set-version.mjs` writes it into
+`Cargo.toml` (core + CLI), `nsh/nsh.json` and `nsh/Cargo.toml` before compiling,
+so the installer, runtime and manifest agree.
 
 ```bash
 git tag -a v0.3.0 -m "OpenColorHub 0.3.0"
 git push origin v0.3.0
 ```
 
-A build tagged `v0.3.0` that still reports `0.2.0` makes the self-updater offer
-the same release on every launch, forever.
+The workflow builds the NSH app on Windows and Linux, the CLI `.deb` and
+tarballs, writes `latest.json`, and publishes one release. A partial platform
+failure fails the release: there is no Windows-only NSH release followed by a
+Linux one.
 
-The same script runs locally:
+## Integrity
 
-```bash
-node scripts/set-version.mjs v0.3.0
-pwsh scripts/build-release.ps1 -Tag v0.3.0 -Portable
-```
+Builds are **not Authenticode signed**. Integrity rests on GitHub's TLS, NSH's
+manifest and archive hashes, and the checksums in `SHA256SUMS.txt`. If that is
+not acceptable, sign the Windows executables before packaging; NSH does not
+change the operating system's publisher warning.
 
-Both platforms build, `dist/` is staged flat, and the release carries the NSIS
-installer, MSI, portable zip, Linux packages, the bare `OpenColorHub.exe` the
-updater downloads, and `SHA256SUMS.txt`. A separate job packages the CLI:
-`opencolorhub-cli_<version>_amd64.deb` (binary, completions, udev rule and the
-`/var/lib/colorctl` tmpfiles entry), a portable tarball, and a completions-only
-tarball.
+## Existing Tauri installs
+
+The previous shell's updater downloads a bare `OpenColorHub.exe` and renames it
+into place. A Native Shell app is a directory with its runtime, so that updater
+cannot move an installation onto it. Existing users install this release once by
+hand; from then on `latest.json` drives updates. The release notes say so.

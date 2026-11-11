@@ -1,14 +1,7 @@
 # OpenColorHub
 
-![OpenColorHub](docs/assets/banner.png)
-
-Fan and ARGB control for Colorful AMD motherboards: a Tauri 2 desktop app and a
-`colorctl` CLI over one hardware core.
-
-> **Native Shell port in progress.** A parallel NSH app lives in
-> [`nsh/`](nsh/README.md), built on the same `colorctl-core`. The Tauri build
-> remains the shipping app until the parity gate in
-> [`MIGRATION.md`](MIGRATION.md) passes.
+Fan and ARGB control for Colorful AMD motherboards: a Native Shell desktop app
+and a `colorctl` CLI over one hardware core.
 
 Two blocks: the **Nuvoton Super I/O** (fan headers, 4-point curves, tachometers,
 board temperature) and the **Colorful RGB controller** (200 LEDs on six
@@ -22,12 +15,15 @@ A desktop rewrite of [`colorctl`](https://github.com/Curstantine/colorctl):
 register programming, curve tables and `CCTL` state stay byte-compatible, so CLI
 and app can alternate without losing lighting state.
 
+The desktop app is built with [Native Shell](https://nsh.dev): native windows on
+Windows and Linux, no WebView and no Tauri.
+
 ## Platforms
 
 | Platform | Fans | Lighting |
 | --- | --- | --- |
 | **Linux** | ✅ `/dev/port` — root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` |
-| **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO without it | ✅ SetupAPI + `hid.dll`, no driver |
+| **Windows** | ✅ PawnIO sandboxed driver — read-only via HWiNFO without it | ✅ SetupAPI + `hid.dll`, no driver |
 
 Windows needs a signed driver to broker `IN`/`OUT`. PawnIO is **not bundled**: on
 launch and from Fan control the app fetches PawnIO's installer from the project's
@@ -35,26 +31,18 @@ releases, checks a pinned SHA-256 and runs it, so its UI and UAC prompt appear.
 Nothing installs silently. Without it: HWiNFO telemetry, then the simulator, both
 labelled. → [Platform notes](docs/PLATFORM.md)
 
-## Screenshots
-
-| | |
-| --- | --- |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Fan control](docs/screenshots/fans.png) |
-| **Dashboard** — gauge with session history, six live metrics, fan and channel detail | **Fan control** — per-channel curves, presets |
-| ![Lighting](docs/screenshots/leds.png) | ![Drivers](docs/screenshots/drivers.png) |
-| **Lighting** — six channels, 200-LED frame | **Drivers** — vendor downloads, nothing executed |
-| ![About](docs/screenshots/about.png) | |
-| **About** — the board this build detected | |
-
-Settings covers backend, elevation, units, safety confirmations, poll interval,
-startup and updates. Closing the window hides it to the tray; **Quit** is the only
-exit; relaunching brings the running instance forward.
+The desktop installer is per-user and does not request administrator. When PawnIO
+is installed but the process cannot open it, the app asks before restarting
+elevated; declining leaves the app running for lighting, settings and telemetry.
 
 ## Install
 
-Windows installers, a portable zip and Linux packages are on the
-[releases page](https://github.com/msartore/OpenColorHub/releases). The portable
-zip keeps settings and state in `config/` and `data/` beside the executable.
+Windows installers, portable zips and Linux tarballs are on the
+[releases page](https://github.com/msartore/OpenColorHub/releases). The app also
+ships `latest.json`, so updates are checked and installed from inside Settings.
+
+The portable build keeps settings and state in `config/` and `data/` beside the
+executable.
 
 ### The `colorctl` CLI
 
@@ -69,34 +57,44 @@ logged-in user drive RGB without root. Portable tarballs (binary + completions)
 are on the release page. Syntax matches upstream: `rgb`, `fan`, `board`,
 `--backend auto|hardware|simulated`, `--json`.
 
-From source:
+## Build from source
+
+The desktop app lives in [`nsh/`](nsh/README.md) and needs the `nsh` toolchain:
 
 ```bash
-npm install
-npm run tauri dev      # hot reload
-npm run tauri build    # bundles in target/release/bundle
-npm run dev            # browser demo, no Rust toolchain needed
-cargo test             # core + CLI unit tests
+curl -fsSL https://nsh.dev/install.sh | sh        # Windows: irm https://nsh.dev/install.ps1 | iex
+nsh check nsh
+nsh build nsh
+OPENCOLORHUB_SIM=1 nsh test nsh                   # simulator, no hardware
+nsh run nsh
+nsh package nsh --target windows                  # or linux
 ```
 
-On Windows, `pwsh scripts/build-release.ps1 -Portable` strips absolute source
-paths and refuses to package a stale executable. Linux hardware needs privileges:
+The core and CLI are ordinary Cargo crates:
 
 ```bash
-sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
+cargo test --workspace
+cargo build --release -p opencolorhub-cli
+```
+
+Linux hardware needs privileges:
+
+```bash
+sudo ./target/release/colorctl fan --header cpu --percent 50
 ```
 
 ## Documentation
 
 | | |
 | --- | --- |
-| [Architecture](docs/ARCHITECTURE.md) | Crates, backend boundary, protocols, verification |
+| [Architecture](docs/ARCHITECTURE.md) | Crates, the NSH seam, backend boundary, protocols, verification |
 | [Platform notes](docs/PLATFORM.md) | Driver rationale, fallbacks, elevation, startup, tray |
 | [RGB compatibility](docs/RGB-COMPATIBILITY.md) | ODM families, USB PIDs, the 200-LED frame, OpenRGB comparison |
 | [Board detection](docs/BOARD-DETECTION.md) | Confidence levels, sources, the hardware guard |
-| [Updates](docs/UPDATES.md) | Self-updater, release process, integrity caveats |
+| [Updates](docs/UPDATES.md) | `nsh/updater`, release process, integrity caveats |
 | [Drivers](docs/DRIVERS.md) | Board download catalogue, URL rules, why nothing is executed |
 | [Presets](docs/SETUPS.md) | Saved fan and lighting presets, on the screens that own them |
+| [MIGRATION.md](MIGRATION.md) | The Tauri → Native Shell conversion record |
 | [NOTICE.md](NOTICE.md) | Licensing of this project and everything it embeds |
 
 ## Safety

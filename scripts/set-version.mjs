@@ -3,11 +3,10 @@
 // manifest that carries one, so cutting a release is `git tag vX.Y.Z` and
 // nothing else.
 //
-// The tag is the single source of truth. Keeping four manifests in sync by hand
-// is exactly the kind of step that gets forgotten, and the failure mode is a
-// release whose installer says 0.2.0 while its tag says 0.3.0 — which then makes
-// the self-updater offer an update forever, because the running build reports a
-// version lower than the release it was cut from.
+// Two places: the Rust workspace (core + CLI) and the Native Shell app
+// (`nsh/nsh.json` and its own crate). The NSH package and `update-manifest`
+// both read `nsh/nsh.json`, so the installer and the update feed agree with the
+// tag.
 //
 // Usage: node scripts/set-version.mjs v1.2.3
 
@@ -40,7 +39,7 @@ function edit(path, re, label) {
   }
 }
 
-// [workspace.package] holds the version the crates inherit.
+// [workspace.package] holds the version the core and CLI inherit.
 {
   const path = "Cargo.toml";
   const text = readFileSync(path, "utf8");
@@ -62,38 +61,8 @@ function edit(path, re, label) {
   }
 }
 
-edit("src-tauri/tauri.conf.json", /"version":\s*"([^"]+)"/, "version");
-edit("package.json", /"version":\s*"([^"]+)"/, "version");
 edit("nsh/nsh.json", /"version":\s*"([^"]+)"/, "version");
 edit("nsh/Cargo.toml", /^version = "([^"]+)"/m, "package version");
-
-// package-lock.json is parsed rather than pattern-matched: only two fields
-// describe this package (the top-level version and packages[""]). Every other
-// "version" in the lock belongs to a dependency.
-{
-  const path = "package-lock.json";
-  const lock = JSON.parse(readFileSync(path, "utf8"));
-  const root = lock.packages?.[""];
-  if (!root) {
-    console.error('set-version: package-lock.json has no packages[""] entry');
-    process.exit(1);
-  }
-
-  let touched = false;
-  if (lock.version !== version) {
-    lock.version = version;
-    touched = true;
-  }
-  if (root.version !== version) {
-    root.version = version;
-    touched = true;
-  }
-
-  if (touched) {
-    writeFileSync(path, `${JSON.stringify(lock, null, 2)}\n`);
-    changes.push(`${path} (root version only)`);
-  }
-}
 
 if (changes.length) {
   console.log(`version ${version} applied to:`);

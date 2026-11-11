@@ -264,7 +264,7 @@ export function SettingsScreen(props: {
 
   return (
     <View class="gap-4">
-      <Text class="text-xl font-semibold text-foreground">Settings</Text>
+      <Text class="text-2xl font-semibold text-foreground">Settings</Text>
 
       <View
         class="gap-4"
@@ -607,3 +607,4 @@ export function SettingsScreen(props: {
     </View>
   );
 }
+

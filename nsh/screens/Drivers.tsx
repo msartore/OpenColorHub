@@ -229,7 +229,7 @@ export function Drivers(props: {
     <View class="gap-4">
       <View class="flex-row items-center justify-between gap-3" style={{ flexWrap: "wrap" }}>
         <View class="gap-1">
-          <Text class="text-xl font-semibold text-foreground">Drivers</Text>
+          <Text class="text-2xl font-semibold text-foreground">Drivers</Text>
           <Text class="text-xs text-muted-foreground">
             Files Colorful publishes for this board. Downloads are saved to the app's
             data folder — nothing is run for you.
@@ -358,3 +358,4 @@ export function Drivers(props: {
     </View>
   );
 }
+

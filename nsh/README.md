@@ -1,10 +1,10 @@
-# OpenColorHub — NSH port
+# OpenColorHub — Native Shell app
 
-The Native Shell port lives here, beside the shipping Tauri app. It shares
-`../crates/colorctl-core`; nothing in `../src/` or `../src-tauri/` is used.
+The desktop app. It shares `../crates/colorctl-core` with the `colorctl` CLI;
+there is no Tauri shell and no webview.
 
-See [`../MIGRATION.md`](../MIGRATION.md) for the plan, the parity checklist and
-the remaining slices. In short:
+See [`../MIGRATION.md`](../MIGRATION.md) for the conversion record and the
+remaining hardware verification. In short:
 
 ```powershell
 $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"   # cargo is installed but may be off PATH
@@ -34,5 +34,7 @@ Layout:
 | `app/composition/` | the app-state facade and the composition root |
 | `screens/`, `components/` | TSX |
 
-Dashboard and Fan control are ported. The other four screens show a truthful
-placeholder until their slice lands.
+All six screens are native: Dashboard (gauge and sparkline), Fan control with
+the four-point curve editor, Lighting with a 200-LED preview and colour presets,
+Drivers, Settings and About. The layout follows `app/presentation/layout.ts`
+(wide, medium, narrow).

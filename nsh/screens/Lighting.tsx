@@ -8,7 +8,7 @@ import {
   ColorPicker,
   ColorSlider,
   ColorSwatch,
-  Popover,
+  Dialog,
   Slider,
   Switch,
 } from "nsh/base";
@@ -20,12 +20,11 @@ import {
   LED_TOTAL,
   channelSignature,
   expandFrame,
-  isHexColor,
 } from "../app/domain/lighting";
 import { confirmWrite } from "../components/confirm";
 import { SetupsDialog } from "../components/SetupsDialog";
 import { Chip, Panel } from "../components/ui";
-import { channelWidth } from "../app/presentation/layout";
+import { channelWidth, dialogWidth } from "../app/presentation/layout";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -47,8 +46,9 @@ function ColorEditor(props: {
   return (
     <ColorPicker
       value={props.value()}
-      onChange={({ value }) => props.onChange(value)}
-      onChangeEnd={({ value }) => props.onChange(value)}
+      format="hex"
+      onChange={({ value, formatted }) => props.onChange(formatted || value)}
+      onChangeEnd={({ value, formatted }) => props.onChange(formatted || value)}
     >
       <View class="gap-2" style={{ width: 220 }}>
         <ColorArea class="h-24 w-full rounded-[8px]" />
@@ -61,8 +61,9 @@ function ColorEditor(props: {
         <ColorField class="h-8 rounded-[6px] border border-border bg-muted px-2 text-xs text-foreground" />
         <View class="flex-row gap-1.5" style={{ flexWrap: "wrap" }}>
           <Each of={PRESETS} key="index">
-            {(preset) => (
+            {(preset, index) => (
               <ColorSwatch
+                testID={`color-preset-${index()}`}
                 color={preset()}
                 accessibilityLabel={preset()}
                 class="h-5 w-5 rounded-[4px] border border-border"
@@ -85,6 +86,7 @@ function ChannelCard(props: {
   ) => Promise<boolean>;
   onOff: (channel: ChannelId) => Promise<void>;
 }) {
+  const pickerOpen = signal(false);
   const hex = signal(props.channel().hex);
   const brightness = signal(props.channel().brightness);
   const enabled = signal(props.channel().enabled);
@@ -115,8 +117,18 @@ function ChannelCard(props: {
   return (
     <View
       class="rounded-[10px] border border-border bg-card p-3 gap-2"
-      style={{ width: channelWidth() }}
+      style={{
+        width: channelWidth(),
+        boxShadow: enabled() ? `0 0 22px ${hex().slice(0, 7)}22` : "none",
+      }}
     >
+      <View
+        style={{
+          height: 3,
+          borderRadius: 2,
+          backgroundColor: enabled() ? hex().slice(0, 7) : "#1a2128",
+        }}
+      />
       <View class="flex-row items-start justify-between gap-2">
         <View class="gap-0.5" style={{ flexShrink: 1 }}>
           <Text class="text-sm font-semibold text-foreground">{props.channel().name}</Text>
@@ -133,28 +145,18 @@ function ChannelCard(props: {
 
       <View class="flex-row items-center justify-between gap-2">
         <View class="flex-row items-center gap-2">
-          <Popover
-            placement="bottom"
-            align="start"
-            popupClass="rounded-[10px] border border-border bg-popover p-3"
-            trigger={
-              <View
-                testID={`channel-colour-${props.channel().id}`}
-                class="h-7 w-10 rounded-[5px] border border-border"
-                style={{ backgroundColor: hex() }}
-              />
-            }
-          >
-            <ColorEditor
-              value={hex}
-              onChange={(value) => {
-                if (!isHexColor(value)) return;
-                dirty.set(true);
-                hex.set(value);
-              }}
-            />
-          </Popover>
+          <View
+            testID={`channel-colour-${props.channel().id}`}
+            class="h-7 w-10 rounded-[5px] border border-border"
+            style={{ backgroundColor: hex() }}
+          />
           <Text class="text-xs font-mono text-muted-foreground">{hex().toUpperCase()}</Text>
+          <Button
+            class="rounded-[5px] border border-border px-2 py-0.5"
+            onPress={() => pickerOpen.set(true)}
+          >
+            <Text class="text-[10px] text-foreground">Colour</Text>
+          </Button>
         </View>
         <Switch
           testID={`channel-enabled-${props.channel().id}`}
@@ -167,6 +169,23 @@ function ChannelCard(props: {
             enabled.set(checked);
           }}
         />
+      </View>
+
+      <View class="flex-row items-center gap-1.5" style={{ flexWrap: "wrap" }}>
+        <Each of={PRESETS} key="index">
+          {(preset) => (
+            <ColorSwatch
+              color={preset()}
+              accessibilityLabel={preset()}
+              class="h-5 w-5 rounded-[4px] border border-border"
+              onPress={({ color }) => {
+                dirty.set(true);
+                enabled.set(true);
+                hex.set(color);
+              }}
+            />
+          )}
+        </Each>
       </View>
 
       <Slider
@@ -197,7 +216,6 @@ function ChannelCard(props: {
         <Button
           testID={`channel-apply-${props.channel().id}`}
           class="rounded-[6px] bg-primary px-3 py-1.5 disabled:opacity-40"
-          disabled={!enabled()}
           onPress={() => void apply()}
         >
           <Text class="text-[11px] text-primary-foreground">Apply</Text>
@@ -213,6 +231,36 @@ function ChannelCard(props: {
           <Chip label="unsaved" tone="warn" />
         </If>
       </View>
+
+      <Dialog
+        open={pickerOpen()}
+        onOpenChange={({ open }) => pickerOpen.set(open)}
+        accessibilityLabel={`${props.channel().name} colour`}
+        class="rounded-[12px] border border-border bg-popover p-4 gap-3"
+        style={{ width: dialogWidth(280) }}
+        backdropClass="bg-black/40"
+      >
+        <Text class="text-sm font-semibold text-foreground">
+          {`${props.channel().name} colour`}
+        </Text>
+        <ColorEditor
+          value={hex}
+          onChange={(value) => {
+            dirty.set(true);
+            enabled.set(true);
+            hex.set(value);
+          }}
+        />
+        <View class="flex-row justify-end">
+          <View
+            role="button"
+            class="rounded-[6px] border border-border px-3 py-1.5"
+            onPress={() => pickerOpen.set(false)}
+          >
+            <Text class="text-[11px] text-foreground">Done</Text>
+          </View>
+        </View>
+      </Dialog>
     </View>
   );
 }
@@ -229,6 +277,7 @@ export function Lighting(props: {
   const globalBright = signal(80);
   const touched = signal(false);
   const presetsOpen = signal(false);
+  const globalPickerOpen = signal(false);
 
   effect(() => {
     const list = channels();
@@ -318,7 +367,7 @@ export function Lighting(props: {
     <View class="gap-4">
       <View class="flex-row items-center justify-between gap-3">
         <View class="gap-1">
-          <Text class="text-xl font-semibold text-foreground">Lighting</Text>
+          <Text class="text-2xl font-semibold text-foreground">Lighting</Text>
           <Text class="text-xs text-muted-foreground">
             {channels().length === 0
               ? (device()?.error ?? "The controller reported no lighting channels.")
@@ -336,32 +385,20 @@ export function Lighting(props: {
 
       <Panel title="Global colour" subtitle="Every channel, one colour">
         <View class="flex-row items-end gap-4" style={{ flexWrap: "wrap" }}>
-          <Popover
-            placement="bottom"
-            align="start"
-            popupClass="rounded-[10px] border border-border bg-popover p-3"
-            trigger={
-              <View class="flex-row items-center gap-2">
-                <View
-                  testID="global-colour"
-                  class="h-10 w-14 rounded-[6px] border border-border"
-                  style={{ backgroundColor: globalHex() }}
-                />
-                <Text class="text-sm font-mono text-muted-foreground">
-                  {globalHex().toUpperCase()}
-                </Text>
-              </View>
-            }
+          <View
+            testID="global-colour"
+            class="h-10 w-14 rounded-[6px] border border-border"
+            style={{ backgroundColor: globalHex() }}
+          />
+          <Text class="text-sm font-mono text-muted-foreground">
+            {globalHex().toUpperCase()}
+          </Text>
+          <Button
+            class="rounded-[6px] border border-border px-2.5 py-1"
+            onPress={() => globalPickerOpen.set(true)}
           >
-            <ColorEditor
-              value={globalHex}
-              onChange={(value) => {
-                if (!isHexColor(value)) return;
-                touched.set(true);
-                globalHex.set(value);
-              }}
-            />
-          </Popover>
+            <Text class="text-[11px] text-foreground">Change</Text>
+          </Button>
 
           <View style={{ width: 240 }} class="gap-1">
             <Slider
@@ -411,6 +448,22 @@ export function Lighting(props: {
             </Button>
           </View>
         </View>
+
+        <View class="flex-row items-center gap-1.5" style={{ flexWrap: "wrap" }}>
+          <Each of={PRESETS} key="index">
+            {(preset) => (
+              <ColorSwatch
+                color={preset()}
+                accessibilityLabel={preset()}
+                class="h-6 w-6 rounded-[4px] border border-border"
+                onPress={({ color }) => {
+                  touched.set(true);
+                  globalHex.set(color);
+                }}
+              />
+            )}
+          </Each>
+        </View>
       </Panel>
 
       <Panel title="Frame preview" subtitle="What the controller receives — 10 packets of 20 LEDs">
@@ -458,6 +511,34 @@ export function Lighting(props: {
         store={props.store}
         toast={props.toast}
       />
+
+      <Dialog
+        open={globalPickerOpen()}
+        onOpenChange={({ open }) => globalPickerOpen.set(open)}
+        accessibilityLabel="Global colour"
+        class="rounded-[12px] border border-border bg-popover p-4 gap-3"
+        style={{ width: dialogWidth(280) }}
+        backdropClass="bg-black/40"
+      >
+        <Text class="text-sm font-semibold text-foreground">Global colour</Text>
+        <ColorEditor
+          value={globalHex}
+          onChange={(value) => {
+            touched.set(true);
+            globalHex.set(value);
+          }}
+        />
+        <View class="flex-row justify-end">
+          <View
+            role="button"
+            class="rounded-[6px] border border-border px-3 py-1.5"
+            onPress={() => globalPickerOpen.set(false)}
+          >
+            <Text class="text-[11px] text-foreground">Done</Text>
+          </View>
+        </View>
+      </Dialog>
     </View>
   );
 }
+

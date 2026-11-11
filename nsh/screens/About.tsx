@@ -47,7 +47,7 @@ export function About(props: {
 
   return (
     <View class="gap-4">
-      <Text class="text-xl font-semibold text-foreground">About</Text>
+      <Text class="text-2xl font-semibold text-foreground">About</Text>
 
       <Panel>
         <View class="flex-row items-center gap-4">
@@ -192,3 +192,4 @@ export function About(props: {
     </View>
   );
 }
+

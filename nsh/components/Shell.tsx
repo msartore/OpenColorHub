@@ -12,15 +12,16 @@ export type ScreenId = "dashboard" | "fans" | "leds" | "drivers" | "settings" | 
 export interface ScreenMeta {
   id: ScreenId;
   label: string;
+  glyph: string;
 }
 
 export const SCREENS: readonly ScreenMeta[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "fans", label: "Fan control" },
-  { id: "leds", label: "Lighting" },
-  { id: "drivers", label: "Drivers" },
-  { id: "settings", label: "Settings" },
-  { id: "about", label: "About" },
+  { id: "dashboard", label: "Dashboard", glyph: "▦" },
+  { id: "fans", label: "Fan control", glyph: "◉" },
+  { id: "leds", label: "Lighting", glyph: "✦" },
+  { id: "drivers", label: "Drivers", glyph: "⇩" },
+  { id: "settings", label: "Settings", glyph: "⚙" },
+  { id: "about", label: "About", glyph: "ⓘ" },
 ];
 
 export interface Toast {
@@ -47,7 +48,13 @@ export function Shell(props: {
   const wide = () => layoutSize() !== "narrow";
 
   return (
-    <View class="flex-1 flex-row bg-background">
+    <View
+      class="flex-1 flex-row bg-background"
+      style={{
+        backgroundImage:
+          "radial-gradient(70% 45% at 8% -10%, rgba(74,222,128,0.07), transparent 70%), repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 44px), repeating-linear-gradient(90deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 44px)",
+      }}
+    >
       <View
         class="border-r border-border bg-sidebar py-4 gap-4"
         style={{
@@ -55,6 +62,8 @@ export function Shell(props: {
           paddingLeft: wide() ? 12 : 6,
           paddingRight: wide() ? 12 : 6,
           alignItems: wide() ? "stretch" : "center",
+          backgroundImage:
+            "linear-gradient(180deg, rgba(74,222,128,0.055), transparent 240px)",
         }}
       >
         <View
@@ -83,16 +92,26 @@ export function Shell(props: {
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: wide() ? "flex-start" : "center",
-                  gap: 8,
+                  gap: 10,
                   paddingLeft: wide() ? 10 : 0,
                   paddingRight: wide() ? 10 : 0,
                   paddingTop: 8,
                   paddingBottom: 8,
+                  borderLeftWidth: 2,
+                  borderLeftColor: props.screen === item().id ? "#4ade80" : "transparent",
                 }}
                 onPress={() => props.onNavigate(item().id)}
                 accessibilityLabel={item().label}
               >
-                <Text class="text-sm">{wide() ? item().label : item().label.slice(0, 1)}</Text>
+                <Text
+                  class="text-base"
+                  style={{ color: props.screen === item().id ? "#4ade80" : "#6f8090" }}
+                >
+                  {item().glyph}
+                </Text>
+                <If when={wide()}>
+                  <Text class="text-sm">{item().label}</Text>
+                </If>
               </Button>
             )}
           </Each>

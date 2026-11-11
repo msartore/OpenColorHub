@@ -5,7 +5,7 @@
  * tested.
  */
 
-import type { AutostartState, Settings, SettingsPatch } from "../../domain/model";
+import type { AutostartState, ElevationState, PawnioStatus, Settings, SettingsPatch } from "../../domain/model";
 
 export interface AutostartPort {
   setAutostart(enabled: boolean): Promise<AutostartState>;
@@ -26,4 +26,16 @@ export async function setAutostart(
   if (!enabled) return { state, settings: null };
   const settings = await port.saveSettings({ reapply_led_on_launch: true });
   return { state, settings };
+}
+
+/**
+ * Ask for elevation only when it would change something: PawnIO is installed
+ * but this process cannot open it. An uninstalled driver needs an install
+ * first, and a ready one needs nothing.
+ */
+export function shouldOfferElevation(
+  elevation: ElevationState,
+  pawnio: PawnioStatus,
+): boolean {
+  return !elevation.elevated && elevation.can_request && pawnio.state === "denied";
 }

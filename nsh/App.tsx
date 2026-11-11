@@ -5,8 +5,10 @@
 
 import { Text, View, Storage, cleanup, effect, keymap, mount, signal } from "nsh";
 import { Application, Tray, Window, currentWindow } from "nsh/desktop";
+import { AlertDialog } from "nsh/base";
 
 import { createDeps } from "./app/composition/deps";
+import { shouldOfferElevation } from "./app/application/usecases/system";
 import { SCREENS, Shell, type ScreenId, type Toast } from "./components/Shell";
 import { About } from "./screens/About";
 import { Dashboard } from "./screens/Dashboard";
@@ -50,6 +52,52 @@ function App() {
     if (SCREENS.some((entry) => entry.id === saved) && saved !== screen()) {
       screen.set(saved as ScreenId);
     }
+  });
+
+  /**
+   * Ask before elevating. The installer is per-user and intentionally does not
+   * request administrator; PawnIO's driver does need it, so the user consents
+   * here and Windows shows its own UAC prompt on the relaunch. A simulated
+   * backend is never asked: it has nothing to gain from the driver.
+   */
+  const offerElevation = async (): Promise<void> => {
+    if (deps.store.settings().backend === "simulated") return;
+    try {
+      const [elevation, pawnio] = await Promise.all([
+        deps.store.system.elevation(),
+        deps.store.pawnio.status(),
+      ]);
+      if (!shouldOfferElevation(elevation, pawnio)) return;
+
+      const answer = await AlertDialog.show({
+        title: "Fan control needs administrator rights",
+        description:
+          "PawnIO is installed, but this process cannot open its driver. Lighting, settings and the dashboard work without it. Restart OpenColorHub as administrator to read fans and write curves.",
+        actions: [
+          { id: "continue", label: "Continue without fan control", role: "cancel" },
+          { id: "restart", label: "Restart as administrator", role: "default" },
+        ],
+      });
+      if (answer.action !== "restart") return;
+
+      const outcome = await deps.store.system.requestElevation();
+      if (outcome === "launched") {
+        // The elevated copy takes over; this process must not keep the
+        // single-instance lock or the driver handle.
+        Application.quit();
+      } else {
+        toast("Elevation cancelled — still running as a standard user", "warn");
+      }
+    } catch (error) {
+      toast(String(error), "danger");
+    }
+  };
+
+  let elevationAsked = false;
+  effect(() => {
+    if (!deps.store.loaded() || elevationAsked) return;
+    elevationAsked = true;
+    void offerElevation();
   });
 
   const shortcuts = SCREENS.map((entry, index) =>

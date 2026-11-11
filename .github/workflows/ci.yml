@@ -29,19 +29,6 @@ jobs:
         with:
           workspaces: ". -> target"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Linux windowing dependencies
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
-            libgtk-3-dev
-
       - name: Formatting
         run: cargo fmt --all -- --check
 
@@ -51,15 +38,45 @@ jobs:
       - name: Core + CLI tests
         run: cargo test --workspace
 
-      - name: Frontend deps
-        run: npm ci
+  # The NSH app is checked separately: it needs the `nsh` toolchain and runs
+  # the TSX screens headless. Tauri is gone; there is no npm build any more.
+  nsh:
+    name: nsh (windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Frontend build (tsc + vite)
-        run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
 
-  # The release job only runs on a tag, so the CLI packaging is exercised here
-  # on every push: a broken asset path or maintainer-script reference should
-  # fail the PR, not the release.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "nsh -> target"
+
+      - name: Install NSH
+        run: irm https://nsh.dev/install.ps1 | iex
+
+      - name: Put nsh and cargo on PATH
+        run: |
+          "$env:LOCALAPPDATA\nsh\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Check
+        run: nsh check nsh
+
+      - name: Build
+        run: nsh build nsh
+
+      - name: Tests (simulator, no hardware)
+        run: |
+          $env:OPENCOLORHUB_SIM = "1"
+          $env:OPENCOLORHUB_DATA_DIR = Join-Path $env:RUNNER_TEMP "opencolorhub-nsh-tests"
+          $env:OPENCOLORHUB_DRIVERS_FIXTURE = Join-Path $env:GITHUB_WORKSPACE "nsh/test-fixtures/drivers.json"
+          Remove-Item -Recurse -Force $env:OPENCOLORHUB_DATA_DIR -ErrorAction SilentlyContinue
+          nsh test nsh
+
   cli-package:
     name: cli deb (ubuntu-22.04)
     runs-on: ubuntu-22.04
@@ -101,54 +118,3 @@ jobs:
             }
           done
           echo "package contents verified"
-
-  desktop:
-    name: desktop build (${{ matrix.os }})
-    needs: check
-    if: github.event_name == 'push'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            args: "--bundles deb,appimage"
-          - os: windows-latest
-            args: "--bundles nsis,msi"
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Linux windowing dependencies
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
-            libgtk-3-dev
-
-      - run: npm ci
-
-      - name: Build bundles
-        run: npm run tauri build -- ${{ matrix.args }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: opencolorhub-${{ matrix.os }}
-          path: |
-            target/release/bundle/**/*.deb
-            target/release/bundle/**/*.rpm
-            target/release/bundle/**/*.AppImage
-            target/release/bundle/**/*.msi
-            target/release/bundle/**/*.exe
-            target/release/bundle/**/*.dmg
-          if-no-files-found: warn

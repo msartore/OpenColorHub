@@ -34,7 +34,9 @@ export function rgbToHex(color: Rgb): string {
 
 /** Three bytes from `#rgb` / `#rrggbb` (falls back to black). */
 export function hexToRgb(hex: string): [number, number, number] {
-  const clean = hex.trim().replace(/^#/, "");
+  let clean = hex.trim().replace(/^#/, "");
+  // The picker can report an alpha byte; the wire is three bytes.
+  if (/^[0-9a-fA-F]{8}$/.test(clean)) clean = clean.slice(0, 6);
   const full =
     clean.length === 3
       ? clean
