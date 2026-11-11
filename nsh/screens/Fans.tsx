@@ -10,6 +10,7 @@ import type {
   FanHeaderId,
   FanProfileId,
   FanStatus,
+  PawnioStatus,
 } from "../app/domain/model";
 import {
   DEFAULT_CURVE,
@@ -23,6 +24,7 @@ import {
 import { dutyColor, fanModeLabel, formatRpm } from "../app/presentation/format";
 import { confirmWrite } from "../components/confirm";
 import { CurveChart } from "../components/CurveChart";
+import { PawnioDialog } from "../components/PawnioDialog";
 import { SetupsDialog } from "../components/SetupsDialog";
 import { Bar, Chip, Notice, Panel } from "../components/ui";
 
@@ -244,6 +246,15 @@ export function Fans(props: {
   );
 
   const presetsOpen = signal(false);
+  const pawnio = signal<PawnioStatus | null>(null);
+  const pawnioOpen = signal(false);
+
+  void props.store.pawnio
+    .status()
+    .then((status) => pawnio.set(status))
+    .catch(() => {
+      // The probe must not break the screen.
+    });
 
   const temperature = (): number | null => props.store.snapshot()?.temperature_c ?? null;
 
@@ -339,6 +350,39 @@ export function Fans(props: {
         </Notice>
       </If>
 
+      <If
+        when={
+          pawnio() !== null &&
+          (pawnio()!.state === "not_installed" || pawnio()!.state === "denied")
+        }
+      >
+        <Notice
+          tone="warn"
+          title={
+            pawnio()?.state === "denied"
+              ? "Fan readings need administrator rights"
+              : "Fan readings are simulated"
+          }
+        >
+          <View class="gap-2">
+            <Text class="text-xs text-muted-foreground">
+              {pawnio()?.state === "denied"
+                ? "PawnIO is installed but this process cannot open it."
+                : "PawnIO is not installed, so fan control reads synthetic values."}
+            </Text>
+            <Button
+              testID="pawnio-open"
+              class="rounded-[6px] bg-primary px-2.5 py-1"
+              onPress={() => pawnioOpen.set(true)}
+            >
+              <Text class="text-[11px] text-primary-foreground">
+                {pawnio()?.state === "denied" ? "Restart as administrator" : "Install PawnIO"}
+              </Text>
+            </Button>
+          </View>
+        </Notice>
+      </If>
+
       <Panel title="Profiles" subtitle="Applied to every header the board exposes">
         <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
           <Each of={PROFILES} key={(profile) => profile.id}>
@@ -398,6 +442,19 @@ export function Fans(props: {
         store={props.store}
         toast={props.toast}
       />
+
+      <If when={pawnio()}>
+        {(status) => (
+          <PawnioDialog
+            status={status()}
+            open={pawnioOpen}
+            onOpenChange={pawnioOpen.set}
+            onStatus={pawnio.set}
+            store={props.store}
+            toast={props.toast}
+          />
+        )}
+      </If>
     </View>
   );
 }

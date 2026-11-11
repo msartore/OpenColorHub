@@ -19,7 +19,7 @@ use colorctl_core::service::ActionResult;
 use colorctl_core::settings::{BackendMode, Settings, SettingsPatch};
 use colorctl_core::setups::{Setup, SetupKind, SetupStore};
 use colorctl_core::{CURVE_POINTS, CurvePoint, FanCurve, FanProfile, Service};
-use colorctl_core::{autostart, platform};
+use colorctl_core::{autostart, pawnio_install, platform};
 use nsh_core::prelude::*;
 
 /// The crate's UI set: one class, `new Controller()`.
@@ -691,6 +691,67 @@ impl Controller {
     pub async fn reveal_driver(this: Instance<Self>, path: String) -> Result<(), String> {
         let _ = this;
         reveal_path(path).await
+    }
+
+    /// Whether fan control can reach PawnIO's driver.
+    pub fn pawnio_status_json(&self) -> Result<String, String> {
+        to_json(&platform::pawnio_status())
+    }
+
+    /// Downloads the pinned, verified installer and runs it with its own UI,
+    /// posting `{received, total}` while the download runs. Then re-probes the
+    /// backends so the caller sees the new status.
+    pub async fn install_pawnio_json(
+        this: Instance<Self>,
+        listener: Callback<String>,
+    ) -> Result<String, String> {
+        let Some(dir) = this.with(|controller| {
+            controller
+                .lock()
+                .ok()
+                .map(|inner| inner.data_dir.join("tools"))
+        }) else {
+            return Err("the state lock is poisoned — restart OpenColorHub".to_string());
+        };
+
+        let (sender, receiver) = std::sync::mpsc::channel::<String>();
+        let job = blocking(move || {
+            pawnio_install::download(&dir, |received, total| {
+                let payload = serde_json::json!({ "received": received, "total": total });
+                let _ = sender.send(payload.to_string());
+            })
+        });
+
+        let done = Arc::new(AtomicBool::new(false));
+        let flag = done.clone();
+        spawn(async move {
+            while !flag.load(Ordering::SeqCst) {
+                timer(Duration::from_millis(120)).await;
+                while let Ok(message) = receiver.try_recv() {
+                    listener.post(message);
+                }
+            }
+        });
+
+        let installer = job
+            .await
+            .map_err(|error| format!("download panicked: {error}"))?
+            .map_err(|error| error.to_string())?;
+        done.store(true, Ordering::SeqCst);
+
+        blocking(move || pawnio_install::run_installer(&installer))
+            .await
+            .map_err(|error| format!("installer panicked: {error}"))?
+            .map_err(|error| error.to_string())?;
+
+        this.with(|controller| {
+            if let Ok(mut inner) = controller.lock() {
+                if let Ok(service) = inner.service_mut() {
+                    service.reload_backends();
+                }
+            }
+        });
+        to_json(&platform::pawnio_status())
     }
 
     /// Ticks the service off the engine thread and posts a JSON snapshot.

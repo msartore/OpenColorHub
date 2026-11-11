@@ -35,6 +35,8 @@ import type {
   ElevationState,
   FanHeaderId,
   FanProfileId,
+  PawnioProgress,
+  PawnioStatus,
   Settings,
   SettingsPatch,
   SetupKind,
@@ -91,6 +93,11 @@ export interface DriverCommands {
   reveal(path: string): Promise<void>;
 }
 
+export interface PawnioCommands {
+  status(): Promise<PawnioStatus>;
+  install(onProgress: (progress: PawnioProgress) => void): Promise<PawnioStatus>;
+}
+
 export interface AppStore {
   snapshot: Accessor<Snapshot | null>;
   settings: Accessor<Settings>;
@@ -102,6 +109,7 @@ export interface AppStore {
   system: SystemCommands;
   setups: SetupCommands;
   drivers: DriverCommands;
+  pawnio: PawnioCommands;
   /** Loads settings, the first snapshot and build facts, then subscribes. */
   start(): Promise<void>;
   refresh(): Promise<void>;
@@ -206,6 +214,11 @@ export function createStore(port: ColorHubPort): AppStore {
     reveal: (path) => port.revealDriver(path),
   };
 
+  const pawnio: PawnioCommands = {
+    status: () => port.pawnioStatus(),
+    install: (onProgress) => port.installPawnio(onProgress),
+  };
+
   return {
     snapshot,
     settings,
@@ -217,6 +230,7 @@ export function createStore(port: ColorHubPort): AppStore {
     system,
     setups,
     drivers,
+    pawnio,
 
     async start() {
       try {

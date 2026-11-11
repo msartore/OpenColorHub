@@ -3,11 +3,11 @@
  * native adapter and the store; screens receive them, never a `Controller`.
  */
 
-import { Text, View, mount, signal } from "nsh";
+import { Text, View, cleanup, effect, keymap, mount, signal } from "nsh";
 import { Application, Tray, currentWindow } from "nsh/desktop";
 
 import { createDeps } from "./app/composition/deps";
-import { Shell, type ScreenId, type Toast } from "./components/Shell";
+import { SCREENS, Shell, type ScreenId, type Toast } from "./components/Shell";
 import { About } from "./screens/About";
 import { Dashboard } from "./screens/Dashboard";
 import { Drivers } from "./screens/Drivers";
@@ -40,6 +40,24 @@ function App() {
       });
     }
   };
+
+  // Restore the last screen once settings have loaded.
+  let restored = false;
+  effect(() => {
+    if (!deps.store.loaded() || restored) return;
+    restored = true;
+    const saved = deps.store.settings().last_screen;
+    if (SCREENS.some((entry) => entry.id === saved) && saved !== screen()) {
+      screen.set(saved as ScreenId);
+    }
+  });
+
+  const shortcuts = SCREENS.map((entry, index) =>
+    keymap.bind(`mod+${index + 1}`, () => navigate(entry.id)),
+  );
+  cleanup(() => {
+    for (const stop of shortcuts) stop();
+  });
 
   const win = currentWindow();
   if (!deps.controller.minimized) win.show();

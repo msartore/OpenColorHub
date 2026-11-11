@@ -2,7 +2,14 @@
 
 import { Application } from "nsh/desktop";
 import { Clipboard, Text, View, effect, signal } from "nsh";
-import { AlertDialog, Button, Slider, Switch } from "nsh/base";
+import { AlertDialog, Button, Progress, Slider, Switch } from "nsh/base";
+import {
+  checkForUpdate,
+  downloadUpdate,
+  installAndRestart,
+  shellInfo,
+  type AppUpdate,
+} from "nsh/updater";
 
 import type { AppStore } from "../app/composition/store";
 import type {
@@ -16,7 +23,7 @@ import type {
 } from "../app/domain/model";
 import { FAN_HEADERS } from "../app/domain/fan";
 import { SETTINGS_RESET_PATCH } from "../app/domain/settings";
-import { Panel } from "../components/ui";
+import { KeyValue, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -103,6 +110,12 @@ export function SettingsScreen(props: {
   const elevation = signal<ElevationState | null>(null);
   const autostart = signal<AutostartState | null>(null);
   const about = signal<AboutInfo | null>(null);
+  const update = signal<AppUpdate | null>(null);
+  const checking = signal(false);
+  const installing = signal(false);
+  const updateLine = signal("");
+  const updateProgress = signal<{ received: number; total: number | null } | null>(null);
+  const shell = shellInfo();
 
   effect(() => {
     const next = props.store.settings();
@@ -205,9 +218,110 @@ export function SettingsScreen(props: {
     }
   };
 
+  const check = async (): Promise<void> => {
+    checking.set(true);
+    updateLine.set("");
+    try {
+      const found = await checkForUpdate();
+      update.set(found);
+      if (found) {
+        updateLine.set(`Version ${found.version} is available.`);
+      } else if (!shell.version) {
+        updateLine.set("Update checks need the packaged build.");
+      } else {
+        updateLine.set(`Up to date — ${shell.version} is the newest release.`);
+      }
+    } catch (error) {
+      updateLine.set(`Check failed: ${String(error)}`);
+    } finally {
+      checking.set(false);
+    }
+  };
+
+  const install = async (): Promise<void> => {
+    installing.set(true);
+    updateProgress.set(null);
+    updateLine.set("Downloading the update…");
+    try {
+      await downloadUpdate((frame) => {
+        updateProgress.set({ received: frame.received, total: frame.total ?? null });
+        updateLine.set(
+          frame.total
+            ? `Downloading… ${Math.min(100, Math.round((frame.received / frame.total) * 100))}%`
+            : `Downloading… ${frame.received} bytes`,
+        );
+      });
+      updateLine.set("Restarting…");
+      await installAndRestart();
+    } catch (error) {
+      updateLine.set(`Update failed: ${String(error)}`);
+    } finally {
+      installing.set(false);
+    }
+  };
+
   return (
     <View class="gap-4">
       <Text class="text-xl font-semibold text-foreground">Settings</Text>
+
+      <Panel title="Updates" subtitle="GitHub releases, verified before they replace the app">
+        <View class="gap-1">
+          <KeyValue label="version" value={shell.version ?? "development"} />
+          <KeyValue label="NSH runtime" value={shell.nshVersion} />
+        </View>
+        <If when={updateLine()}>
+          {(line) => <Text class="text-[11px] text-muted-foreground">{line()}</Text>}
+        </If>
+        <If when={updateProgress()}>
+          {(frame) => (
+            <View class="gap-1">
+              <Progress
+                value={
+                  frame().total
+                    ? Math.min(100, Math.round((frame().received / frame().total!) * 100))
+                    : 0
+                }
+                indeterminate={!frame().total}
+                class="h-1"
+                trackClass="h-1 rounded-full bg-muted"
+                indicatorClass="h-1 rounded-full bg-primary"
+              />
+            </View>
+          )}
+        </If>
+        <If when={update()}>
+          {(found) => (
+            <View class="gap-2">
+              <Text class="text-xs text-foreground">{`OpenColorHub ${found().version} is available.`}</Text>
+              <If when={found().notes}>
+                <Text class="text-[11px] text-muted-foreground">
+                  {found().notes?.slice(0, 900)}
+                </Text>
+              </If>
+              <Button
+                testID="updates-install"
+                class="rounded-[7px] bg-primary px-3 py-1.5"
+                disabled={installing()}
+                onPress={() => void install()}
+              >
+                <Text class="text-xs text-primary-foreground">
+                  {installing() ? "Installing…" : "Download & install"}
+                </Text>
+              </Button>
+            </View>
+          )}
+        </If>
+        <View class="flex-row gap-2">
+          <Button
+            testID="updates-check"
+            class="rounded-[7px] border border-border px-3 py-1.5"
+            disabled={checking()}
+            onPress={() => void check()}
+          >
+            <Text class="text-xs text-foreground">{checking() ? "Checking…" : "Check now"}</Text>
+          </Button>
+        </View>
+      </Panel>
 
       <Panel title="Backend" subtitle="Where readings come from">
         <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>

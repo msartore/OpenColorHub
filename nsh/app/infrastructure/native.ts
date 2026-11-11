@@ -23,6 +23,8 @@ import type {
   ElevationState,
   FanHeaderId,
   FanProfileId,
+  PawnioProgress,
+  PawnioStatus,
   Settings,
   SettingsPatch,
   SetupKind,
@@ -101,6 +103,22 @@ export function createNativePort(controller: Controller): ColorHubPort {
     revealDriver: async (path: string) => {
       try {
         await controller.revealDriver(path);
+      } catch (error) {
+        throw toAppError(error);
+      }
+    },
+
+    pawnioStatus: () => call<PawnioStatus>(() => controller.pawnioStatusJson()),
+    installPawnio: async (onProgress: (progress: PawnioProgress) => void) => {
+      try {
+        const json = await controller.installPawnioJson((progress) => {
+          try {
+            onProgress(parse<PawnioProgress>(progress));
+          } catch (error) {
+            console.error("PawnIO progress could not be read", error);
+          }
+        });
+        return parse<PawnioStatus>(json);
       } catch (error) {
         throw toAppError(error);
       }

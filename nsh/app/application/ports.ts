@@ -20,6 +20,8 @@ import type {
   ElevationState,
   FanHeaderId,
   FanProfileId,
+  PawnioProgress,
+  PawnioStatus,
   Settings,
   SettingsPatch,
   SetupKind,
@@ -79,6 +81,11 @@ export interface DriverPort {
   revealDriver(path: string): Promise<void>;
 }
 
+export interface PawnioPort {
+  pawnioStatus(): Promise<PawnioStatus>;
+  installPawnio(onProgress: (progress: PawnioProgress) => void): Promise<PawnioStatus>;
+}
+
 export interface SystemPort {
   about(): Promise<AboutInfo>;
   elevation(): Promise<ElevationState>;
@@ -95,4 +102,5 @@ export interface ColorHubPort
     LightingPort,
     SetupPort,
     DriverPort,
+    PawnioPort,
     SystemPort {}
