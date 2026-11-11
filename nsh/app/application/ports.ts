@@ -10,13 +10,17 @@ import type {
   AboutInfo,
   ActionResult,
   ActivityEntry,
+  AutostartState,
+  ChannelId,
   CurvePoint,
+  ElevationState,
   FanHeaderId,
   FanProfileId,
   Settings,
   SettingsPatch,
   Snapshot,
 } from "../domain/model";
+import type { Rgb } from "../domain/lighting";
 
 export type Unlisten = () => void;
 
@@ -38,8 +42,25 @@ export interface FanPort {
   applyProfile(headers: FanHeaderId[], profile: FanProfileId): Promise<ActionResult>;
 }
 
+export interface LightingPort {
+  setChannel(
+    channel: ChannelId,
+    color: Rgb,
+    brightness: number,
+    enabled: boolean,
+  ): Promise<ActionResult>;
+  setAllChannels(color: Rgb, brightness: number, enabled: boolean): Promise<ActionResult>;
+  setBrightness(percent: number): Promise<ActionResult>;
+  turnOffChannel(channel: ChannelId): Promise<ActionResult>;
+  applyLed(): Promise<ActionResult>;
+}
+
 export interface SystemPort {
   about(): Promise<AboutInfo>;
+  elevation(): Promise<ElevationState>;
+  requestElevation(): Promise<string>;
+  autostart(): Promise<AutostartState>;
+  setAutostart(enabled: boolean): Promise<AutostartState>;
   shutdown(): void;
 }
 
@@ -47,4 +68,5 @@ export interface ColorHubPort
   extends TelemetryPort,
     SettingsPort,
     FanPort,
+    LightingPort,
     SystemPort {}

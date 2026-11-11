@@ -7,12 +7,7 @@
 import type { ActionResult, CurvePoint, FanHeaderId, FanProfileId } from "../../domain/model";
 import { PUMP_FLOOR_PERCENT, clampDuty, validateCurve } from "../../domain/fan";
 import { AppError } from "../errors";
-
-export interface FanPort {
-  setFanPercent(header: FanHeaderId, percent: number): Promise<ActionResult>;
-  setFanCurve(header: FanHeaderId, points: CurvePoint[]): Promise<ActionResult>;
-  applyProfile(headers: FanHeaderId[], profile: FanProfileId): Promise<ActionResult>;
-}
+import type { FanPort } from "../ports";
 
 export interface SetDutyInput {
   header: FanHeaderId;

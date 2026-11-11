@@ -13,13 +13,17 @@ import type {
   AboutInfo,
   ActionResult,
   ActivityEntry,
+  AutostartState,
+  ChannelId,
   CurvePoint,
+  ElevationState,
   FanHeaderId,
   FanProfileId,
   Settings,
   SettingsPatch,
   Snapshot,
 } from "../domain/model";
+import type { Rgb } from "../domain/lighting";
 
 function parse<T>(json: string): T {
   return JSON.parse(json) as T;
@@ -43,6 +47,11 @@ export function createNativePort(controller: Controller): ColorHubPort {
     about: () => call<AboutInfo>(() => controller.aboutJson()),
     activity: () => call<ActivityEntry[]>(() => controller.activityJson()),
     reloadState: () => call<Snapshot>(() => controller.reloadStateJson()),
+    elevation: () => call<ElevationState>(() => controller.elevationJson()),
+    requestElevation: () => call<string>(() => controller.requestElevation()),
+    autostart: () => call<AutostartState>(() => controller.autostartJson()),
+    setAutostart: (enabled: boolean) =>
+      call<AutostartState>(() => controller.setAutostart(enabled)),
 
     setFanPercent: (header: FanHeaderId, percent: number) =>
       call<ActionResult>(() => controller.setFanPercent(header, percent)),
@@ -50,6 +59,29 @@ export function createNativePort(controller: Controller): ColorHubPort {
       call<ActionResult>(() => controller.setFanCurve(header, JSON.stringify(points))),
     applyProfile: (headers: FanHeaderId[], profile: FanProfileId) =>
       call<ActionResult>(() => controller.applyProfile(JSON.stringify(headers), profile)),
+
+    setChannel: (channel: ChannelId, color: Rgb, brightness: number, enabled: boolean) =>
+      call<ActionResult>(() =>
+        controller.setChannel(
+          channel,
+          JSON.stringify([color[0], color[1], color[2]]),
+          Math.round(brightness),
+          enabled,
+        ),
+      ),
+    setAllChannels: (color: Rgb, brightness: number, enabled: boolean) =>
+      call<ActionResult>(() =>
+        controller.setAllChannels(
+          JSON.stringify([color[0], color[1], color[2]]),
+          Math.round(brightness),
+          enabled,
+        ),
+      ),
+    setBrightness: (percent: number) =>
+      call<ActionResult>(() => controller.setBrightness(Math.round(percent))),
+    turnOffChannel: (channel: ChannelId) =>
+      call<ActionResult>(() => controller.turnOffChannel(channel)),
+    applyLed: () => call<ActionResult>(() => controller.applyLed()),
 
     onTelemetry: (listener) => {
       void controller.startTelemetry((json) => {

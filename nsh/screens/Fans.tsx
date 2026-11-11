@@ -1,7 +1,7 @@
 /** Fan control: live duty, the pump floor, profiles and the four-point curve. */
 
 import { Text, View, computed, effect, signal } from "nsh";
-import { AlertDialog, Button, NumberInput, Slider } from "nsh/base";
+import { Button, NumberInput, Slider } from "nsh/base";
 import type { Accessor } from "nsh";
 
 import type { AppStore } from "../app/composition/store";
@@ -10,7 +10,6 @@ import type {
   FanHeaderId,
   FanProfileId,
   FanStatus,
-  Settings,
 } from "../app/domain/model";
 import {
   DEFAULT_CURVE,
@@ -22,23 +21,11 @@ import {
   setCurvePoint,
 } from "../app/domain/fan";
 import { dutyColor, fanModeLabel, formatRpm } from "../app/presentation/format";
+import { confirmWrite } from "../components/confirm";
 import { CurveChart } from "../components/CurveChart";
 import { Bar, Chip, Notice, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
-
-async function confirmWrite(settings: Settings, message: string): Promise<boolean> {
-  if (!settings.confirm_writes) return true;
-  const answer = await AlertDialog.show({
-    title: "Confirm hardware write",
-    description: message,
-    actions: [
-      { id: "cancel", label: "Cancel", role: "cancel" },
-      { id: "write", label: "Write", role: "destructive" },
-    ],
-  });
-  return answer.action === "write";
-}
 
 function curveLabel(points: readonly CurvePoint[]): string {
   return points.map((point) => `${point.temp_c} °C · ${point.percent}%`).join("   ");

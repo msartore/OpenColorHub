@@ -128,11 +128,43 @@ export interface ActivityEntry {
   message: string;
 }
 
+export interface ElevationState {
+  elevated: boolean;
+  can_request: boolean;
+  detail: string;
+}
+
+export interface AutostartState {
+  /** False on platforms with no implementation. */
+  supported: boolean;
+  /** Whether the OS currently has a logon entry for this user. */
+  enabled: boolean;
+  /** `logon-task`, `xdg-autostart` or `none`. */
+  mechanism: string;
+  /** Where the entry lives, shown verbatim. */
+  detail: string;
+}
+
+export interface BuildMeta {
+  version: string;
+  tauri: string | null;
+  rustc: string;
+  profile: string;
+  os: string;
+  arch: string;
+  family: string;
+}
+
 export interface AboutInfo {
   name: string;
   version: string;
   tagline: string;
   license: string;
+  build: BuildMeta;
+  upstream: { name: string; url: string; author: string; license: string };
+  chip: string;
+  chip_id: number;
+  total_leds: number;
   board: BoardInfo;
   paths: {
     data_dir: string;

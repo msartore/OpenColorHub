@@ -7,9 +7,21 @@ import { signal, type Accessor } from "nsh";
 
 import type { ColorHubPort } from "../application/ports";
 import { applyFanProfile, setFanCurve, setFanDuty } from "../application/usecases/fans";
+import {
+  allOff as turnAllOff,
+  dimChannels,
+  setAllFromHex,
+  setChannel as setChannelUseCase,
+  turnOffChannel,
+} from "../application/usecases/lighting";
+import { setAutostart as setAutostartUseCase } from "../application/usecases/system";
 import type {
+  AboutInfo,
   ActionResult,
+  AutostartState,
+  ChannelId,
   CurvePoint,
+  ElevationState,
   FanHeaderId,
   FanProfileId,
   Settings,
@@ -17,6 +29,7 @@ import type {
   Snapshot,
 } from "../domain/model";
 import { isPumpHeader } from "../domain/fan";
+import { hexToRgb } from "../domain/lighting";
 import { DEFAULT_SETTINGS, mergeSettings } from "../domain/settings";
 
 export interface FanCommands {
@@ -26,6 +39,27 @@ export interface FanCommands {
   applyProfile(profile: FanProfileId): Promise<string>;
 }
 
+export interface LightingCommands {
+  setChannel(
+    channel: ChannelId,
+    hex: string,
+    brightness: number,
+    enabled: boolean,
+  ): Promise<string>;
+  setAll(hex: string, brightness: number): Promise<string>;
+  dim(percent: number): Promise<string>;
+  off(channel: ChannelId): Promise<string>;
+  allOff(): Promise<string>;
+}
+
+export interface SystemCommands {
+  about(): Promise<AboutInfo>;
+  elevation(): Promise<ElevationState>;
+  requestElevation(): Promise<string>;
+  autostart(): Promise<AutostartState>;
+  setAutostart(enabled: boolean): Promise<AutostartState>;
+}
+
 export interface AppStore {
   snapshot: Accessor<Snapshot | null>;
   settings: Accessor<Settings>;
@@ -33,6 +67,8 @@ export interface AppStore {
   loaded: Accessor<boolean>;
   error: Accessor<string | null>;
   fans: FanCommands;
+  lighting: LightingCommands;
+  system: SystemCommands;
   /** Loads settings, the first snapshot and build facts, then subscribes. */
   start(): Promise<void>;
   refresh(): Promise<void>;
@@ -84,6 +120,42 @@ export function createStore(port: ColorHubPort): AppStore {
     },
   };
 
+  const lighting: LightingCommands = {
+    async setChannel(channel, hex, brightness, enabled) {
+      const result = await setChannelUseCase(port, {
+        channel,
+        color: hexToRgb(hex),
+        brightness,
+        enabled,
+      });
+      return applyResult(result);
+    },
+    async setAll(hex, brightness) {
+      return applyResult(await setAllFromHex(port, hex, brightness));
+    },
+    async dim(percent) {
+      return applyResult(await dimChannels(port, percent));
+    },
+    async off(channel) {
+      return applyResult(await turnOffChannel(port, channel));
+    },
+    async allOff() {
+      return applyResult(await turnAllOff(port));
+    },
+  };
+
+  const system: SystemCommands = {
+    about: () => port.about(),
+    elevation: () => port.elevation(),
+    requestElevation: () => port.requestElevation(),
+    autostart: () => port.autostart(),
+    async setAutostart(enabled) {
+      const outcome = await setAutostartUseCase(port, enabled);
+      if (outcome.settings) settings.set(outcome.settings);
+      return outcome.state;
+    },
+  };
+
   return {
     snapshot,
     settings,
@@ -91,6 +163,8 @@ export function createStore(port: ColorHubPort): AppStore {
     loaded,
     error,
     fans,
+    lighting,
+    system,
 
     async start() {
       try {

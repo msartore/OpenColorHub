@@ -13,9 +13,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use colorctl_core::about::{AboutInfo, AboutParams};
-use colorctl_core::model::FanHeader;
+use colorctl_core::model::{Channel, ChannelConfig, FanHeader};
 use colorctl_core::settings::{BackendMode, Settings, SettingsPatch};
 use colorctl_core::{CURVE_POINTS, CurvePoint, FanCurve, FanProfile, Service};
+use colorctl_core::{autostart, platform};
 use nsh_core::prelude::*;
 
 /// The crate's UI set: one class, `new Controller()`.
@@ -30,6 +31,7 @@ struct Inner {
     error: Option<String>,
     settings: Settings,
     settings_path: PathBuf,
+    settings_warning: Option<String>,
     data_dir: PathBuf,
 }
 
@@ -96,6 +98,22 @@ fn parse_profile(id: &str) -> Result<FanProfile, String> {
     }
 }
 
+fn parse_channel(id: &str) -> Result<Channel, String> {
+    Channel::from_id(id).ok_or_else(|| format!("unknown lighting channel: {id}"))
+}
+
+fn parse_color(json: &str) -> Result<[u8; 3], String> {
+    let parts: Vec<u8> =
+        serde_json::from_str(json).map_err(|error| format!("invalid colour: {error}"))?;
+    parts
+        .try_into()
+        .map_err(|_| "a colour needs exactly three bytes (r, g, b)".to_string())
+}
+
+fn parse_level(percent: u32, label: &str) -> Result<u8, String> {
+    u8::try_from(percent).map_err(|_| format!("{label} {percent}% is outside 0–100%"))
+}
+
 /// The one object TSX holds. Its Rust value lives on the engine thread; the
 /// service is shared with a blocking thread only through this `Arc<Mutex<_>>`.
 #[class]
@@ -159,6 +177,7 @@ impl Controller {
                 error,
                 settings,
                 settings_path,
+                settings_warning: warning,
                 data_dir,
             })),
             minimized: std::env::args().any(|arg| arg == "--minimized"),
@@ -183,6 +202,43 @@ impl Controller {
     pub fn settings_json(&self) -> Result<String, String> {
         let inner = self.lock()?;
         to_json(&inner.settings)
+    }
+
+    /// A settings file that could not be read, when there was one.
+    #[getter]
+    pub fn settings_warning(&self) -> Option<String> {
+        self.lock()
+            .ok()
+            .and_then(|inner| inner.settings_warning.clone())
+    }
+
+    /// Whether this process is elevated, and whether it could ask.
+    pub fn elevation_json(&self) -> Result<String, String> {
+        to_json(&platform::state())
+    }
+
+    /// Asks the OS for an elevated relaunch. `"launched"` means the caller
+    /// must quit: the elevated copy takes over.
+    pub fn request_elevation(&self) -> Result<String, String> {
+        match platform::request() {
+            Ok(platform::Outcome::Launched) => Ok("launched".to_string()),
+            Ok(platform::Outcome::Declined) => Ok("declined".to_string()),
+            Ok(platform::Outcome::Unsupported) => {
+                Err("this build cannot raise a consent prompt".to_string())
+            }
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
+    /// The logon entry the OS holds for this user.
+    pub fn autostart_json(&self) -> Result<String, String> {
+        to_json(&autostart::status())
+    }
+
+    /// Creates or removes the logon entry; needs elevation on Windows.
+    pub fn set_autostart(&self, enabled: bool) -> Result<String, String> {
+        let state = autostart::set_enabled(enabled).map_err(|error| error.to_string())?;
+        to_json(&state)
     }
 
     /// Applies a `SettingsPatch` (JSON) and writes the file atomically.
@@ -290,6 +346,79 @@ impl Controller {
         let result = inner
             .service_mut()?
             .apply_profile(&headers, profile)
+            .map_err(|error| error.to_string())?;
+        to_json(&result)
+    }
+
+    /// One lighting channel: colour as JSON `[r,g,b]`, brightness, enabled.
+    pub fn set_channel(
+        &self,
+        channel: String,
+        color_json: String,
+        brightness: u32,
+        enabled: bool,
+    ) -> Result<String, String> {
+        let channel = parse_channel(&channel)?;
+        let color = parse_color(&color_json)?;
+        let brightness = parse_level(brightness, "brightness")?;
+        let config = if enabled {
+            ChannelConfig::rgb(color, brightness)
+        } else {
+            ChannelConfig::off()
+        };
+        let mut inner = self.lock()?;
+        let result = inner
+            .service_mut()?
+            .set_channel(channel, config, true)
+            .map_err(|error| error.to_string())?;
+        to_json(&result)
+    }
+
+    /// The same colour and brightness on every channel.
+    pub fn set_all_channels(
+        &self,
+        color_json: String,
+        brightness: u32,
+        enabled: bool,
+    ) -> Result<String, String> {
+        let color = parse_color(&color_json)?;
+        let brightness = parse_level(brightness, "brightness")?;
+        let mut inner = self.lock()?;
+        let result = inner
+            .service_mut()?
+            .set_all_channels(color, brightness, enabled)
+            .map_err(|error| error.to_string())?;
+        to_json(&result)
+    }
+
+    /// Scales every lit channel, keeping the stored colours.
+    pub fn set_brightness(&self, percent: u32) -> Result<String, String> {
+        let percent = parse_level(percent, "brightness")?;
+        let mut inner = self.lock()?;
+        let result = inner
+            .service_mut()?
+            .set_global_brightness(percent)
+            .map_err(|error| error.to_string())?;
+        to_json(&result)
+    }
+
+    /// Turns one channel off without touching the others.
+    pub fn turn_off_channel(&self, channel: String) -> Result<String, String> {
+        let channel = parse_channel(&channel)?;
+        let mut inner = self.lock()?;
+        let result = inner
+            .service_mut()?
+            .turn_off_channel(channel)
+            .map_err(|error| error.to_string())?;
+        to_json(&result)
+    }
+
+    /// Pushes the staged frame to the controller.
+    pub fn apply_led(&self) -> Result<String, String> {
+        let mut inner = self.lock()?;
+        let result = inner
+            .service_mut()?
+            .apply_led()
             .map_err(|error| error.to_string())?;
         to_json(&result)
     }

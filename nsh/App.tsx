@@ -8,9 +8,12 @@ import { Application, Tray, currentWindow } from "nsh/desktop";
 
 import { createDeps } from "./app/composition/deps";
 import { Shell, type ScreenId, type Toast } from "./components/Shell";
+import { About } from "./screens/About";
 import { Dashboard } from "./screens/Dashboard";
 import { Fans } from "./screens/Fans";
+import { Lighting } from "./screens/Lighting";
 import { Placeholder } from "./screens/Placeholder";
+import { SettingsScreen } from "./screens/Settings";
 import trayIcon from "./assets/icon.png";
 
 const TONE_ORDER: Toast["tone"][] = ["ok", "warn", "danger", "muted"];
@@ -99,7 +102,24 @@ function App() {
           <If when={screen() === "fans"}>
             <Fans store={deps.store} toast={toast} />
           </If>
-          <If when={screen() !== "dashboard" && screen() !== "fans"}>
+          <If when={screen() === "leds"}>
+            <Lighting store={deps.store} toast={toast} />
+          </If>
+          <If when={screen() === "settings"}>
+            <SettingsScreen store={deps.store} toast={toast} />
+          </If>
+          <If when={screen() === "about"}>
+            <About store={deps.store} toast={toast} />
+          </If>
+          <If
+            when={
+              screen() !== "dashboard" &&
+              screen() !== "fans" &&
+              screen() !== "leds" &&
+              screen() !== "settings" &&
+              screen() !== "about"
+            }
+          >
             <Placeholder screen={screen()} />
           </If>
         </If>

@@ -34,6 +34,19 @@ const FAN_HEADER_IDS: readonly FanHeaderId[] = [
   "aux3",
 ];
 
+/** "Reset to defaults" is a patch: the state-file override and last screen stay. */
+export const SETTINGS_RESET_PATCH: SettingsPatch = {
+  backend: DEFAULT_SETTINGS.backend,
+  poll_interval_ms: DEFAULT_SETTINGS.poll_interval_ms,
+  temp_unit: DEFAULT_SETTINGS.temp_unit,
+  smoothing: DEFAULT_SETTINGS.smoothing,
+  reapply_led_on_launch: DEFAULT_SETTINGS.reapply_led_on_launch,
+  confirm_writes: DEFAULT_SETTINGS.confirm_writes,
+  accent: DEFAULT_SETTINGS.accent,
+  low_duty_warning: DEFAULT_SETTINGS.low_duty_warning,
+  pump_header: "none",
+};
+
 export function isAccent(value: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(value);
 }

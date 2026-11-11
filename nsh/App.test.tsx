@@ -31,3 +31,46 @@ test("the curve editor drags a point and writes the curve", async () => {
   expect(app.texts().some((text) => text.includes("curve set to"))).toBe(true);
   expect(app.dialogs().length).toBeGreaterThan(0);
 });
+
+test("lighting renders the frame and turns everything off", async () => {
+  const app = await open("./App.tsx");
+  app.onDialog(() => "Write");
+  await app.press("Lighting");
+  await app.waitFor("Frame preview");
+  expect(app.texts()).toContain("Global colour");
+  expect(app.texts().some((text) => text.includes("channels"))).toBe(true);
+  await app.press("id:lighting-all-off");
+  await app.wait(300);
+  expect(app.texts().some((text) => text.includes("All lighting turned off"))).toBe(true);
+});
+
+test("a channel applies its colour and brightness", async () => {
+  const app = await open("./App.tsx");
+  app.onDialog(() => "Write");
+  await app.press("Lighting");
+  await app.waitFor("Frame preview");
+  await app.press("id:channel-enabled-argb1");
+  await app.press("id:channel-apply-argb1");
+  await app.wait(300);
+  expect(app.dialogs().length).toBeGreaterThan(0);
+  expect(app.texts().some((text) => text.includes("set to"))).toBe(true);
+});
+
+test("settings shows the backend, safety and paths", async () => {
+  const app = await open("./App.tsx");
+  await app.press("Settings");
+  await app.waitFor("Telemetry");
+  expect(app.texts()).toContain("Backend");
+  expect(app.texts()).toContain("Safety");
+  expect(app.texts()).toContain("Files & paths");
+  expect(app.texts().some((text) => text.includes("Pump channel"))).toBe(true);
+});
+
+test("about reports the detected board and build", async () => {
+  const app = await open("./App.tsx");
+  await app.press("About");
+  await app.waitFor("Detected motherboard");
+  expect(app.texts()).toContain("Build");
+  expect(app.texts()).toContain("Upstream");
+  expect(app.texts().some((text) => text.includes("CVN"))).toBe(true);
+});
