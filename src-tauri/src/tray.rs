@@ -1,5 +1,3 @@
-//! System tray.
-//!
 //! The app is a background utility: at sign-in it should apply the saved state
 //! and get out of the way. So the window starts hidden when the autostart entry
 //! launches it (`--minimized`), closing the window hides it instead of quitting,
@@ -13,17 +11,13 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
-/// Tray icon id, so the entry can be updated or removed later.
 pub const ID: &str = "main";
 
-/// Window label the tray controls.
 const WINDOW: &str = "main";
 
 /// Flag the autostart entry passes to keep the window out of the way.
 const HIDDEN_FLAG: &str = "--minimized";
 
-/// True when these command-line arguments ask for a background launch.
-///
 /// Takes the arguments rather than reading the process's own, because the
 /// single-instance callback receives the *second* process's command line and
 /// has to tell an icon click from the autostart entry.
@@ -35,12 +29,10 @@ where
     args.into_iter().any(|arg| arg.as_ref() == HIDDEN_FLAG)
 }
 
-/// True when the process was started by the autostart entry.
 pub fn starts_hidden() -> bool {
     wants_hidden(std::env::args())
 }
 
-/// Brings the window back, whether it was hidden or merely minimised.
 pub fn reveal(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(WINDOW) {
         let _ = window.unminimize();
@@ -61,7 +53,6 @@ fn toggle(app: &AppHandle) {
     }
 }
 
-/// Creates the tray icon and makes the window close to the tray.
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open OpenColorHub", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -77,7 +68,6 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            // Left click toggles; the menu handles everything else.
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
@@ -93,8 +83,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     }
     builder.build(app)?;
 
-    // Closing the window parks the app in the tray. Without this the tray would
-    // be destroyed the first time somebody hits the title-bar X.
+    // Without this the tray is destroyed the first time somebody hits the title-bar X.
     if let Some(window) = app.get_webview_window(WINDOW) {
         let handle = window.clone();
         window.on_window_event(move |event| {
@@ -108,7 +97,6 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Shows the window unless this launch came from the autostart entry.
 pub fn show_unless_hidden(app: &AppHandle) {
     if starts_hidden() {
         return;
@@ -123,7 +111,6 @@ mod tests {
     #[test]
     fn recognises_the_autostart_flag() {
         assert!(wants_hidden(["opencolorhub.exe", "--minimized"]));
-        // Exact match only: a path or a similar-looking flag is not the entry.
         assert!(!wants_hidden(["opencolorhub.exe"]));
         assert!(!wants_hidden(["C:/build/--minimized/OpenColorHub.exe"]));
         assert!(!wants_hidden(["opencolorhub.exe", "--minimised"]));

@@ -2,8 +2,8 @@
 //!
 //! A preset stores *outcomes*, not commands: the duty or curve each header ended
 //! up with, or the colour, brightness and on/off state of each lighting channel.
-//! Applying one replays those into the service, which is what makes a preset
-//! portable across restarts and boards with the same channel map.
+//! Applying one replays those into the service, which is why a preset survives
+//! restarts and ports to a board with the same channel map.
 //!
 //! The two halves are deliberately separate: a fan preset never writes lighting
 //! and a lighting preset never writes fans, so recalling a fan curve at night
@@ -25,7 +25,6 @@ use crate::service::Service;
 /// lighting presets.
 pub const VERSION: u32 = 2;
 
-/// Which half of the machine a preset covers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SetupKind {
@@ -33,19 +32,16 @@ pub enum SetupKind {
     Lighting,
 }
 
-/// What one fan header was set to.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FanSetting {
     pub header: FanHeader,
     /// Manual duty, used when `curve` is `None`.
     #[serde(default)]
     pub percent: u8,
-    /// SmartFan curve, when the header was curve-driven.
     #[serde(default)]
     pub curve: Option<FanCurve>,
 }
 
-/// What one lighting channel was set to.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChannelSetting {
     pub channel: Channel,
@@ -63,7 +59,6 @@ impl ChannelSetting {
         }
     }
 
-    /// `#rrggbb`, for the summary the UI shows.
     pub fn hex(&self) -> String {
         format!(
             "#{:02x}{:02x}{:02x}",
@@ -86,7 +81,6 @@ pub struct Setup {
 }
 
 impl Setup {
-    /// Snapshot of the half `kind` covers, as the service is running it now.
     pub fn capture(service: &mut Service, kind: SetupKind, name: impl Into<String>) -> Self {
         let snapshot = service.snapshot();
         let (fans, channels) = match kind {
@@ -127,8 +121,6 @@ impl Setup {
         }
     }
 
-    /// Replays the preset into the service, touching only its own half.
-    ///
     /// Lighting is staged channel by channel and pushed with a single
     /// `apply_led`, so a lighting preset costs one HID frame instead of six.
     pub fn apply(&self, service: &mut Service) -> Result<String> {
@@ -164,7 +156,6 @@ impl Setup {
         }
     }
 
-    /// Short human summary for the UI.
     pub fn summary(&self) -> String {
         match self.kind {
             SetupKind::Fans => {
@@ -203,7 +194,6 @@ impl Setup {
     }
 }
 
-/// Presets persisted next to the rest of the app state.
 #[derive(Debug)]
 pub struct SetupStore {
     path: PathBuf,
@@ -254,9 +244,6 @@ impl SetupStore {
         match serde_json::from_str::<Disk>(&text) {
             Ok(disk) => store.setups = disk.setups,
             Err(current_error) => match serde_json::from_str::<DiskV1>(&text) {
-                // A version 1 entry becomes one fan preset and one lighting
-                // preset under the same name: the settings are kept rather than
-                // the file being discarded.
                 Ok(old) => {
                     store.setups = split_combined(old.setups);
                     if let Err(error) = store.persist() {
@@ -286,7 +273,6 @@ impl SetupStore {
             .collect()
     }
 
-    /// Inserts a new preset or replaces the one with the same id.
     pub fn upsert(&mut self, setup: Setup) -> Result<()> {
         match self.setups.iter_mut().find(|entry| entry.id == setup.id) {
             Some(existing) => *existing = setup,
@@ -325,7 +311,6 @@ impl SetupStore {
     }
 }
 
-/// Turns each version 1 entry into a fan preset and a lighting preset.
 fn split_combined(old: Vec<SetupV1>) -> Vec<Setup> {
     let mut out = Vec::new();
     for entry in old {
@@ -361,8 +346,7 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// Ids only have to be unique within one machine's file, so the clock is enough;
-/// two saves in the same millisecond fall back to a suffix.
+/// Ids only have to be unique within one machine's file, so the clock is enough.
 fn new_id() -> String {
     format!("s{:x}", now_ms())
 }

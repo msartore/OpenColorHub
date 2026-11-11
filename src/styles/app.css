@@ -1,9 +1,3 @@
-/* =============================================================================
-   opencolorhub — dark instrument-panel theme
-   Layout: fixed nav rail, status strip, scrolling screen area.
-   Everything is driven by the tokens below; the accent comes from settings.
-   ========================================================================== */
-
 :root {
   color-scheme: dark;
 
@@ -66,7 +60,6 @@ body {
   overflow: hidden;
 }
 
-/* Drafting-grid backdrop. */
 body::before {
   content: "";
   position: fixed;
@@ -109,7 +102,6 @@ select {
   background: var(--accent-soft);
 }
 
-/* Thin scrollbars that match the panel edges. */
 * {
   scrollbar-width: thin;
   scrollbar-color: #263038 transparent;
@@ -1114,7 +1106,6 @@ select {
   overflow: hidden;
 }
 
-/* The tone lives in the number, not in a stripe down the edge. */
 .stat--warn .stat-value {
   color: var(--warn);
 }
@@ -2394,7 +2385,6 @@ select {
   }
 }
 
-/* Collapsible hardware notice: one actionable line, details on demand. */
 .notice--fold {
   display: block;
   padding: 0;
@@ -2513,8 +2503,6 @@ select {
   gap: 8px;
 }
 
-/* Drivers screen -------------------------------------------------------- */
-
 .drivers-stack {
   display: grid;
   gap: var(--gap);
@@ -2584,8 +2572,6 @@ select {
   font-size: 11px;
   color: var(--text-faint);
 }
-
-/* Dashboard additions: session range, history chart, system facts -------- */
 
 .gauge-range {
   margin: 8px 0 0;
@@ -2687,8 +2673,6 @@ select {
     grid-template-columns: minmax(340px, 0.72fr) minmax(0, 1fr);
   }
 }
-
-/* Presets dialog --------------------------------------------------------- */
 
 .icon-btn {
   display: inline-flex;
@@ -2841,7 +2825,6 @@ select {
   font-style: italic;
 }
 
-/* A header with nothing plugged in is not a card: it is one line of text. */
 .fan-card.is-undetected {
   display: none;
 }
@@ -2856,7 +2839,6 @@ select {
   display: none;
 }
 
-/* Empty and error states: same shape, different tone. */
 .state {
   display: flex;
   flex-direction: column;

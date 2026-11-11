@@ -163,7 +163,6 @@ fn header_after(buf: &[u8], base: usize, version: u32, revision: u32) -> Option<
     })
 }
 
-/// Parses every reading in the block.
 pub fn parse_readings(buf: &[u8], header: &Header) -> Vec<Reading> {
     let mut out = Vec::with_capacity(header.reading_count);
     for index in 0..header.reading_count {
@@ -221,9 +220,6 @@ fn read_cstr(buf: &[u8], offset: usize, len: usize) -> String {
     String::from_utf8_lossy(&bytes[..end]).trim().to_string()
 }
 
-// ---------------------------------------------------------------- mapping --
-
-/// A mapped view of HWiNFO's section.
 pub struct SharedMemory {
     handle: HANDLE,
     view: *mut c_void,
@@ -326,8 +322,6 @@ fn region_size(base: *mut c_void) -> usize {
     if written == 0 { 0 } else { info.RegionSize }
 }
 
-// ---------------------------------------------------------------- backend --
-
 /// Maps HWiNFO's sensor block onto the five fan headers.
 pub struct HwinfoFan {
     shm: SharedMemory,
@@ -335,7 +329,6 @@ pub struct HwinfoFan {
 }
 
 impl HwinfoFan {
-    /// True when a usable HWiNFO block is present.
     pub fn available() -> bool {
         Self::open().is_ok()
     }
@@ -568,7 +561,6 @@ mod tests {
     #[test]
     fn rejects_arrays_that_overflow_the_mapping() {
         let mut buf = block(false);
-        // Claim a huge reading count that cannot fit.
         let base = 12;
         buf[base + 20..base + 24].copy_from_slice(&90_000u32.to_le_bytes());
         assert!(

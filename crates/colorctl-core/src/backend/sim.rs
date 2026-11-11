@@ -53,7 +53,6 @@ impl Default for SimFanFile {
     }
 }
 
-/// Synthetic fan/thermal backend.
 pub struct SimFan {
     path: PathBuf,
     file: SimFanFile,

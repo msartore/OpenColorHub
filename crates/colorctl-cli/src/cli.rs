@@ -1,5 +1,3 @@
-//! CLI argument definitions.
-//!
 //! Mirrors upstream `colorctl` so existing scripts keep working, and adds a
 //! global `--backend` switch (handy for testing the whole flow off-hardware)
 //! plus `--json` for machine-readable output.
@@ -66,8 +64,6 @@ pub enum Command {
         shell: Shell,
     },
 }
-
-// ---------------------------------------------------------------- RGB ----
 
 #[derive(Args, Debug)]
 pub struct RgbArgs {
@@ -145,8 +141,6 @@ pub enum RgbAction {
         channel: Vec<RgbTarget>,
     },
 }
-
-// ---------------------------------------------------------------- FAN ----
 
 #[derive(Args, Debug)]
 pub struct FanArgs {

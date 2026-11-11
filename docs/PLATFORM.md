@@ -9,26 +9,22 @@
 
 ## Lighting without root
 
-`/dev/hidraw*` is root-owned and mode `0600` by default, so a freshly unpacked
-build can *find* the controller and still be refused when it opens it. Both
-`.deb` packages ship a udev rule that grants the user at the seat an ACL on the
-controller's nodes:
+`/dev/hidraw*` is root-owned, mode `0600`: a fresh build finds the controller but
+is refused on open. Both `.deb` packages ship a udev rule granting the user at
+the seat an ACL on the controller's nodes:
 
 ```udev
 KERNEL=="hidraw*", ATTRS{idVendor}=="2f4c", ATTRS{idProduct}=="1000", TAG+="uaccess"
 ```
 
-It is `uaccess`, not `MODE="0666"`: lighting becomes unprivileged for the
-logged-in user, not for every account on the machine. Root is unaffected, and
-fan control is untouched — `/dev/port` is a different device with different
-stakes.
+`uaccess`, not `MODE="0666"`: unprivileged for the logged-in user only. Root is
+unaffected; fan control is untouched (`/dev/port` is a different device).
 
-The `.deb` installs it as `/usr/lib/udev/rules.d/99-opencolorhub.rules` (desktop)
-or `99-colorctl.rules` (CLI) and reloads udev from `postinst`, so the rule
-applies without a reboot. The portable tarballs ship the same file as
-`colorctl.rules` (in the repository it is
-[`packaging/colorctl.rules`](../packaging/colorctl.rules)); for the AppImage or a
-source build, install it by hand:
+The `.deb` installs `/usr/lib/udev/rules.d/99-opencolorhub.rules` (desktop) or
+`99-colorctl.rules` (CLI) and reloads udev from `postinst` — no reboot. Portable
+tarballs ship it as `colorctl.rules`
+([`packaging/colorctl.rules`](../packaging/colorctl.rules)); AppImage or source
+builds install it by hand:
 
 ```bash
 sudo cp colorctl.rules /etc/udev/rules.d/99-opencolorhub.rules
@@ -36,69 +32,58 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=hidraw
 ```
 
-Without the rule an unprivileged run is refused when it opens the controller:
-`--backend hardware` reports the lighting backend as unavailable, and `auto`
-falls back to the simulator with a note that names the error. Adding the rule is
-the whole fix.
+Without it an unprivileged run is refused on open: `--backend hardware` reports
+lighting unavailable, `auto` falls back to the simulator with a note naming the
+error.
 
 ## Why Windows needs a driver at all
 
-`IN`/`OUT` are ring-0 instructions. Windows exposes no user-mode port broker
-equivalent to Linux's `/dev/port`, so user-mode code cannot touch a Super I/O
-directly. The options are a kernel driver of your own,
-[WinRing0](https://nvd.nist.gov/vuln/detail/CVE-2020-14979) — which this project
-will not ship, see `NOTICE.md` — or **PawnIO**: a signed driver that executes a
+`IN`/`OUT` are ring-0. Windows has no user-mode port broker like `/dev/port`.
+Options: your own kernel driver, [WinRing0](https://nvd.nist.gov/vuln/detail/CVE-2020-14979)
+— not shipped, see `NOTICE.md` — or **PawnIO**: a signed driver running a
 bytecode module whose port access is allow-listed to the selected index pair and
-discovered BARs, and which never exposes physical memory.
+discovered BARs, never exposing physical memory.
 
-OpenColorHub talks to it through `PawnIOLib.dll`, with the LpcIO module embedded
-and passed to the driver at runtime.
+OpenColorHub uses `PawnIOLib.dll`, with the LpcIO module embedded and passed to
+the driver at runtime.
 
-**Temperature comes from the register Colorful's own client reads.** On the
+**Temperature** comes from the register Colorful's client reads: on the
 NCT5567D-B (`0xD121`) iGC.Lite calls `GetTemp(1, 80)` — bank 1, register `0x50` —
-and uses that value as the X axis of its fan curves. OpenColorHub reads the same
-one first, then falls back to the bank-0 Nuvoton sensors (`0x27`, `0x73`, `0x75`,
-`0x77`) for boards that leave `0x50` unwired. The Dashboard says which kind of
-sensor the number came from ("board thermistor", "HWiNFO shared memory",
-"synthetic") and keeps the register — `bank 1 · 0x50` — in the gauge's tooltip,
-so a reading can always be traced without putting hex on the screen. Values
-outside 5–110 °C are rejected rather than shown.
+as the X axis of its fan curves. OpenColorHub reads that first, then falls back
+to bank-0 Nuvoton sensors (`0x27`, `0x73`, `0x75`, `0x77`) where `0x50` is
+unwired. The Dashboard names the source ("board thermistor", "HWiNFO shared
+memory", "synthetic") and keeps `bank 1 · 0x50` in the gauge tooltip. Values
+outside 5–110 °C are rejected.
 
-**Headers with nothing plugged in are hidden.** A header that never reports a
-tach is an empty socket, not a fan at 0 rpm, so its card is dropped and the
-screen says *"No more fans detected — N of 6 headers are in use."* The check is
-latched: once a header has spun, it keeps its card even when a 0% curve stops it.
-Average duty and the total rpm on the Dashboard count only the headers that
-exist.
+**Empty headers are hidden.** A header that never reports a tach is an empty
+socket, not a fan at 0 rpm: its card is dropped and the screen says *"No more
+fans detected — N of 6 headers are in use."* Latched — once spun, a header keeps
+its card at 0%. Average duty and total rpm count only existing headers.
 
-**PawnIO is not bundled.** The app offers to install it instead: a dialog on
-launch, and a callout on the Fan control screen, fetch `PawnIO_setup.exe` from
-the project's own GitHub release (currently 2.2.0), verify it against a pinned
-SHA-256, and run it so its installer UI and UAC prompt are what you see. A hash
-mismatch deletes the download and refuses to run it. When the driver is present
-but the process is not elevated, the prompt offers *Restart as administrator*
-instead of a pointless install.
+**PawnIO is not bundled.** On launch and on Fan control the app fetches
+`PawnIO_setup.exe` from the project's GitHub release (currently 2.2.0), verifies
+a pinned SHA-256, and runs it so its installer UI and UAC prompt appear. A hash
+mismatch deletes it and refuses. Driver present but process unelevated: offers
+*Restart as administrator*.
 
-Without it the app falls back, in order:
+Fallback order:
 
-1. **PawnIO** — real RPM, real board temperature, real manual duty. Requires the
-   driver installed and the app elevated.
-2. **HWiNFO shared memory** — read-only. Needs HWiNFO64 running with
-   *Settings → Safety → Shared Memory Support* enabled. Two header layouts exist
-   in the wild (`__time64_t` packed or 8-byte aligned) and both are detected from
-   the block itself, so a version bump does not silently break it.
-   `OPENCOLORHUB_HWINFO_SHM` overrides the section name.
-3. **Simulator** — persists state, evaluates curves and enforces the pump floor,
-   so the app is fully usable anywhere.
+1. **PawnIO** — real RPM, board temperature, manual duty; needs driver and
+   elevation.
+2. **HWiNFO shared memory** — read-only; HWiNFO64 running with *Settings → Safety
+   → Shared Memory Support*. Two header layouts (`__time64_t` packed or 8-byte
+   aligned) are detected from the block. `OPENCOLORHUB_HWINFO_SHM` overrides the
+   section name.
+3. **Simulator** — persists state, evaluates curves, enforces the pump floor.
 
-The chosen backend is named in Settings and in the sidebar; nothing is silently
+The chosen backend is named in Settings and the sidebar; nothing is silently
 simulated.
 
 ### Curves on Windows are software curves
 
-The manual-duty registers are mapped for the `0xD121` chip; the SmartFan curve
-registers are not. A curve therefore lives as long as the process does, and
-manual duty stays as last written after the app exits until the BIOS resets it.
+Manual-duty registers are mapped for `0xD121`; the SmartFan curve registers are
+not. A curve lives as long as the process, and manual duty stays as last written
+after exit until the BIOS resets it.
 
 ### Exercising the HWiNFO reader
 
@@ -109,9 +94,8 @@ colorctl fan status                                   # reads it
 
 ## Lighting over HID
 
-Lighting needs no privileged access: the RGB controller is an ordinary USB HID
-device, reached through SetupAPI and `hid.dll` with no driver, service or
-elevation.
+No privileged access: an ordinary USB HID device via SetupAPI + `hid.dll`, no
+driver, service or elevation.
 
 `colorctl rgb probe` shows what the HID layer finds:
 
@@ -124,145 +108,117 @@ Colorful HID interfaces (VID 2F4C, PID 1000):
 ```
 
 MI_02 (`0xFF01`) carries LED frames. MI_01 (`0xFF00`) is the firmware-update
-collection — same VID/PID, different usage page, never written to. If a firmware
-revision expects feature reports instead of output reports, set
+collection — same VID/PID, never written to. Feature-report firmware:
 `OPENCOLORHUB_HID_TRANSPORT=feature`; the backend falls back automatically when
 the output-report write fails.
 
 ## Elevation
 
-The Windows build carries a manifest requesting `requireAdministrator`, so
-Windows raises its own UAC prompt before the process starts. Every launch asks,
-declining means the app does not run, and nothing is persisted.
+The manifest requests `requireAdministrator`: UAC before the process starts,
+declining means the app does not run, nothing is persisted.
 
-Elevation is what makes PawnIO fan control work: `pawnio_open` returns
-`ERROR_ACCESS_DENIED` to an unelevated process. RGB and HWiNFO do not need it, so
-an unelevated build still drives lighting and still reads sensors when HWiNFO is
-running — it just cannot touch the Super I/O.
+`pawnio_open` returns `ERROR_ACCESS_DENIED` unelevated, so fan control needs
+elevation; RGB and HWiNFO work without it.
 
-Settings → Privileges shows the current state and offers a one-shot *Restart as
-administrator*. Builds that already carry the manifest never show that button,
-because they can never be running unelevated.
+Settings → Privileges shows the state and offers a one-shot *Restart as
+administrator*; builds carrying the manifest never show it.
 
-This is deliberately the visible path. Some vendor utilities register a hidden
-scheduled task with `RunLevel::Highest` and rewrite their shortcuts, gaining
-administrator rights on every launch with no consent dialog. This app will not
-do that: one prompt, one decision, nothing persisted.
+Some vendor utilities register a hidden `RunLevel::Highest` task and rewrite
+their shortcuts. This app does not: one prompt, one decision, nothing persisted.
 
-Trade-off: requiring elevation means the portable build also prompts for UAC. To
-drop it, delete `src-tauri/app.manifest` and revert `build.rs` to
-`tauri_build::build()` — at the cost of Windows fan control, which then degrades
-to HWiNFO or the simulator.
+Trade-off: the portable build also prompts for UAC. To drop it, delete
+`src-tauri/app.manifest` and revert `build.rs` to `tauri_build::build()` —
+Windows fan control then degrades to HWiNFO or the simulator.
 
 ## Start with the OS
 
 **Settings → Startup** registers a sign-in entry for the current user:
 
-* **Windows** — a Task Scheduler logon task named `OpenColorHub` with
-  `RunLevel Highest`. A `HKCU\...\Run` value is simpler but starts the process
-  unelevated, which for this app means no fan control and a UAC prompt at every
+* **Windows** — Task Scheduler logon task `OpenColorHub` with `RunLevel Highest`.
+  A `HKCU\...\Run` value starts unelevated: no fan control and a UAC prompt at
   sign-in anyway.
 * **Linux** — `${XDG_CONFIG_HOME:-~/.config}/autostart/opencolorhub.desktop`.
 
-Turning the switch off deletes the entry. It is created only when asked for,
-named plainly in Task Scheduler, and removed by the same switch.
+The switch off deletes the entry, which is created only when asked for.
 
-Enabling it also turns on **Re-apply lighting at launch**, so the saved `CCTL`
-state is pushed at sign-in; otherwise the app would start and leave the lighting
-dark.
+Enabling it also turns on **Re-apply lighting at launch**, pushing the saved
+`CCTL` state at sign-in.
 
 ## Waking from sleep
 
-Suspending the machine takes the hardware state with it. The USB bus is
-power-cycled, so the RGB controller comes back on its own pattern, and the Super
-I/O is reloaded from its firmware defaults, which puts every header back under
-BIOS fan control. Nothing in either chip remembers what this app wrote.
+Suspend power-cycles the USB bus, so the RGB controller returns on its own
+pattern, and reloads the Super I/O from firmware defaults, putting every header
+back under BIOS fan control. Neither chip remembers what this app wrote.
 
-Two checks catch that, because a suspend is not always visible as a long pause:
+Two checks:
 
-* Every tick asks the open controller whether it still answers. A resume — or a
-  hub power dip, or a controller reset — invalidates the handle without telling
-  anyone, so this notices on the next second even when the machine was only
-  asleep for two.
-* A tick that arrives more than half a second beyond its poll interval means the
-  process was suspended rather than merely slow; the wall clock is what it
-  measures.
+* Every tick asks the open controller whether it still answers. A resume, hub
+  power dip or controller reset invalidates the handle silently, caught on the
+  next second.
+* A tick more than half a second beyond its poll interval means the process was
+  suspended; it measures wall clock.
 
-Either way the lighting frame is pushed again and every duty or curve this
-session set is rewritten — including the manual-mode bit, because the chip
-returned to automatic. A controller that is still re-enumerating refuses the
-frame, so the write is retried for a few seconds before it is reported.
+Either re-pushes the lighting frame and rewrites every duty or curve this session
+set, including the manual-mode bit, because the chip returned to automatic. A
+re-enumerating controller refuses the frame; the write is retried for a few
+seconds before it is reported.
 
-Only what the session actually applied is restored. A session that never touched
-lighting leaves the controller alone, and a header nobody set keeps its firmware
-behaviour. A successful recovery appears in the Dashboard's activity log as a
-`wake` entry.
+Only what the session applied is restored. Untouched lighting is left alone; a
+header nobody set keeps its firmware behaviour. Success appears as a `wake` entry
+in the Dashboard activity log.
 
-Waking is handled separately from **Re-apply lighting at launch**: that switch
-covers a fresh start (sign-in, or an app launched by hand), while a wake is
-always re-applied because the app itself caused the state that was lost.
+Waking is separate from **Re-apply lighting at launch**: that switch covers a
+fresh start; a wake is always re-applied.
 
 ## Tray
 
-The app lives in the tray. Closing the window hides it rather than quitting —
-polling continues and the lighting stays as set — and the window returns from the
-tray icon (left click) or its **Open OpenColorHub** menu entry. **Quit** is the
-only real exit.
+Closing the window hides it — polling continues and the lighting stays as set —
+and the window returns from the tray icon (left click) or **Open OpenColorHub**.
+**Quit** is the only real exit.
 
-A launch from the autostart entry passes `--minimized`, so signing in shows no
-window at all.
+An autostart launch passes `--minimized`: no window at sign-in.
 
-Starting the app again while it is already running does not create a second
-process. The new launch hands its command line to the running instance and exits;
-that instance brings its window forward, so the desktop icon behaves like
-"switch to OpenColorHub" rather than "start another copy". A `--minimized`
-hand-over asks for nothing — the autostart entry firing after a fast sign-in
-leaves the window where it is.
+A second launch hands its command line to the running instance and exits; that
+instance brings its window forward. A `--minimized` hand-over asks for nothing.
 
 ## Supported boards
 
-Two Super I/O families are in play, which is why nothing promises a single chip:
+* **B650 / B840 / B850 / X870** boards ship the **NCT5584D** (`0xD42A`), verified
+  upstream, including the CVN B650M Gaming Frozen V14.
+* The **CVN X570M GAMING PRO V14** carries a **`0xD121`** (NCT6793D /
+  NCT5567D-B family). Its fan registers were mapped by probing this board, not
+  from a vendor document.
 
-* **B650 / B840 / B850 / X870** boards ship the **NCT5584D** (`0xD42A`), which is
-  what upstream verified, including the CVN B650M Gaming Frozen V14.
-* The **CVN X570M GAMING PRO V14** is older and carries a **`0xD121`**
-  (NCT6793D / NCT5567D-B family). Its fan registers were mapped by probing this
-  board, not from a vendor document.
-
-Lighting is the common denominator: all of these expose the same Colorful RGB
-controller as HID `2F4C:1000` on usage page `0xFF01`.
+Lighting is the common denominator: all expose the same Colorful RGB controller
+as HID `2F4C:1000` on usage page `0xFF01`.
 
 ## Settling the channel map
 
-The bank numbers are settled: `chipmap.rs` uses Colorful's own assignment —
-SYS 1, CPU 2, AUX0 3, AUX1 8, AUX2 9, AUX3 10 — and the headers are named after
-those channels rather than after a silkscreen guess. Earlier versions shipped a
-five-header list (CPU, CHA_FAN1-3, AIO_PUMP) whose labels were one row early:
-"CPU_FAN" wrote bank 1, which the vendor calls SYS, and bank 10 was never
-touched. That is now four labels fixed and one channel recovered.
+`chipmap.rs` uses Colorful's own assignment — SYS 1, CPU 2, AUX0 3, AUX1 8,
+AUX2 9, AUX3 10 — and names headers after the channels. Earlier builds shipped
+five headers (CPU, CHA_FAN1-3, AIO_PUMP) one row early: "CPU_FAN" wrote bank 1,
+which the vendor calls SYS, and bank 10 was never touched.
 
-A pump is a setting (Settings → Safety), because nothing in the vendor table
-says which channel a cooler's pump is on. The bound channel is floored at 60%
-for both manual duty and curves; none is bound by default.
+A pump is a Settings → Safety setting; the bound channel is floored at 60% for
+manual duty and curves; none is bound by default.
 
-What is still open is which *physical* header answers to each channel on this
-board, and which tachometer window is the real one:
+Open: which *physical* header answers to each channel, and which tachometer
+window is real:
 
 | | Windows (measured here) | Vendor's service |
 |---|---|---|
 | Tachometers | bank 6, `0x56 + 2i` | bank 4, `0xC0 + 2i`, MSB first |
 | Temperature | bank 1 `0x50`, then bank 0 | bank 1, `0x50` |
 
-`colorctl fan probe` prints every register both layouts depend on, from an
-elevated shell:
+`colorctl fan probe` prints every register both layouts use, from an elevated
+shell:
 
 ```
 colorctl.exe fan probe          # table
 colorctl.exe fan probe --json   # machine-readable
 ```
 
-It writes nothing. Run it twice — once idle, once with a manual duty applied to
-one channel — and the registers that move belong to that channel's fan. Label
-the slots from what moved, never from the channel order. Until that is done,
-treat the channel-to-silkscreen mapping as unverified and RGB as the only fully
-tested path.
+It writes nothing. Run it twice — idle, then with a manual duty on one channel —
+and the registers that move belong to that fan. Label slots from movement, never
+channel order. Until then the channel-to-silkscreen mapping is unverified and RGB
+is the only fully tested path.

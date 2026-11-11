@@ -1,5 +1,3 @@
-//! Tauri application wiring: setup, state, telemetry ticker, IPC handlers.
-
 mod commands;
 mod state;
 mod tray;
@@ -24,11 +22,7 @@ pub fn run() {
     update::clean_previous();
 
     tauri::Builder::default()
-        // First plugin, so a second launch is turned away before *any* setup
-        // runs: two processes would both open the SMBus and HID ports and each
-        // would install its own tray icon. Clicking the desktop icon again
-        // therefore reaches this callback in the running instance instead of
-        // starting a rival one.
+        // First plugin: the second launch must not open the SMBus/HID ports or add a second tray icon.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // `--minimized` means the autostart entry, not the user: when the
             // app is already up (a fast sign-in, or Explorer restarted) that
@@ -211,8 +205,6 @@ pub fn run() {
 const WAKE_ATTEMPTS: usize = 6;
 const WAKE_RETRY_DELAY: Duration = Duration::from_millis(700);
 
-/// Emits a snapshot on the configured interval.
-///
 /// A plain OS thread keeps this independent of the async runtime: the work is
 /// blocking port I/O, which should never sit on a tokio worker.
 fn spawn_ticker(app: tauri::AppHandle) {
@@ -264,8 +256,6 @@ fn spawn_ticker(app: tauri::AppHandle) {
     });
 }
 
-/// Re-applies the lighting and fan settings the machine forgot while asleep.
-///
 /// Locks the state for one attempt at a time, so an IPC command can still get in
 /// between retries instead of waiting out the whole sequence.
 fn reapply_after_wake(app: &tauri::AppHandle, slept: Duration) {
@@ -318,14 +308,12 @@ fn reassert_once(app: &tauri::AppHandle) -> Result<WakeReport, String> {
     Ok(inner.service_mut()?.reassert_after_wake())
 }
 
-/// Directory holding `opencolorhub.portable`, when this is a portable build.
 fn portable_root() -> Option<std::path::PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?.to_path_buf();
     dir.join("opencolorhub.portable").is_file().then_some(dir)
 }
 
-///
 /// Portable builds keep both beside the executable so the folder can be moved
 /// or deleted as a unit; installed builds use the per-user AppData paths.
 fn state_dirs(app: &tauri::AppHandle) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {

@@ -117,7 +117,7 @@ pub fn enumerate() -> Vec<HidDeviceInfo> {
     out
 }
 
-/// Resolves one interface to its device path, then to a populated [`HidDeviceInfo`].
+/// Resolves one interface to its device path.
 ///
 /// The size query is racy (another interface can appear between the two calls),
 /// so the detail call is retried with a grown buffer instead of trusting the
@@ -274,7 +274,6 @@ pub enum Transport {
     Feature,
 }
 
-/// An open controller.
 pub struct HidDevice {
     handle: HANDLE,
     info: HidDeviceInfo,
@@ -285,7 +284,6 @@ pub struct HidDevice {
 unsafe impl Send for HidDevice {}
 
 impl HidDevice {
-    /// Opens the interface described by `info`.
     pub fn open(info: HidDeviceInfo) -> Result<Self> {
         let wide = to_wide(&info.path);
         // SAFETY: `wide` is NUL-terminated and lives across the call.

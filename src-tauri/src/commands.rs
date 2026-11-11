@@ -1,5 +1,3 @@
-//! IPC commands exposed to the webview.
-//!
 //! Every command returns `Result<_, String>` so the frontend can display the
 //! underlying hardware error verbatim (a `Result<T, E>` needs `E: Serialize`,
 //! and hardware errors are strings anyway).
@@ -21,7 +19,6 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::state::AppState;
 
-/// Event name carrying telemetry pushes to the UI.
 pub const TELEMETRY_EVENT: &str = "telemetry";
 
 #[tauri::command]
@@ -36,14 +33,11 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<Settings, String> {
     Ok(inner.settings.clone())
 }
 
-/// Whether this process is elevated and whether a prompt can be raised.
 #[tauri::command]
 pub fn get_elevation() -> Elevation {
     platform::state()
 }
 
-/// Asks the OS for elevation and hands over to a fresh elevated instance.
-///
 /// Returns `"launched"`, `"declined"` (the user dismissed the prompt) or an
 /// error. On success the caller must exit — two instances would fight over the
 /// same state files, and the elevated one is the one that matters.
@@ -79,7 +73,6 @@ pub fn save_settings(
     };
 
     if rebuilt {
-        // Backend changed: push a fresh snapshot so the UI leaves stale data behind.
         let snapshot = {
             let mut inner = state.lock()?;
             inner.service_mut()?.snapshot()
@@ -90,7 +83,7 @@ pub fn save_settings(
     Ok(settings)
 }
 
-/// Motherboard identity, detected from SMBIOS at startup.
+/// Detected from SMBIOS at startup.
 #[tauri::command]
 pub fn get_board(state: State<'_, AppState>) -> Result<colorctl_core::BoardInfo, String> {
     let inner = state.lock()?;
@@ -252,8 +245,6 @@ pub fn apply_led(state: State<'_, AppState>) -> Result<ActionResult, String> {
     inner.service_mut()?.apply_led().map_err(|e| e.to_string())
 }
 
-/// Opens a link in the user's browser.
-///
 /// Only `http(s)` and `mailto` are allowed, and the URL is passed as a single
 /// argv entry (never through a shell string) so it cannot be used to inject
 /// extra commands.
@@ -287,14 +278,12 @@ pub fn open_external(url: String) -> Result<(), String> {
         .map_err(|e| format!("could not open {trimmed}: {e}"))
 }
 
-/// Exposed for the frontend so it can display why the UI has no hardware.
 #[tauri::command]
 pub fn get_settings_warning(state: State<'_, AppState>) -> Result<Option<String>, String> {
     let inner = state.lock()?;
     Ok(inner.settings_warning.clone())
 }
 
-/// Re-reads the lighting state from disk (used by Settings → reload).
 #[tauri::command]
 pub fn reload_state(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let mut inner = state.lock()?;
@@ -302,25 +291,21 @@ pub fn reload_state(state: State<'_, AppState>) -> Result<Snapshot, String> {
     Ok(inner.service_mut()?.snapshot())
 }
 
-/// Whether the OS will launch this app at sign-in.
 #[tauri::command]
 pub fn get_autostart() -> colorctl_core::autostart::Autostart {
     colorctl_core::autostart::status()
 }
 
-/// Registers or removes the logon entry. Requires elevation on Windows.
+/// Requires elevation on Windows.
 #[tauri::command]
 pub fn set_autostart(enabled: bool) -> Result<colorctl_core::autostart::Autostart, String> {
     colorctl_core::autostart::set_enabled(enabled).map_err(|e| e.to_string())
 }
 
-/// Catalogue row as the UI sees it: the file plus whether it is newer than what
-/// is installed.
 #[derive(serde::Serialize)]
 pub struct DriverRow {
     #[serde(flatten)]
     pub file: DriverFile,
-    /// True when this is firmware newer than the running BIOS.
     pub newer: bool,
 }
 
@@ -328,12 +313,10 @@ pub struct DriverRow {
 pub struct DriverList {
     pub board: String,
     pub product_id: u32,
-    /// BIOS version reported by SMBIOS, for context in the UI.
     pub installed_bios: String,
     pub files: Vec<DriverRow>,
     /// When the vendor was last asked, in milliseconds since the epoch.
     pub fetched_at_ms: u64,
-    /// True when this came from the local copy rather than the network.
     pub cached: bool,
     /// Set when a refresh failed but a cached copy could still be served.
     pub warning: Option<String>,
@@ -365,12 +348,9 @@ fn driver_list(
     }
 }
 
-/// Lists the vendor's downloads for the detected board.
-///
-/// The copy on disk is served immediately — the catalogue changes a few times a
-/// year, and a network round-trip should not sit in front of the screen. Pass
-/// `refresh` to ask the vendor again; if that fails the cached copy is returned
-/// with a warning rather than an empty screen.
+/// The cached copy is served unless `refresh` is set: the catalogue changes a
+/// few times a year and should not hold up the screen. If a refresh fails, the
+/// cached copy is returned with a warning rather than an empty screen.
 #[tauri::command]
 pub async fn get_drivers(state: State<'_, AppState>, refresh: bool) -> Result<DriverList, String> {
     let (board, bios) = {
@@ -414,10 +394,7 @@ struct DriverProgress {
     total: Option<u64>,
 }
 
-/// Downloads one catalogue entry into the app's data directory.
-///
-/// Emits `drivers://progress` while the transfer runs. Nothing is executed: the
-/// file is written, hashed and reported back.
+/// Nothing is executed: the file is written, hashed and reported back.
 #[tauri::command]
 pub async fn download_driver(
     app: AppHandle,
@@ -445,7 +422,6 @@ pub async fn download_driver(
     .map_err(|e| format!("download panicked: {e}"))?
 }
 
-/// A file already sitting in the download folder.
 #[derive(serde::Serialize)]
 pub struct StoredFile {
     pub file_name: String,
@@ -453,7 +429,6 @@ pub struct StoredFile {
     pub bytes: u64,
 }
 
-/// Lists what is already downloaded, so a restart does not lose the button.
 #[tauri::command]
 pub fn downloaded_drivers(state: State<'_, AppState>) -> Result<Vec<StoredFile>, String> {
     let dir = state.data_dir().join("drivers");
@@ -470,7 +445,6 @@ pub fn downloaded_drivers(state: State<'_, AppState>) -> Result<Vec<StoredFile>,
                 return None;
             }
             let name = path.file_name()?.to_string_lossy().to_string();
-            // A partial download is not something to reveal.
             if name.ends_with(".part") {
                 return None;
             }
@@ -485,7 +459,6 @@ pub fn downloaded_drivers(state: State<'_, AppState>) -> Result<Vec<StoredFile>,
     Ok(files)
 }
 
-/// Opens the folder a downloaded file landed in, selecting the file itself.
 #[tauri::command]
 pub fn reveal_driver(path: String) -> Result<(), String> {
     let target = std::path::PathBuf::from(&path);
@@ -523,7 +496,6 @@ pub fn reveal_driver(path: String) -> Result<(), String> {
     Err("revealing files is not supported on this platform".to_string())
 }
 
-/// Saved setups plus any problem reading the file, so the UI can say so.
 #[derive(serde::Serialize)]
 pub struct SetupList {
     pub setups: Vec<colorctl_core::Setup>,
@@ -550,8 +522,6 @@ pub fn list_setups(state: State<'_, AppState>, kind: SetupKind) -> Result<SetupL
     Ok(setup_list(setup_store(&state)?, kind))
 }
 
-/// Saves the current state of the half `kind` covers under `name`.
-///
 /// Passing an `id` overwrites that preset instead of creating a new one, which is
 /// what the "Update" action uses.
 #[tauri::command]
@@ -607,7 +577,6 @@ pub fn delete_setup(
     Ok(setup_list(store, kind))
 }
 
-/// Whether fan control can reach PawnIO right now.
 #[tauri::command]
 pub fn pawnio_status() -> colorctl_core::PawnioStatus {
     colorctl_core::platform::pawnio_status()
@@ -619,8 +588,6 @@ struct PawnioProgress {
     total: Option<u64>,
 }
 
-/// Downloads PawnIO's official installer, verifies it, runs it, then re-probes.
-///
 /// The installer is shown with its own UI: this does not install a kernel driver
 /// silently, it starts the vendor's installer and waits for the user to finish.
 #[tauri::command]

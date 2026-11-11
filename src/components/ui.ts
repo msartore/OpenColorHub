@@ -259,7 +259,6 @@ export function kv(label: string, value: string | number, mono = true): HTMLElem
   );
 }
 
-/** Header strip used by the fan / channel cards. */
 export function cardHead(options: {
   title: string;
   subtitle?: string;
@@ -299,7 +298,6 @@ export function bar(percent: number, tone?: string): HTMLElement {
   return el("div", { class: "bar" }, fill);
 }
 
-/** Small helper for toggle-groups (segmented buttons). */
 export function segmented<T extends string>(options: {
   value: T;
   items: { value: T; label: string }[];

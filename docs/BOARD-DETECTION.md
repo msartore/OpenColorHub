@@ -1,7 +1,7 @@
 # Board auto-detection
 
 Every screen shows which board the app thinks it is talking to, and how sure it
-is about that.
+is.
 
 | Confidence | Meaning | Hardware probe |
 | --- | --- | --- |
@@ -10,15 +10,14 @@ is about that.
 | **unknown** | identity unreadable, or a Colorful chipset outside the catalogue (X570, B550, …) | allowed — the chip-ID check decides |
 | **unsupported** | another vendor (ASUS, MSI, ASRock, …) | **blocked** in `auto` mode |
 
-Sources: `/sys/class/dmi/id/*` on Linux and
+Sources: `/sys/class/dmi/id/*` on Linux,
 `HKLM\HARDWARE\DESCRIPTION\System\BIOS` on Windows. Other platforms report
-`none`. Reading needs no privileges on either.
+`none`. Reading needs no privileges.
 
 ## Where the verdict appears
 
-The verdict travels in every telemetry snapshot (`snapshot.board`), so it is
-shown identically on the Dashboard header, in Settings, on the About screen and
-in `colorctl board`:
+Every telemetry snapshot carries it (`snapshot.board`), so the Dashboard header,
+Settings, About and `colorctl board` agree:
 
 ```console
 $ colorctl board
@@ -35,16 +34,15 @@ Motherboard: Colorful Technology And Development Co.,LTD CVN X570M GAMING PRO
   Hardware: Super I/O probe decides at runtime
 ```
 
-That board is not in the catalogue, so it reads `UNKNOWN` — and fan control still
-works, because the Super I/O on this X570 board (`0xD121`) answers the probe.
-**The confidence level gates policy, not capability.**
+That board is not catalogued and reads `UNKNOWN`, yet fan control works: the
+Super I/O (`0xD121`) answers the probe. **Confidence gates policy, not
+capability.**
 
 ## Why the guard is asymmetric
 
-It is deliberately conservative in one direction only: it refuses hardware when
-the board is *known* to be someone else's, and stays out of the way when it
-simply does not know. Guessing "unsupported" from a missing catalogue entry would
-block working hardware; guessing "supported" from a Colorful vendor string would
-poke registers on a board nobody has verified.
+It refuses hardware only when the board is *known* to be someone else's, and
+stays out of the way when it does not know. "Unsupported" guessed from a missing
+catalogue entry would block working hardware; "supported" guessed from a vendor
+string would poke registers on an unverified board.
 
 `--backend hardware` overrides the guard for people who know what they are doing.

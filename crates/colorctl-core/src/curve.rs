@@ -13,7 +13,6 @@ use crate::units::{pct, pwm_to_pct};
 /// The chip only understands four points.
 pub const CURVE_POINTS: usize = 4;
 
-/// One `(temperature °C, duty %)` pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CurvePoint {
     pub temp_c: u8,
@@ -78,7 +77,6 @@ impl FanProfile {
         }
     }
 
-    /// Curve for a normal header or, for `pump == true`, for the AIO pump.
     pub fn points_for(&self, pump: bool) -> FanCurve {
         match (self, pump) {
             (FanProfile::Quiet, false) => [
@@ -115,7 +113,6 @@ impl FanProfile {
     }
 }
 
-/// Validates a curve before it reaches the chip.
 pub fn validate(curve: &[CurvePoint]) -> Result<(), CurveError> {
     if curve.len() != CURVE_POINTS {
         return Err(CurveError::WrongCount {
@@ -179,7 +176,6 @@ pub fn pwm_points(curve: &FanCurve) -> [(u8, u8); CURVE_POINTS] {
     ]
 }
 
-/// Rebuilds a curve from raw register values.
 pub fn from_pwm_points(points: &[(u8, u8)]) -> FanCurve {
     let mut out = [CurvePoint::new(0, 0); CURVE_POINTS];
     for (i, (temp, pwm)) in points.iter().take(CURVE_POINTS).enumerate() {
@@ -227,7 +223,6 @@ pub fn parse(raw: &str) -> Result<FanCurve, CurveError> {
     Ok(curve)
 }
 
-/// Inverse of [`parse`], used by the CLI and the settings export.
 pub fn format(curve: &FanCurve) -> String {
     curve
         .iter()
@@ -236,7 +231,6 @@ pub fn format(curve: &FanCurve) -> String {
         .join(",")
 }
 
-/// Helper for the UI: the duty the chip would apply at the last measured temp.
 pub fn percent_at(curve: &FanCurve, temperature_c: Option<f32>) -> Option<u8> {
     temperature_c.map(|t| eval(curve, t))
 }

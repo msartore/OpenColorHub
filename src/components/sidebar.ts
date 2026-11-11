@@ -1,5 +1,3 @@
-/** Left navigation rail: brand, screens, backend health. */
-
 import { el } from "../dom";
 import logoUrl from "../assets/logo.png";
 import { isDemo } from "../api";

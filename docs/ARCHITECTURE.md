@@ -2,11 +2,10 @@
 
 ## Why a workspace
 
-The upstream `colorctl` is a single Linux binary that mixes three concerns:
-hardware access, business rules (curves, profiles, pump safety) and the CLI.
-Reusing any of that from a desktop shell would have meant either linking the
-CLI crate (dragging `clap` into the GUI) or copy-pasting register writes. The
-workspace splits the concerns instead:
+Upstream `colorctl`: one Linux binary mixing hardware access, business rules
+(curves, profiles, pump safety) and the CLI. Reuse from a desktop shell meant
+linking the CLI crate (`clap` in the GUI) or copy-pasting register writes. Split
+instead:
 
 | Crate | Depends on | Responsibility |
 | --- | --- | --- |
@@ -15,9 +14,8 @@ workspace splits the concerns instead:
 | `src-tauri` (`opencolorhub`) | core + `tauri` + `ureq` | IPC commands, telemetry thread, self-updater, window |
 | `src/` (TypeScript) | `@tauri-apps/api` | UI, browser demo backend |
 
-`colorctl-core` compiles and its tests pass on Windows and Linux. That
-is what "multi-platform ready" means here: the platform boundary is one trait
-pair (`FanBackend`, `LedBackend`), not `#[cfg]` scattered through the UI.
+`colorctl-core` builds and tests pass on Windows and Linux; the platform boundary
+is one trait pair (`FanBackend`, `LedBackend`), not `#[cfg]` through the UI.
 
 ## The backend boundary
 
@@ -38,104 +36,83 @@ pub trait LedBackend: Send {
 }
 ```
 
-Implementations:
-
 * `backend::linux::{LinuxFan, LinuxLed}` — `/dev/port` register I/O for the
-  NCT5584D and the hidraw frame writer, ported from upstream with the same
-  register sequence.
-* `backend::windows::{pawnio, fan}` — fan control through **PawnIO**, a signed
-  driver that executes a bytecode module (`LpcIO.bin`) whose port access is
-  allow-listed to the selected index pair and discovered BARs. Real RPM, real
-  temperature, real manual duty. Curves are evaluated in software (below).
-* `backend::windows::{hid, led}` — SetupAPI enumeration plus `hid.dll` report
-  I/O for the RGB controller, so lighting works on Windows with no driver and no
-  elevation.
-* `backend::windows::hwinfo` — read-only fan and temperature telemetry from
-  HWiNFO's shared-memory block, used when PawnIO is absent. Writes are refused.
+  NCT5584D, hidraw frame writer; upstream register sequence.
+* `backend::windows::{pawnio, fan}` — **PawnIO**, a signed driver running a
+  bytecode module (`LpcIO.bin`) whose port access is allow-listed to the selected
+  index pair and discovered BARs. Real RPM, temperature, manual duty; curves in
+  software (below).
+* `backend::windows::{hid, led}` — SetupAPI + `hid.dll` report I/O: lighting
+  without driver or elevation.
+* `backend::windows::hwinfo` — read-only telemetry from HWiNFO's shared-memory
+  block when PawnIO is absent. Writes refused.
 * `backend::sim::{SimFan, SimLed}` — deterministic synthetic telemetry plus a
   real `CCTL` state file on disk.
 
-`backend::windows::pawnio` wraps the driver and the module in two types: `PawnIo`
-resolves the five exports with `LoadLibraryW`/`GetProcAddress` and degrades to
-"not installed" rather than failing the build, while `LpcIo` implements the
-sandbox contract (slot select, BAR discovery, Super I/O index/data access). The
-port allow-list is enforced by the driver, not by us, which is the entire reason
-this backend exists instead of WinRing0.
+`PawnIo` resolves the five exports with `LoadLibraryW`/`GetProcAddress` and
+degrades to "not installed" rather than failing the build; `LpcIo` implements the
+sandbox contract (slot select, BAR discovery, index/data access). The driver
+enforces the port allow-list — hence this backend instead of WinRing0.
 
-Both hardware families build their packets in `backend::frame`, so the 200-LED
-wire format has exactly one definition and cannot drift between platforms.
+Both families build packets in `backend::frame`: one 200-LED wire format.
 
-`backend::build(mode, …)` decides which pair to use. `Auto` probes hardware and
-falls back per subsystem, recording *why* in `Capabilities::notes`. On Windows
-the fan order is PawnIO → HWiNFO → simulator, and the notes say which one won, so
-the UI never has to guess. `Hardware` never falls back — it hands back an
-`Unsupported*` backend that reports the underlying error, so a missing device can
-never masquerade as a working one.
+`backend::build(mode, …)` picks the pair. `Auto` probes and falls back per
+subsystem, recording *why* in `Capabilities::notes`; Windows fan order is
+PawnIO → HWiNFO → simulator. `Hardware` never falls back — it returns an
+`Unsupported*` backend with the underlying error.
 
 ## Curves on Windows are software curves
 
-The `0xD121` Super I/O has mapped manual-duty registers but no known SmartFan
-curve layout, so `PawnIoFan` keeps the curve in memory, evaluates it against the
-latest temperature on every read, and writes duty when the target moves by three
-or more steps. Consequences worth knowing, and documented in the README:
+`0xD121` has manual-duty registers but no known SmartFan curve layout. `PawnIoFan`
+keeps the curve in memory, re-evaluates it on every read, and writes duty when the
+target moves by three or more steps.
 
-* a curve lives as long as the process does;
-* manual duty remains in effect after exit until the BIOS resets the chip;
-* `supports_curves()` is `true`, because the user-visible behaviour is a working
-  curve — but nothing is written to the curve registers.
+* a curve lives as long as the process;
+* manual duty remains after exit until the BIOS resets the chip;
+* `supports_curves()` is `true`, but nothing is written to the curve registers.
 
 ## State and persistence
 
-* **Lighting** — 35-byte `CCTL` blob: magic, version, then 6 × (R, G, B,
-  brightness, enabled). Identical to upstream, so an existing
-  `/var/lib/colorctl/rgb.state` keeps working, and the CLI and GUI can share a
-  file. The system path is only adopted when this process can write it, so a
-  root-owned state file never strands an unprivileged run.
+* **Lighting** — 35-byte `CCTL` blob: magic, version, 6 × (R, G, B, brightness,
+  enabled). Identical to upstream, so `/var/lib/colorctl/rgb.state` keeps working
+  and CLI and GUI share a file; the system path is adopted only when writable.
   `RgbState::to_leds()` expands it to the 200-LED frame.
-* **Settings** — JSON at `<app config>/settings.json`, written atomically
-  (temp file + rename). Unknown/corrupt files degrade to defaults with a
-  warning instead of blocking startup.
-* **Simulator** — `sim-fan.json` next to it, so a restart preserves the
-  simulated configuration.
+* **Settings** — `<app config>/settings.json`, atomic write (temp file + rename);
+  unknown or corrupt files degrade to defaults with a warning.
+* **Simulator** — `sim-fan.json` beside it, preserved across restarts.
 * **Portable mode** — an `opencolorhub.portable` marker next to the executable
-  redirects config and data into `config/` and `data/` beside it, so one binary
-  serves both installed and portable use.
+  redirects config and data into `config/` and `data/`.
 
 ## The service façade
 
-`Service` owns the backends and enforces the rules that must not be bypassed by
-any frontend:
+`Service` enforces what no frontend may bypass:
 
 * pump duty floor (60%) on manual writes and curves;
 * curve validation (4 points, strictly ascending, 0–100%);
 * optional EMA smoothing of temperature/RPM;
-* an activity ring buffer surfaced in the UI;
-* `ActionResult { snapshot, message }` for every mutation, so the UI never
-  re-reads stale state.
+* an activity ring buffer in the UI;
+* `ActionResult { snapshot, message }` per mutation, so the UI never re-reads
+  stale state.
 
 ## Elevation
 
-The Windows executable carries `src-tauri/app.manifest` with
+`src-tauri/app.manifest` sets
 `requestedExecutionLevel level="requireAdministrator"`, wired in `build.rs`
-through `tauri_build::WindowsAttributes`. Windows therefore raises UAC before
-the process starts; declining means the app does not run.
+through `tauri_build::WindowsAttributes`: UAC runs before the process starts and
+declining means the app does not run.
 
-`colorctl-core::platform` detects the current state (`OpenProcessToken` +
-`GetTokenInformation(TokenElevation)`) and can relaunch itself through
-`ShellExecuteExW` with `lpVerb = "runas"`, re-quoting the original command line.
-`ERROR_CANCELLED` (1223) is treated as a decision rather than an error: the
-caller stays put and says so.
+`colorctl-core::platform` reads the state via `OpenProcessToken` +
+`GetTokenInformation(TokenElevation)` and can relaunch through `ShellExecuteExW`
+with `lpVerb = "runas"`, re-quoting the command line. `ERROR_CANCELLED` (1223) is
+a decision, not an error.
 
-This is deliberately the visible path. The vendor utility analysed in
-`iGC.Lite-RE/` instead registers a hidden scheduled task with `RunLevel::Highest`
-and rewrites its shortcuts — administrator rights on every launch, no consent
-dialog. This app will not do that.
+The vendor utility in `iGC.Lite-RE/` instead registers a hidden scheduled task
+with `RunLevel::Highest` and rewrites shortcuts. This app will not.
 
 ## Updates
 
-`src-tauri/src/update.rs` implements a self-updater without the Tauri updater
-plugin, which would require signing keys, a `latest.json` per release and an
-installer re-run:
+`src-tauri/src/update.rs`, without the Tauri updater plugin (signing keys,
+`latest.json` per release, installer re-run):
 
 1. `GET https://api.github.com/repos/msartore/OpenColorHub/releases/latest`.
 2. Compare `tag_name` with `CARGO_PKG_VERSION` (numeric, tolerant of `v` and
@@ -147,120 +124,103 @@ installer re-run:
    into place, `app.restart()`. The leftover is deleted on the next launch, and a
    failed copy rolls the rename back.
 
-`restart()` rather than a manual spawn matters: the old process still holds the
-WebView2 profile lock, and racing it produces a window that never appears.
+`restart()` matters: the old process holds the WebView2 profile lock, and racing
+it produces a window that never appears.
 
 ## Tray and window lifecycle
 
-`src-tauri/src/tray.rs` owns the shell behaviour: a tray icon with
-**Open** / **Quit**, left click toggling the window, and `CloseRequested`
-prevented so the title-bar X hides the window instead of ending the process.
+`src-tauri/src/tray.rs`: tray icon with **Open** / **Quit**, left click toggles
+the window, `CloseRequested` prevented so the title-bar X hides rather than exits.
 
-The window is declared `visible: false` in `tauri.conf.json` and only shown when
-the process was *not* started with `--minimized` — the flag the autostart entry
-passes. Declaring it hidden avoids the flash of an empty frame at sign-in that
+The window is `visible: false` in `tauri.conf.json`, shown only without
+`--minimized` (the autostart flag) — no empty-frame flash at sign-in, as
 `show()`-then-`hide()` would produce.
 
-Only one process ever owns the hardware. `tauri-plugin-single-instance` is
-registered first, so a second launch — desktop icon, Start menu shortcut, or the
-autostart entry firing once more — forwards its command line to the running
-instance and exits before its own setup runs: no second tray icon, and no second
-claim on the Super I/O port or the HID interface. The running instance reads the
-hand-over as "show yourself" and calls `tray::reveal`, unless the forwarded
-command line carries `--minimized`; that is the autostart entry, and it must not
-pull a window in front of somebody.
+Only one process owns the hardware. `tauri-plugin-single-instance` registers
+first: a second launch forwards its command line and exits before its own setup —
+no second tray icon, no second claim on the Super I/O port or HID interface. The
+running instance treats the hand-over as "show yourself" and calls
+`tray::reveal`, unless the forwarded line carries `--minimized`.
 
-The hand-over is a `WM_COPYDATA` message to a hidden window the plugin owns, and
-Windows blocks that message between different integrity levels. Every launch path
-therefore has to start at the same elevation, which is what the
-`requireAdministrator` manifest buys: the icon and the sign-in task both run
-elevated. A build with the manifest dropped runs `asInvoker`, so clicking the
-icon while the elevated instance is up would find the mutex, fail to deliver the
-hand-over, and exit — the window would never come forward.
+The hand-over is `WM_COPYDATA` to a hidden plugin window, and Windows blocks that
+message between integrity levels. Every launch path must start at the same
+elevation — what the `requireAdministrator` manifest buys. Without it the build
+runs `asInvoker`: a click while the elevated instance is up finds the mutex, fails
+to deliver the hand-over, and exits.
 
-The lock behind this is a named mutex created in the plugin's setup. Its
-`RunEvent::Exit` handler releases it, and `App::run` dispatches that event before
-`process::restart` respawns the executable, so a self-update is not mistaken for
-a rival instance. The plugin is pinned below 2.5, whose minimum Tauri (2.12) is
-newer than the one this crate builds against.
+The lock is a named mutex created in the plugin's setup; `RunEvent::Exit`
+releases it, and `App::run` dispatches that event before `process::restart`, so a
+self-update is not mistaken for a rival instance. The plugin is pinned below 2.5,
+whose minimum Tauri (2.12) is newer than this crate's.
 
-This uses Tauri's built-in tray rather than the `tray-icon` + `winit` recipe
-found in guides: Tauri already runs an event loop, and a second one competes with
-the webview for the message pump.
+Tauri's built-in tray is used rather than `tray-icon` + `winit`: a second event
+loop competes with the webview for the message pump.
 
 ## Threading and IPC
 
-One `Mutex<Inner>` guards the service, because port I/O and the HID frame are
-global resources. A dedicated OS thread ticks `Service::snapshot()` every
-`poll_interval_ms` and emits a `telemetry` event; the webview never polls. This
-keeps blocking I/O off the async runtime entirely. The same thread watches for
-hardware the machine forgot: a tick that arrives well past its interval means the
-machine was suspended, and a controller that stops answering means it was
-re-enumerated. Either one re-applies the lighting and the fan settings that were
-lost (`Service::reassert_after_wake`) before the next snapshot.
+One `Mutex<Inner>` guards the service; port I/O and the HID frame are global. A
+dedicated OS thread ticks `Service::snapshot()` every `poll_interval_ms` and emits
+`telemetry`, keeping the webview out of polling and blocking I/O off the async
+runtime. The same thread catches hardware the machine forgot: a tick well past its
+interval means suspend, a controller that stops answering means re-enumeration.
+Either re-applies the lost lighting and fan settings
+(`Service::reassert_after_wake`) before the next snapshot.
 
-Commands are thin: lock, call the service, map the error to a `String` that the
-UI displays verbatim. `save_settings` rebuilds the backends only when the
-backend mode or state path actually changed, then pushes a fresh snapshot.
+Commands are thin: lock, call the service, map the error to a `String` the UI
+shows verbatim. `save_settings` rebuilds backends only when the mode or state path
+changed, then pushes a fresh snapshot.
 
 `capabilities/default.json` grants only `core:default` — no filesystem, shell or
-HTTP plugins. All privileged work happens in Rust; the webview cannot open
-`/dev/port` or write next to the executable even if it wanted to.
+HTTP plugins. The webview cannot open `/dev/port` or write next to the executable.
 
 ## Frontend
 
-No framework: a small DOM helper (`el`, `svg`) plus views that own their nodes
-and update them in place. That matters because telemetry arrives every second —
-re-rendering would steal focus from sliders and colour pickers mid-drag.
+No framework: a DOM helper (`el`, `svg`) and views that own their nodes and
+update in place — telemetry arrives every second, and re-rendering would steal
+focus from sliders and colour pickers mid-drag.
 
 * `main.ts` — state, hash router, toast stack, keyboard shortcuts (⌘/Ctrl+1…5).
 * `views/*` — one module per screen; each exposes `{ el, update(snapshot) }`.
 * `update.ts` — release check, modal, download progress.
-* `components/charts.ts` — SVG temperature gauge, draggable 4-point curve
-  editor, 200-LED frame preview.
-* `mock.ts` — a browser backend implementing the same command names and data
-  shapes as the Rust side. `npm run dev` therefore runs the entire UI with no
-  Rust toolchain, which is also how the UI is verified headlessly.
+* `components/charts.ts` — SVG temperature gauge, draggable 4-point curve editor,
+  200-LED frame preview.
+* `mock.ts` — same command names and data shapes as the Rust side, so
+  `npm run dev` runs the whole UI without a Rust toolchain, headlessly verifiable.
 
-The interface is intentionally sparse: no persistent status bar, no explanatory
-subtitle on every screen, no register or bank identifiers. Diagnostics live
-behind a single collapsible line on the dashboard.
+Sparse by design: no status bar, no per-screen subtitle, no register or bank
+identifiers. Diagnostics sit behind one collapsible dashboard line.
 
 ## Board detection and the hardware guard
 
-`board::detect()` reads the platform's SMBIOS view once, at service
-construction:
+`board::detect()` reads SMBIOS once, at service construction:
 
-* Linux — eight files under `/sys/class/dmi/id` (no privileges needed);
-* Windows — the `HKLM\HARDWARE\DESCRIPTION\System\BIOS` registry mirror,
-  parsed from `reg query` output so no extra crate is required;
+* Linux — eight files under `/sys/class/dmi/id` (no privileges);
+* Windows — `HKLM\HARDWARE\DESCRIPTION\System\BIOS`, parsed from `reg query`
+  output, so no extra crate.
 
-`board::classify()` is pure and carries all the policy, which is why the tests
-can cover it exhaustively without hardware:
+`board::classify()` is pure and holds all policy:
 
-* names are normalised (case, whitespace, `(ATX)` hints, `V14`/`V14A`/`V15`
-  revisions) before comparison, and a prefix match tolerates marketing suffixes;
+* names normalised (case, whitespace, `(ATX)` hints, `V14`/`V14A`/`V15`
+  revisions) before comparison; prefix match for marketing suffixes;
 * exact catalogue hit → **verified**;
-* Colorful board on a supported generation → **compatible**;
+* Colorful board, supported generation → **compatible**;
 * Colorful board on a *legacy* chipset (X570, B550, B450, …) → **unknown**: the
-  Super I/O probe is still allowed, because the chip ID check is the authority —
-  this is the path the CVN X570M in this repository takes;
-* any other vendor → **unsupported**, and `backend::build` then refuses to open
-  the hardware backend at all in `auto` mode.
+  Super I/O probe is allowed, because the chip-ID check is the authority — the
+  path the CVN X570M here takes;
+* any other vendor → **unsupported**; `backend::build` then refuses the hardware
+  backend in `auto` mode.
 
-The verdict rides along in `Snapshot.board`, so every IPC response and the CLI
-carry the same facts the guard used. `Service::with_board` allows tests and the
-CLI's `--backend simulated` path to inject a known identity.
+The verdict rides in `Snapshot.board`, so every IPC response and the CLI carry the
+same facts. `Service::with_board` injects a known identity for tests and the CLI's
+`--backend simulated`.
 
 ## Hardware protocol notes
 
-**Fan channels.** One table, `crates/colorctl-core/src/chipmap.rs`, names and
-numbers the six channels: SYS 1, CPU 2, AUX0 3, AUX1 8, AUX2 9, AUX3 10 — the
-assignment in Colorful's own `NCT5567D_B_Service`. Both backends read that table;
-no backend keeps a second copy, which is how the two used to disagree about
-which header a write would reach. The headers are named after those channels,
-not after a silkscreen guess: this board's vendor service never calls one of
-them `AIO_PUMP`.
+**Fan channels.** `crates/colorctl-core/src/chipmap.rs` names and numbers the six
+channels — SYS 1, CPU 2, AUX0 3, AUX1 8, AUX2 9, AUX3 10 — Colorful's own
+`NCT5567D_B_Service` assignment. Both backends read that table; headers are named
+after the channels, not a silkscreen guess, since the vendor service never calls
+one `AIO_PUMP`.
 
 * HWM base `0x0A30` on this board, index/data at `base+0x05` / `base+0x06`;
 * bank select is register `0x4E` written *through* the index/data pair
@@ -270,42 +230,38 @@ them `AIO_PUMP`.
 * tachometers: bank 6 at `0x56 + 2i` on Windows (measured here — 3640 rpm idle,
   4426 under load), bank 4 at `0xC0 + 2i` on Linux (the vendor's layout, not yet
   measured on that chip);
-* a duty write is verified against the same bank's `0x09`, not against the bank-0
-  table, so the check does not reuse the slot order it is meant to check;
+* a duty write is verified against the same bank's `0x09`, not the bank-0 table,
+  so the check does not reuse the slot order it checks;
 * on exit the desktop app writes `0x02 = 0x40` for every channel it put in manual
-  mode, handing control back to the chip's own SmartFan curve. The CLI does not:
-  it writes a duty and exits on purpose;
-* a channel bound as a pump in Settings is floored at 60% for duty and curves.
-  None is bound by default, because this board's table names no pump channel.
+  mode, handing control back to the chip's SmartFan curve. The CLI does not: it
+  writes a duty and exits on purpose;
+* a channel bound as a pump in Settings is floored at 60% for duty and curves;
+  none is bound by default, because this board's table names no pump channel.
 
-**Fans, Linux (NCT5584D, chip `0xD42A`).** Super I/O index/data pairs are probed
-at 0x4E/0x4F then 0x2E/0x2F; the chip ID is validated before any write. The
-hardware-monitor base comes from LDN 0x0B, giving index = base+5 and data =
-base+6. Manual mode is register `0x02 = 0x00` plus duty in `0x09`; the Linux
-backend can also program the chip's SmartFan points (`0x66 = 0xAA`,
-`0x03 = 0x01`, `0x04 = 0x01`, `0x02 = 0x40`, then four temperatures in
-`0x21..0x24` and four duties in `0x27..0x2A`). The Windows backend evaluates
-curves in software and hands them back on exit.
+**Fans, Linux (NCT5584D, chip `0xD42A`).** Index/data pairs probed at 0x4E/0x4F
+then 0x2E/0x2F; chip ID validated before any write. Hardware-monitor base from LDN
+0x0B: index = base+5, data = base+6. Manual mode is `0x02 = 0x00` plus duty in
+`0x09`; the Linux backend can also program SmartFan points (`0x66 = 0xAA`,
+`0x03 = 0x01`, `0x04 = 0x01`, `0x02 = 0x40`, four temperatures in `0x21..0x24`,
+four duties in `0x27..0x2A`). Windows evaluates curves in software.
 
-Traps that cost time: bank 0 registers `0x00`/`0x02` masquerade as RPM
-(`0x04A0` = reserved byte + duty `0xA0` = 63%), and every bank reads identically
-when the bank write is silently dropped. Sensors are therefore identified by how
-they respond to load, not by whether the value looks plausible. Writes are
-verified by read-back, which catches a wrong register but not a rotated
-bank→header mapping — only ears on the actual fans can settle that.
+Bank 0 registers `0x00`/`0x02` masquerade as RPM (`0x04A0` = reserved byte + duty
+`0xA0` = 63%), and every bank reads identically when the bank write is silently
+dropped. Identify sensors by response to load, not plausibility. Read-back
+catches a wrong register but not a rotated bank→header mapping — only ears on the
+fans settle that.
 
-**Lighting.** The controller enumerates as HID `2F4C:1000` with usage page
-`0xFF01`. The frame is ten 65-byte packets (report ID, `01 00 88`, packet index,
-20 × RGB) followed by a flush packet with index `0xFF`. Some drivers reject the
-65-byte form with `EINVAL`; the first write probes and the rest follow whichever
-worked, which is the only reliable behaviour across kernels.
+**Lighting.** HID `2F4C:1000`, usage page `0xFF01`. Ten 65-byte packets (report
+ID, `01 00 88`, packet index, 20 × RGB) then a flush packet with index `0xFF`.
+Some drivers reject the 65-byte form with `EINVAL`; the first write probes, the
+rest follow whichever worked.
 
 ## Packaging
 
 * `scripts/icons.py` regenerates the PNG set without a resampling round-trip:
-  sizes the source `.ico` already contains are decoded straight out of it and
-  only the rest are resampled. `npx tauri icon` needs a ≥1024 master, so feeding
-  it a 256 px source produced every size as 256 → 1024 → N and went soft.
+  sizes the source `.ico` already contains are decoded from it, only the rest are
+  resampled (`npx tauri icon` needs a ≥1024 master; a 256 px source produced every
+  size as 256 → 1024 → N and went soft).
 * `scripts/portable.ps1` stages the portable zip and writes the marker file.
 * `tauri.conf.json` builds NSIS, MSI and the Linux bundles; the release workflow
   stages everything flat into `dist/`, adds `SHA256SUMS.txt` and the bare
@@ -319,26 +275,24 @@ worked, which is the only reliable behaviour across kernels.
 * `npm run build` — `tsc --noEmit` then a Vite build; the type layer is the
   contract between Rust serde representations and the UI.
 * Headless UI verification — the browser demo is driven over CDP (click, read
-  DOM, screenshot) so every screen is exercised without a human.
-* Desktop verification — the built binary is launched with
+  DOM, screenshot).
+* Desktop verification — the built binary runs with
   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=…` and
   `__COMPAT_LAYER=RunAsInvoker` (the manifest demands elevation and a UAC click
-  cannot be automated), then driven over CDP; the resulting `sim-fan.json`,
-  `rgb.state` and `settings.json` are inspected to prove the Rust side really
-  wrote them.
+  cannot be automated), then over CDP; `sim-fan.json`, `rgb.state` and
+  `settings.json` prove the Rust side wrote them.
 
 ## Empty and error states
 
-Every screen can end up with nothing to show or with a failed read, and a blank
-panel cannot tell those apart. `src/components/state.ts` renders both in one
-shape — a large Tabler glyph, a title, a sentence saying what happened, optional
-technical detail in mono, and an action when retrying makes sense.
+A blank panel cannot distinguish "nothing to show" from a failed read.
+`src/components/state.ts` renders both in one shape: a large Tabler glyph, a
+title, a sentence on what happened, optional mono detail, and an action when
+retrying makes sense.
 
-- `state--empty` is neutral: no fans reporting a tach, no lighting channels, no
-  catalogue entries, a board SMBIOS could not identify.
+- `state--empty` is neutral: no tach, no lighting channels, no catalogue entries,
+  an unidentifiable board.
 - `state--error` turns the glyph red and carries the backend's own message
-  (`snapshot.read_error`, `led_device.error`, the fetch error) rather than a
-  paraphrase, so the detail line is always something a bug report can quote.
-- `stateSlot()` wraps the pattern used by Fan control, Lighting and the
-  Dashboard: hide the real content, show the state in its place, clear it when
-  data returns.
+  (`snapshot.read_error`, `led_device.error`, the fetch error), so the detail is
+  quotable in a bug report.
+- `stateSlot()` hides the content, shows the state, clears it when data returns —
+  the pattern in Fan control, Lighting and the Dashboard.

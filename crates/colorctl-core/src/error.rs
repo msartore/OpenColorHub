@@ -2,7 +2,6 @@
 
 use std::path::PathBuf;
 
-/// Convenience alias used across the crate.
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
@@ -21,7 +20,6 @@ pub enum Error {
     #[error("{0}")]
     Backend(String),
 
-    /// Caller supplied invalid input.
     #[error("{0}")]
     Invalid(#[from] CurveError),
 
@@ -47,7 +45,6 @@ impl Error {
     }
 }
 
-/// Errors produced while validating a fan curve.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CurveError {
     #[error("a fan curve needs exactly {expected} points, got {got}")]

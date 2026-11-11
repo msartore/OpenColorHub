@@ -2,22 +2,20 @@
 
 ![OpenColorHub](docs/assets/banner.png)
 
-Fan and ARGB control for Colorful AMD motherboards — a Tauri 2 desktop app and a
-`colorctl` CLI sharing one hardware core.
+Fan and ARGB control for Colorful AMD motherboards: a Tauri 2 desktop app and a
+`colorctl` CLI over one hardware core.
 
-It drives the two blocks those boards ship with: the **Nuvoton Super I/O** (fan
-headers, 4-point curves, tachometers, board temperature) and the **Colorful RGB
-controller** (200 LEDs across six channels: onboard shroud, two 12V RGB headers,
-three 5V ARGB headers).
+Two blocks: the **Nuvoton Super I/O** (fan headers, 4-point curves, tachometers,
+board temperature) and the **Colorful RGB controller** (200 LEDs on six
+channels: onboard shroud, two 12V RGB headers, three 5V ARGB headers).
 
-The board is identified from SMBIOS before anything is written, and matched
-against a verified catalogue. A machine that is not a Colorful board never has
-its Super I/O touched. → [Board detection](docs/BOARD-DETECTION.md)
+SMBIOS identifies the board before any write, against a verified catalogue; a
+non-Colorful machine never has its Super I/O touched.
+→ [Board detection](docs/BOARD-DETECTION.md)
 
-It is a desktop rewrite of [`colorctl`](https://github.com/Curstantine/colorctl):
-the register programming, curve tables and `CCTL` state format stay
-byte-compatible, so a machine can alternate between the CLI and this app without
-losing its lighting state.
+A desktop rewrite of [`colorctl`](https://github.com/Curstantine/colorctl):
+register programming, curve tables and `CCTL` state stay byte-compatible, so CLI
+and app can alternate without losing lighting state.
 
 ## Platforms
 
@@ -26,12 +24,11 @@ losing its lighting state.
 | **Linux** | ✅ `/dev/port` — root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` |
 | **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO without it | ✅ SetupAPI + `hid.dll`, no driver |
 
-Windows needs a signed driver to broker `IN`/`OUT`; PawnIO is **not bundled**,
-but the app offers to install it: on launch (and from the Fan control screen) it
-fetches PawnIO's own installer from the project's releases, checks it against a
-pinned SHA-256 and runs it so its UI and UAC prompt appear. Nothing is installed
-silently. Without the driver the app falls back to HWiNFO telemetry and then the
-simulator, both labelled. → [Platform notes](docs/PLATFORM.md)
+Windows needs a signed driver to broker `IN`/`OUT`. PawnIO is **not bundled**: on
+launch and from Fan control the app fetches PawnIO's installer from the project's
+releases, checks a pinned SHA-256 and runs it, so its UI and UAC prompt appear.
+Nothing installs silently. Without it: HWiNFO telemetry, then the simulator, both
+labelled. → [Platform notes](docs/PLATFORM.md)
 
 ## Screenshots
 
@@ -44,10 +41,9 @@ simulator, both labelled. → [Platform notes](docs/PLATFORM.md)
 | ![About](docs/screenshots/about.png) | |
 | **About** — the board this build detected | |
 
-Settings covers backend selection, elevation, units, safety confirmations, poll
-interval, startup with the OS and updates. The app lives in the tray: closing the
-window hides it, **Quit** is the only real exit, and launching the icon again
-brings the running instance forward instead of starting a second one.
+Settings covers backend, elevation, units, safety confirmations, poll interval,
+startup and updates. Closing the window hides it to the tray; **Quit** is the only
+exit; relaunching brings the running instance forward.
 
 ## Install
 
@@ -57,17 +53,16 @@ zip keeps settings and state in `config/` and `data/` beside the executable.
 
 ### The `colorctl` CLI
 
-The same hardware core also ships as a command line tool. On Debian/Ubuntu:
+On Debian/Ubuntu:
 
 ```bash
 sudo apt install ./opencolorhub-cli_*_amd64.deb
 ```
 
-That installs `colorctl`, bash/zsh/fish completions and the udev rule that lets
-the logged-in user drive the RGB controller without root. Portable tarballs
-(binary + completions) are on the same release page. The syntax is compatible
-with upstream `colorctl` — `rgb`, `fan`, `board`, plus `--backend auto|hardware|simulated`
-and `--json` for scripting.
+Installs `colorctl`, bash/zsh/fish completions and the udev rule that lets the
+logged-in user drive RGB without root. Portable tarballs (binary + completions)
+are on the release page. Syntax matches upstream: `rgb`, `fan`, `board`,
+`--backend auto|hardware|simulated`, `--json`.
 
 From source:
 
@@ -79,9 +74,8 @@ npm run dev            # browser demo, no Rust toolchain needed
 cargo test             # core + CLI unit tests
 ```
 
-On Windows use `pwsh scripts/build-release.ps1 -Portable` for a shippable build:
-it strips absolute source paths from the binary and refuses to package a stale
-executable. Real hardware on Linux needs privileges:
+On Windows, `pwsh scripts/build-release.ps1 -Portable` strips absolute source
+paths and refuses to package a stale executable. Linux hardware needs privileges:
 
 ```bash
 sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
@@ -102,21 +96,21 @@ sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
 
 ## Safety
 
-* **The pump is protected** — curves below 60% are rejected, manual duty clamped,
-  and the built-in profiles use Colorful's pump table.
-* **Curves are validated before they reach the chip** — four points, strictly
-  ascending temperatures, 0–100% duty, enforced in the UI, the CLI and the service.
-* **The chip is identified first** — an unrecognised Super I/O aborts before any
+* **Pump protected** — curves below 60% rejected, manual duty clamped, built-in
+  profiles use Colorful's pump table.
+* **Curves validated before the chip** — four points, strictly ascending
+  temperatures, 0–100% duty, enforced in UI, CLI and service.
+* **Chip identified first** — an unrecognised Super I/O aborts before any
   register write (`0xD42A` via `/dev/port`, the `0xD1xx` family via PawnIO).
 
-Writing fan curves on a board you have not verified is at your own risk.
+Writing fan curves on an unverified board is at your own risk.
 
 ## Licence
 
 GNU General Public License v3.0 — SPDX `GPL-3.0-only`. Full text in
-[`LICENSE.md`](LICENSE.md); what it means in practice, plus the MIT attribution
-for the upstream `colorctl` portions and the LGPL notice for the embedded PawnIO
-module, is in [`NOTICE.md`](NOTICE.md).
+[`LICENSE.md`](LICENSE.md); practical terms, the MIT attribution for upstream
+`colorctl` portions and the LGPL notice for the embedded PawnIO module are in
+[`NOTICE.md`](NOTICE.md).
 
-No warranty. This software writes to Super I/O and USB HID hardware; if that
-damages anything, the licence says the authors are not liable.
+No warranty: this software writes to Super I/O and USB HID hardware, and the
+licence says the authors are not liable for damage.

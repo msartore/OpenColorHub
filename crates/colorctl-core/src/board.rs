@@ -43,7 +43,6 @@ impl BoardFamily {
     }
 }
 
-/// One verified board model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoardEntry {
     pub name: &'static str,
@@ -54,7 +53,7 @@ pub struct BoardEntry {
 
 /// Catalogue extracted from the vendor software (see `COMPATIBILITY.md`).
 pub const BOARDS: &[BoardEntry] = &[
-    // --- B850 / B840 / X870 (AM5, NCT5584D) ---
+    // B850 / B840 / X870 — AM5, NCT5584D
     BoardEntry {
         name: "CVN B850 GAMING PRO WIFI7",
         family: BoardFamily::Cvn,
@@ -150,7 +149,7 @@ pub const BOARDS: &[BoardEntry] = &[
         family: BoardFamily::ICafe,
         series: "B850",
     },
-    // --- B650 (AM5, NCT5584D) ---
+    // B650 — AM5, NCT5584D
     BoardEntry {
         name: "CVN B650 GAMING FROZEN",
         family: BoardFamily::Cvn,
@@ -243,7 +242,6 @@ pub const LEGACY_SERIES: &[&str] = &[
     "A320", "B350", "X370", "B450", "X470", "A520", "B550", "X570",
 ];
 
-/// How strongly the detected board matches the catalogue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BoardConfidence {
@@ -275,13 +273,11 @@ impl BoardConfidence {
         !self.is_foreign()
     }
 
-    /// True when the board is confirmed *not* ours (as opposed to merely unknown).
     pub fn is_foreign(&self) -> bool {
         matches!(self, BoardConfidence::Unsupported)
     }
 }
 
-/// Raw SMBIOS identity of the board.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct BoardIdentity {
     pub vendor: String,
@@ -311,14 +307,12 @@ impl BoardIdentity {
     }
 }
 
-/// Result of detection: identity, catalogue match and human notes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BoardInfo {
     pub identity: Option<BoardIdentity>,
     pub confidence: BoardConfidence,
     pub family: Option<String>,
     pub series: Option<String>,
-    /// Catalogue entry that matched exactly.
     pub matched: Option<String>,
     pub catalog_size: usize,
     /// `dmi`, `registry`, `demo` or `none`.
@@ -354,15 +348,12 @@ impl BoardInfo {
     }
 }
 
-// ---------------------------------------------------------------- matching --
-
 /// Uppercases, collapses whitespace and drops revision suffixes so that
 /// `"CVN B650M Gaming Frozen V14"` and `"CVN B650M GAMING FROZEN V14 (mATX)"`
 /// compare equal to the catalogue entry.
 pub fn normalize(name: &str) -> String {
     let mut text = name.trim().to_uppercase();
 
-    // Drop parenthetical hints such as "(ATX)" / "(mATX)".
     if let Some(index) = text.find('(') {
         text.truncate(index);
     }
@@ -416,8 +407,8 @@ fn series_of(name: &str) -> Option<String> {
         .map(|series| series.to_string())
 }
 
-/// Matches an identity against the catalogue. Pure: all platform detection
-/// funnels through here, which is what the tests exercise.
+/// Pure: all platform detection funnels through here, which is what the tests
+/// exercise.
 pub fn classify(identity: Option<BoardIdentity>, source: &str) -> BoardInfo {
     let Some(identity) = identity.filter(|i| !i.is_empty()) else {
         return BoardInfo::unknown(source, "SMBIOS did not report a board name");
@@ -508,9 +499,6 @@ pub fn classify(identity: Option<BoardIdentity>, source: &str) -> BoardInfo {
     }
 }
 
-// -------------------------------------------------------------- detection --
-
-/// Detects the board on the current platform.
 pub fn detect() -> BoardInfo {
     #[cfg(target_os = "linux")]
     {
@@ -586,7 +574,6 @@ pub fn detect_from_registry() -> BoardInfo {
     board_from_pairs(&parse_reg_query(&text), "registry")
 }
 
-/// Turns SMBIOS name/value pairs into a classified board.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn board_from_pairs(pairs: &[(String, String)], source: &str) -> BoardInfo {
     let get = |key: &str| {
@@ -614,8 +601,6 @@ fn board_from_pairs(pairs: &[(String, String)], source: &str) -> BoardInfo {
     classify(Some(identity), source)
 }
 
-/// Reads the SMBIOS mirror key through the Win32 API.
-///
 /// The values are the same ones `reg query` prints, but this avoids creating a
 /// process — worth several hundred milliseconds on the startup path.
 #[cfg(target_os = "windows")]

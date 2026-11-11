@@ -16,7 +16,6 @@ use crate::model::FanHeader;
 /// Bank holding each channel's control registers (`0x02` mode, `0x09` duty).
 pub const BANKS: [u8; 6] = [1, 2, 3, 8, 9, 10];
 
-/// Super I/O bank whose registers drive `header`.
 pub fn bank(header: FanHeader) -> u8 {
     BANKS[header.index()]
 }
@@ -35,8 +34,8 @@ pub const TACH_BASE: u8 = 0xC0;
 /// The channel the vendor's table marks as a pump, when it has one.
 ///
 /// This board's table does not: its channels are SYS, CPU and AUX0-AUX3, and
-/// an `AIO_PUMP` card was an invention inherited from another board. Settings
-/// start from this value; the user binds a channel when their cooler has one.
+/// an `AIO_PUMP` card came from another board. Settings start from this value;
+/// the user binds a channel when their cooler has one.
 pub const PUMP_CHANNEL: Option<FanHeader> = None;
 
 /// Register holding `header`'s 16-bit tachometer value, high byte first.

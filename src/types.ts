@@ -18,7 +18,6 @@ export type ScreenId =
   | "settings"
   | "about";
 
-/** Privilege state, as reported by `get_elevation`. */
 export interface AutostartState {
   /** False on platforms with no implementation. */
   supported: boolean;

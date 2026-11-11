@@ -33,8 +33,8 @@ pub const COMMIT_INDEX: u8 = 0xFF;
 /// Number of packets needed for a full frame, excluding the commit.
 pub const PACKET_COUNT: usize = TOTAL_LEDS / LEDS_PER_PACKET;
 
-/// Builds one data packet. Bytes past `chunk` stay zero, matching firmware
-/// behaviour for channels with fewer than twenty LEDs.
+/// Bytes past `chunk` stay zero, matching firmware behaviour for channels with
+/// fewer than twenty LEDs.
 pub fn packet(index: u8, chunk: &[[u8; 3]]) -> [u8; PACKET_LEN] {
     let mut pkt = [0u8; PACKET_LEN];
     pkt[0] = REPORT_ID;
@@ -93,7 +93,6 @@ mod tests {
         let pkt = packet(3, &[[0xAA, 0xBB, 0xCC]]);
         assert_eq!(&pkt[0..5], &[0x00, 0x01, 0x00, 0x88, 0x03]);
         assert_eq!(&pkt[5..8], &[0xAA, 0xBB, 0xCC]);
-        // The rest of the packet stays zeroed.
         assert!(pkt[8..].iter().all(|b| *b == 0));
     }
 
@@ -120,7 +119,7 @@ mod tests {
         // gets a well-formed packet stream: 20 + 5 LEDs across two packets.
         let leds = [[1u8, 2, 3]; 25];
         let packets = frame(&leds);
-        assert_eq!(packets.len(), 3); // 2 data packets + commit
+        assert_eq!(packets.len(), 3);
         assert_eq!(
             &packets[1][5..20],
             &[1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3]

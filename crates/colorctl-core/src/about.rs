@@ -17,7 +17,6 @@ fn default_pid() -> u16 {
     COLORFUL_PID
 }
 
-/// Attribution for the project this work derives from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Upstream {
     pub name: String,
@@ -40,7 +39,6 @@ pub struct BuildMeta {
     pub family: String,
 }
 
-/// One row of the supported-hardware table.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HeaderInfo {
     pub id: String,
@@ -49,7 +47,6 @@ pub struct HeaderInfo {
     pub description: String,
 }
 
-/// One row of the channel table.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelInfo {
     pub id: String,
@@ -59,7 +56,6 @@ pub struct ChannelInfo {
     pub description: String,
 }
 
-/// Everything the About screen renders.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AboutInfo {
     pub name: String,
@@ -75,7 +71,6 @@ pub struct AboutInfo {
     #[serde(default = "default_pid")]
     pub pid: u16,
     pub total_leds: usize,
-    /// What this machine actually is, and how well it matches the catalogue.
     pub board: BoardInfo,
     pub boards: Vec<String>,
     pub headers: Vec<HeaderInfo>,
@@ -94,7 +89,6 @@ pub struct Paths {
     pub config_override: Option<String>,
 }
 
-/// External link rendered as a button.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Link {
     pub label: String,
@@ -211,7 +205,6 @@ impl AboutInfo {
     }
 }
 
-/// Verified board catalogue, rendered on the About screen.
 pub fn supported_boards() -> Vec<String> {
     BOARDS
         .iter()

@@ -230,12 +230,10 @@ impl SuperIo {
         Ok(points)
     }
 
-    /// Reads back the manual duty register.
     pub fn read_pwm(&mut self, header: crate::model::FanHeader) -> Result<u8> {
         self.read_hwm_reg(crate::chipmap::bank(header), 0x09)
     }
 
-    /// Reads back the control mode register.
     pub fn read_mode(&mut self, header: crate::model::FanHeader) -> Result<u8> {
         self.read_hwm_reg(crate::chipmap::bank(header), 0x02)
     }

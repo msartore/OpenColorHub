@@ -1,8 +1,3 @@
-/**
- * Overview screen: thermal gauge with the session range, six headline numbers,
- * fan and lighting state, temperature history, system facts and recent writes.
- */
-
 import { api } from "../api";
 import { el } from "../dom";
 import { dutyColor, formatClock, formatRpm, formatTemp } from "../format";

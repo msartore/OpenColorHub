@@ -1,5 +1,3 @@
-/** Built-in SmartFan profiles, shared by the UI and the browser demo. */
-
 import type { CurvePoint, FanProfileId } from "./types";
 
 export interface ProfileMeta {

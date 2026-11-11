@@ -11,25 +11,20 @@
 
 use serde::Serialize;
 
-/// What the UI needs to decide whether to offer the action.
 #[derive(Debug, Clone, Serialize)]
 pub struct Elevation {
     /// True when the current process already holds an elevated token (or euid 0).
     pub elevated: bool,
-    /// True when this platform/build can actually raise a prompt.
     pub can_request: bool,
     /// Human-readable reason, shown verbatim when the action is unavailable.
     pub detail: String,
 }
 
-/// Result of asking the OS for elevation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     /// The elevated instance was started; the caller should exit.
     Launched,
-    /// The user dismissed the prompt.
     Declined,
-    /// This platform cannot raise an elevation prompt.
     Unsupported,
 }
 
@@ -50,12 +45,10 @@ pub fn state() -> Elevation {
     }
 }
 
-/// Whether this process already has the privileges it would ask for.
 pub fn is_elevated() -> bool {
     imp::is_elevated()
 }
 
-/// Raises the platform's consent prompt and relaunches this binary elevated.
 pub fn request() -> crate::error::Result<Outcome> {
     imp::request()
 }
@@ -175,7 +168,6 @@ mod imp {
             match ch {
                 '\\' => backslashes += 1,
                 '"' => {
-                    // Escape the run of backslashes and the quote itself.
                     for _ in 0..backslashes * 2 + 1 {
                         out.push('\\');
                     }

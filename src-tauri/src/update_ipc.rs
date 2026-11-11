@@ -1,5 +1,3 @@
-//! IPC for the self-updater.
-
 use tauri::{AppHandle, State};
 
 use crate::state::AppState;
@@ -20,8 +18,6 @@ pub async fn update_check() -> UpdateStatus {
         })
 }
 
-/// Downloads the release asset, verifies it, swaps it in and relaunches.
-///
 /// Returns only on failure — success exits the process.
 #[tauri::command]
 pub async fn update_install(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {

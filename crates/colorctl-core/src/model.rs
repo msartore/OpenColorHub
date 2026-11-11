@@ -1,9 +1,7 @@
 //! Hardware model: fan headers, ARGB channels and the wire types shared with
 //! the frontend.
 //!
-//! Everything that crosses the Tauri IPC boundary is defined here so the Rust
-//! and TypeScript sides cannot drift apart silently (`src/types.ts` mirrors
-//! these serde representations).
+//! `src/types.ts` mirrors these serde representations.
 
 use serde::{Deserialize, Serialize};
 
@@ -88,7 +86,6 @@ impl FanHeader {
         }
     }
 
-    /// Human description shown on the fan screen.
     pub fn description(&self) -> &'static str {
         match self {
             FanHeader::Sys => "System fan / rear exhaust",
@@ -220,7 +217,6 @@ impl Channel {
         }
     }
 
-    /// Short label used in compact UI.
     pub fn label(&self) -> &'static str {
         match self {
             Channel::Led => "Onboard",
@@ -296,7 +292,6 @@ impl std::fmt::Display for Channel {
     }
 }
 
-/// Colour + brightness + on/off for one channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ChannelConfig {
     pub color: [u8; 3],
@@ -317,7 +312,6 @@ impl ChannelConfig {
         Self::default()
     }
 
-    /// Colour actually written to the LEDs (brightness applied).
     pub fn scaled(&self) -> [u8; 3] {
         scale_color(self.color, self.brightness)
     }
@@ -330,7 +324,7 @@ impl ChannelConfig {
     }
 }
 
-/// Scales a colour by a percentage (0-100), matching upstream maths.
+/// Matches upstream brightness maths.
 pub fn scale_color(color: [u8; 3], brightness: u8) -> [u8; 3] {
     let factor = brightness.min(100) as u16;
     [
@@ -340,13 +334,10 @@ pub fn scale_color(color: [u8; 3], brightness: u8) -> [u8; 3] {
     ]
 }
 
-/// One fan reading plus its programmed state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FanSample {
     pub header: FanHeader,
-    /// The Super I/O bank this sample came from. Published so the UI and the
-    /// CLI report what the backend actually read, never a second copy of the
-    /// map kept elsewhere.
+    /// The Super I/O bank this sample came from, as the backend read it.
     pub bank: u8,
     pub rpm: u16,
     pub pwm: u8,
@@ -373,17 +364,15 @@ impl FanSample {
     }
 }
 
-/// A full telemetry read.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Telemetry {
     pub temperature_c: Option<f32>,
     /// Where the reading came from — `bank 1 · 0x50`, `HWiNFO shared memory`,
-    /// `synthetic`. A number nobody can trace is a number nobody should trust.
+    /// `synthetic`.
     #[serde(default)]
     pub temperature_source: Option<String>,
-    /// The register behind the reading, e.g. `bank 1 · 0x50`. Kept apart from
-    /// the label so the screen can say "board thermistor" and the tooltip can
-    /// say where it was read.
+    /// The register behind the reading, e.g. `bank 1 · 0x50`, kept apart from
+    /// the human label.
     #[serde(default)]
     pub temperature_register: Option<String>,
     pub fans: Vec<FanSample>,
@@ -400,12 +389,10 @@ impl Telemetry {
     }
 }
 
-/// Where a backend points at, and whether it can actually reach hardware.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceInfo {
     /// Human name, e.g. "Nuvoton NCT5584D".
     pub name: String,
-    /// What it is / how it is reached.
     pub detail: String,
     /// `/dev/port`, `/dev/hidraw3`, a config path, ... when known.
     pub path: Option<String>,
@@ -413,7 +400,6 @@ pub struct DeviceInfo {
     pub available: bool,
     /// True when readings are synthetic — always surfaced in the UI.
     pub simulated: bool,
-    /// Why the hardware backend is unavailable, when it is.
     pub error: Option<String>,
 }
 
@@ -461,7 +447,6 @@ impl DeviceInfo {
     }
 }
 
-/// What the current backend can actually do.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Capabilities {
     pub fan_control: bool,
@@ -505,10 +490,8 @@ pub struct FanStatus {
     pub curve_percent: Option<u8>,
 }
 
-/// One Super I/O register read by the diagnostic probe.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RegisterRead {
-    /// What this register is believed to hold.
     pub label: String,
     pub bank: u8,
     pub register: u8,
@@ -548,12 +531,9 @@ pub struct Snapshot {
     pub fan_device: DeviceInfo,
     pub led_device: DeviceInfo,
     pub capabilities: Capabilities,
-    /// Average fan duty, used by the dashboard summary.
     pub avg_percent: u8,
-    /// Why the last telemetry read failed, when it did. Absent on success.
     #[serde(default)]
     pub read_error: Option<String>,
-    /// SMBIOS identity of the host board and how well it matches the catalogue.
     pub board: BoardInfo,
 }
 
@@ -580,7 +560,6 @@ impl Snapshot {
     }
 }
 
-/// Milliseconds since the Unix epoch.
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

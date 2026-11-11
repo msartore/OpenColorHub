@@ -12,13 +12,11 @@ pub const fn pct(p: u8) -> u8 {
     (p as u32 * 255).div_ceil(100) as u8
 }
 
-/// Converts a raw PWM value (0-255) back to an approximate percentage (0-100).
 #[inline]
 pub const fn pwm_to_pct(pwm: u8) -> u8 {
     ((pwm as u16 * 100 + 127) / 255) as u8
 }
 
-/// Formats a temperature for display in the requested unit.
 pub fn format_temp(celsius: f32, unit: crate::settings::TempUnit) -> String {
     match unit {
         crate::settings::TempUnit::Celsius => format!("{celsius:.0}°C"),

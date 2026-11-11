@@ -1,5 +1,3 @@
-//! `colorctl` CLI (desktop app: `opencolorhub`).
-//!
 //! Thin layer over [`colorctl_core::Service`]: parse args, call the service,
 //! print the result. All hardware knowledge lives in the core crate, so this
 //! binary builds and runs on Windows too (against the simulator).
@@ -59,7 +57,6 @@ fn run(cli: Cli) -> Result<ExitCode> {
     }
 }
 
-/// Writable directory for state, mirroring the upstream cascade.
 fn data_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("COLORCTL_STATE_DIR") {
         return PathBuf::from(dir);
@@ -67,7 +64,6 @@ fn data_dir() -> PathBuf {
     colorctl_core::backend::default_data_dir()
 }
 
-/// `colorctl board` — SMBIOS identity plus the catalogue verdict.
 fn handle_board(service: &Service, json: bool) -> Result<ExitCode> {
     let info = service.board();
 
@@ -440,7 +436,6 @@ fn handle_fan(action: FanAction, service: &mut Service, json: bool) -> Result<Ex
     Ok(ExitCode::SUCCESS)
 }
 
-/// Colour parser matching upstream: names first, then hex.
 fn parse_color(raw: &str) -> Result<[u8; 3]> {
     let s = raw.trim();
     match s.to_ascii_lowercase().as_str() {

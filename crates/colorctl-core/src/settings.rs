@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::model::FanHeader;
 
-/// Which backend to talk to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BackendMode {
@@ -55,7 +54,6 @@ impl BackendMode {
     }
 }
 
-/// Temperature display unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TempUnit {
@@ -72,7 +70,6 @@ impl TempUnit {
         }
     }
 
-    /// Converts a Celsius reading for display.
     pub fn convert(&self, celsius: f32) -> f32 {
         match self {
             TempUnit::Celsius => celsius,
@@ -90,25 +87,18 @@ pub const POLL_DEFAULT_MS: u64 = 1_000;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Which backend to use.
     pub backend: BackendMode,
-    /// Telemetry interval in milliseconds.
     pub poll_interval_ms: u64,
-    /// Display unit for temperatures.
     pub temp_unit: TempUnit,
     /// Exponential smoothing of RPM/temperature readings.
     pub smoothing: bool,
-    /// Re-apply the stored lighting state when the app starts.
     pub reapply_led_on_launch: bool,
-    /// Ask before writing to hardware (fan/LED changes).
     pub confirm_writes: bool,
     /// UI accent colour (`#rrggbb`).
     pub accent: String,
     /// Optional override for the `CCTL` state file.
     pub state_file: Option<PathBuf>,
-    /// Remember the last screen so the app reopens where it was.
     pub last_screen: String,
-    /// Warn when a fan is configured below this duty (percent).
     pub low_duty_warning: u8,
     /// Channel that drives an AIO pump, when the user has one.
     ///
@@ -136,8 +126,6 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// Loads settings, returning defaults when the file is missing.
-    ///
     /// A corrupt file yields `Err`, but the caller keeps the defaults it passed
     /// in — the GUI shows a warning banner instead of refusing to start.
     pub fn load(path: &Path) -> Result<Self> {
@@ -151,7 +139,6 @@ impl Settings {
         }
     }
 
-    /// Loads without failing: returns defaults plus an optional warning.
     pub fn load_or_default(path: &Path) -> (Self, Option<String>) {
         match Self::load(path) {
             Ok(mut s) => {
@@ -174,7 +161,6 @@ impl Settings {
         Ok(())
     }
 
-    /// Clamps every field to a sane range. Called after load and after a patch.
     pub fn sanitize(&mut self) {
         self.poll_interval_ms = self.poll_interval_ms.clamp(POLL_MIN_MS, POLL_MAX_MS);
         self.low_duty_warning = self.low_duty_warning.min(100);
@@ -186,7 +172,6 @@ impl Settings {
         }
     }
 
-    /// Applies a partial update from the UI.
     pub fn apply_patch(&mut self, patch: SettingsPatch) {
         if let Some(v) = patch.backend {
             self.backend = v;
@@ -230,19 +215,16 @@ impl Settings {
         self.sanitize();
     }
 
-    /// Whether `header` is the channel the user bound as a pump.
     pub fn is_pump(&self, header: FanHeader) -> bool {
         self.pump_header == Some(header)
     }
 
-    /// Clamp a requested duty for a header, protecting the pump.
     pub fn clamp_duty(&self, is_pump: bool, percent: u8) -> u8 {
         let floor = if is_pump { 60 } else { 0 };
         percent.clamp(floor, 100)
     }
 }
 
-/// Partial settings update coming from the UI.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SettingsPatch {
@@ -256,8 +238,6 @@ pub struct SettingsPatch {
     pub state_file: Option<Option<PathBuf>>,
     pub last_screen: Option<String>,
     pub low_duty_warning: Option<u8>,
-    /// `"none"` clears the binding, a header id (`"aux3"`) binds it, absent
-    /// leaves it alone.
     pub pump_header: Option<String>,
 }
 

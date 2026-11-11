@@ -1,6 +1,3 @@
-//! Self-update: check the GitHub release feed, download the new executable and
-//! swap it in place.
-//!
 //! Windows refuses to overwrite a running image, but it does allow *renaming*
 //! one, so the swap is: rename `OpenColorHub.exe` -> `OpenColorHub.old.exe`,
 //! copy the downloaded binary into place, relaunch, and delete the leftover on
@@ -23,7 +20,6 @@ const REPO: &str = "msartore/OpenColorHub";
 const ASSET: &str = "OpenColorHub.exe";
 const SUMS: &str = "SHA256SUMS.txt";
 
-/// What the UI needs to render the update prompt.
 #[derive(Debug, Clone, Serialize)]
 pub struct UpdateStatus {
     pub current: String,
@@ -84,7 +80,7 @@ fn is_newer(latest: &str, current: &str) -> bool {
     }
 }
 
-/// Queries the release feed. Blocking; callers run it off the UI thread.
+/// Blocking; callers run it off the UI thread.
 pub fn check() -> UpdateStatus {
     let current = env!("CARGO_PKG_VERSION").to_string();
     let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
@@ -161,12 +157,10 @@ fn describe(err: &ureq::Error) -> String {
     }
 }
 
-/// Directory that holds the staged download, next to the app's data.
 pub fn staging_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("update")
 }
 
-/// Downloads `url` into `dest`, emitting `update://progress` as it goes.
 pub fn download(app: &AppHandle, url: &str, dest: &Path) -> Result<PathBuf, String> {
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent)
@@ -209,9 +203,8 @@ pub fn download(app: &AppHandle, url: &str, dest: &Path) -> Result<PathBuf, Stri
     Ok(dest.to_path_buf())
 }
 
-/// Fetches `SHA256SUMS.txt` from the same release and matches `ASSET`.
-/// Returns the expected digest, or `None` when the file or entry is absent —
-/// an unsigned project should still update, just with less assurance.
+/// Returns `None` when the file or entry is absent — an unsigned project should
+/// still update, just with less assurance.
 pub fn expected_digest(status: &UpdateStatus) -> Option<String> {
     let base = status.asset_url.as_deref()?.rsplit_once('/')?.0;
     let url = format!("{base}/{SUMS}");
@@ -222,8 +215,6 @@ pub fn expected_digest(status: &UpdateStatus) -> Option<String> {
         .map(|(digest, _)| digest.trim().to_ascii_lowercase())
 }
 
-/// Replaces the running executable with `staged` and relaunches.
-///
 /// The app exits on success; the caller never regains control.
 pub fn swap_and_restart(app: &AppHandle, staged: &Path) -> Result<(), String> {
     let current = std::env::current_exe().map_err(|e| format!("cannot locate executable: {e}"))?;
@@ -242,7 +233,6 @@ pub fn swap_and_restart(app: &AppHandle, staged: &Path) -> Result<(), String> {
     app.restart()
 }
 
-/// Removes the `*.old.exe` left behind by a previous update. Best effort.
 pub fn clean_previous() {
     if let Ok(current) = std::env::current_exe() {
         let _ = fs::remove_file(current.with_extension("old.exe"));

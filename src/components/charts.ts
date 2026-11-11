@@ -1,5 +1,3 @@
-/** SVG charts: temperature gauge, SmartFan curve editor, 200-LED preview strip. */
-
 import { clamp, el, svg } from "../dom";
 import { tempColor, tempSymbol, tempValue } from "../format";
 import type { ChannelStatus, CurvePoint, TempUnit } from "../types";
@@ -98,7 +96,6 @@ export function temperatureGauge(): Gauge {
     const max = unit === "fahrenheit" ? 212 : 100;
     const value = tempValue(celsius, unit);
 
-    // Tick labels follow the active unit.
     while (labelLayer.firstChild) labelLayer.removeChild(labelLayer.firstChild);
     for (let i = 0; i <= 5; i += 1) {
       const ratio = i / 5;
@@ -407,7 +404,6 @@ export interface LedStrip {
   update(channels: ChannelStatus[]): void;
 }
 
-/** 200-LED preview, one rect per LED, grouped per channel. */
 export function ledStrip(options: { legend?: boolean } = {}): LedStrip {
   const showLegend = options.legend ?? true;
   const total = 200;

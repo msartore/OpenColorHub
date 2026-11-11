@@ -96,7 +96,6 @@ const PATHS: Record<IconName, string[]> = {
   ],
 };
 
-/** Builds one Tabler glyph, sized by CSS. */
 export function icon(name: IconName, className = "nav-icon"): SVGSVGElement {
   const node = svg("svg", {
     class: className,

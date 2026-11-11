@@ -16,7 +16,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{CHANNELS, Channel, ChannelConfig, ChannelStatus, TOTAL_LEDS, scale_color};
 
-/// Serialized lighting state for every channel.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RgbState {
     channels: [ChannelConfig; CHANNELS.len()],
@@ -46,7 +45,6 @@ impl RgbState {
         };
     }
 
-    /// Marks a channel as an active solid colour.
     pub fn set_rgb(&mut self, channel: Channel, color: [u8; 3], brightness: u8) {
         self.set(channel, ChannelConfig::rgb(color, brightness));
     }
@@ -61,12 +59,10 @@ impl RgbState {
         }
     }
 
-    /// True when at least one channel is lit.
     pub fn any_enabled(&self) -> bool {
         self.channels.iter().any(|c| c.enabled)
     }
 
-    /// Number of lit channels.
     pub fn enabled_count(&self) -> usize {
         self.channels.iter().filter(|c| c.enabled).count()
     }
@@ -146,7 +142,6 @@ impl RgbState {
             .collect()
     }
 
-    /// Average brightness of the lit channels, for the dashboard summary tile.
     pub fn average_brightness(&self) -> u8 {
         let lit: Vec<_> = self.channels.iter().filter(|c| c.enabled).collect();
         if lit.is_empty() {
@@ -156,19 +151,16 @@ impl RgbState {
         (sum / lit.len() as u32) as u8
     }
 
-    /// Convenience for tests and the settings screen: 6 hex strings in channel order.
     pub fn as_hex_list(&self) -> Vec<String> {
         Channel::all().iter().map(|c| self.get(*c).hex()).collect()
     }
 
-    /// Applies a solid colour to every channel at once.
     pub fn fill(&mut self, color: [u8; 3], brightness: u8) {
         for ch in Channel::all() {
             self.set(*ch, ChannelConfig::rgb(color, brightness));
         }
     }
 
-    /// Scales every lit channel (used by the global brightness slider).
     pub fn set_global_brightness(&mut self, brightness: u8) {
         for i in 0..self.channels.len() {
             if self.channels[i].enabled {

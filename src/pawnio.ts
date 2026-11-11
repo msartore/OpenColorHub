@@ -135,7 +135,6 @@ export function showPawnioDialog(ctx: ViewContext, status: PawnioStatus): void {
   });
 }
 
-/** Offers the install once per launch, and only when it would help. */
 export async function maybeOfferPawnio(ctx: ViewContext): Promise<void> {
   if (offered) return;
   offered = true;

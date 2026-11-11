@@ -1,14 +1,12 @@
 # RGB compatibility
 
-The lighting controller is a **USB HID device, not a Super I/O block**: every
-Colorful board that has one exposes it as vendor `0x2F4C`, and the AMD boards
-this project targets expose it as product `0x1000` on HID usage page `0xFF01`.
+The lighting controller is a **USB HID device, not a Super I/O block**: Colorful
+boards expose vendor `0x2F4C`; the AMD boards this project targets use product
+`0x1000` on usage page `0xFF01`.
 
-That matters because it makes lighting the widest-supported subsystem in the
-app. Nothing about the board model, the chipset or the Super I/O changes how the
-controller is found or how a frame is written. Board identity from SMBIOS
-([board detection](BOARD-DETECTION.md)) gates *fan* control; it does not gate
-RGB.
+SMBIOS identity ([board detection](BOARD-DETECTION.md)) gates *fan* control, not
+RGB. Board model, chipset and Super I/O change neither detection nor frame
+writing.
 
 ## How the controller is identified
 
@@ -19,19 +17,18 @@ RGB.
 | Usage page | `0xFF01`, usage `0x0001` |
 | Report | 65-byte output reports, report ID `0x00` |
 
-There is **no model whitelist**, and that is not an assumption made here: it is
-what Colorful's own driver does. `iGameMBoard.dll` dispatches on the USB product
-ID alone, and OpenRGB registers the same detector
-(`REGISTER_HID_DETECTOR_PU(…, 0x2F4C, 0x1000, 0xFF01, 0x0001)`). The libraries
-examined for this are `iGameMBoard.dll`, `iGameCenter.Hardware` and
-`iGameAPI.dll` from the iGame Center Lite installer; the analysis was published
-with the upstream [`colorctl`](https://github.com/Curstantine/colorctl)
-`COMPATIBILITY.md` and is reproduced here as it applies to this app.
+**No model whitelist** — matching Colorful's own driver: `iGameMBoard.dll`
+dispatches on USB product ID alone, and OpenRGB registers the same detector
+(`REGISTER_HID_DETECTOR_PU(…, 0x2F4C, 0x1000, 0xFF01, 0x0001)`). Libraries
+examined: `iGameMBoard.dll`, `iGameCenter.Hardware` and `iGameAPI.dll` from the
+iGame Center Lite installer; the analysis was published with upstream
+[`colorctl`](https://github.com/Curstantine/colorctl) `COMPATIBILITY.md` and is
+reproduced as it applies to this app.
 
 ## ODM families behind the model list
 
-Colorful does not design every board it sells. The internal classes in
-`iGameMBoard.dll` are grouped by the original design manufacturer:
+Colorful does not design every board it sells; `iGameMBoard.dll` classes group by
+original design manufacturer:
 
 | Prefix in the driver | ODM | Platforms |
 | --- | --- | --- |
@@ -43,9 +40,8 @@ Colorful does not design every board it sells. The internal classes in
 ## Product ID catalogue
 
 Seventeen product IDs have a dispatch routine in `iGameMBoard.dll`. Only
-`0x1000` is on the AMD path this project drives; the Intel entries are listed so
-a controller found on another board can be identified rather than mistaken for
-an unsupported device.
+`0x1000` is on the AMD path this project drives; Intel entries are listed so a
+controller on another board is identified, not mistaken for unsupported.
 
 | PID | Driver class | Platform |
 | --- | --- | --- |
@@ -66,10 +62,8 @@ an unsupported device.
 
 ## Boards that share the `0x1000` endpoint
 
-The AMD firmware is the same across the whole modern lineup, so all of these
-speak the identical 200-LED protocol. The list is upstream's, not a hardware
-test of every SKU — what is verified here is the endpoint and the payload, which
-is what the app actually depends on.
+Identical AMD firmware and the same 200-LED protocol. The list is upstream's, not
+a hardware test of every SKU; what is verified here is the endpoint and payload.
 
 **AM5 (B650 / B840 / B850 / X870)**
 
@@ -96,8 +90,8 @@ is what the app actually depends on.
 
 ## The frame
 
-`crates/colorctl-core/src/backend/frame.rs` is the implementation of record;
-both the Linux and Windows backends build their packets there.
+`crates/colorctl-core/src/backend/frame.rs` is the implementation of record; both
+backends build packets there.
 
 ```text
 offset 0        report ID (0x00)
@@ -106,15 +100,14 @@ offset 4        packet index 0..=9, or 0xFF for the commit
 offset 5..     20 × (R, G, B)
 ```
 
-A full update is **ten 65-byte packets of twenty LEDs**, followed by a commit
-packet that latches the frame. Bytes past a channel's last LED stay zero, which
-is what the firmware does for unpopulated headers.
+A full update is **ten 65-byte packets of twenty LEDs** plus a commit packet that
+latches the frame. Bytes past a channel's last LED stay zero, as the firmware
+does for unpopulated headers.
 
 ## Channel and header map
 
-The controller always accepts all 200 LEDs; a board with fewer physical headers
-simply has no traces from the unused channels to a pin. That is why setting
-colour on a channel with nothing plugged into it is harmless rather than an
+The controller accepts all 200 LEDs; a board with fewer headers has no traces
+from the unused channels. Setting colour on an empty channel is harmless, not an
 error.
 
 | Channel | Label | Official ID | LED range | LEDs |
@@ -126,9 +119,9 @@ error.
 | `argb2` | `5V_2` — 5V ARGB header 2 | `52` (`5V_2`) | `80..140` | 60 |
 | `argb3` | `5V_3` — 5V ARGB header 3 | `53` (`5V_3`) | `140..200` | 60 |
 
-The driver provisions eight 5V headers (`51`–`58`) and two 12V headers; the AMD
-boards this app supports expose the first three 5V and both 12V offsets. A 12V
-header is a single zone driven by one LED entry — G-R-B is not addressable.
+The driver provisions eight 5V headers (`51`–`58`) and two 12V; the AMD boards
+this app supports expose the first three 5V and both 12V. A 12V header is a
+single zone driven by one LED entry — G-R-B is not addressable.
 
 ## Comparison with OpenRGB
 
@@ -142,25 +135,22 @@ header is a single zone driven by one LED entry — G-R-B is not addressable.
 | Platform scope | 17 PIDs, Intel + AMD | AMD `0x1000` | AMD `0x1000` |
 | State | vendor config | per-app | `CCTL` blob, upstream-compatible |
 
-The payload is therefore the same wire format in all three; the differences are
-in naming, persistence and how much of the header count is exposed.
+Same wire format in all three; the differences are naming, persistence and how
+much of the header count is exposed.
 
 ## What "supported" means for RGB
 
-Lighting works on any board where the controller enumerates: the app opens the
-device, writes the frame, and reads the state back from the `CCTL` file. Fan
-control is the narrower claim, because it depends on the Super I/O answering the
-chip-ID probe — see [board detection](BOARD-DETECTION.md) and
-[platform notes](PLATFORM.md).
+Lighting works wherever the controller enumerates: open the device, write the
+frame, read state back from the `CCTL` file. Fan control is narrower — it needs
+the Super I/O to answer the chip-ID probe; see
+[board detection](BOARD-DETECTION.md) and [platform notes](PLATFORM.md).
 
-Access to `/dev/hidraw` is granted by the udev rule the `.deb` packages install;
-[platform notes](PLATFORM.md) has the rule and the manual steps for the AppImage
-and tarball builds.
+`/dev/hidraw` access comes from the udev rule the `.deb` packages install;
+[platform notes](PLATFORM.md) has the rule and manual steps for AppImage and
+tarball builds.
 
 ## Licence and provenance
 
-The compatibility tables above are adapted from the upstream
-[`colorctl`](https://github.com/Curstantine/colorctl) project (MIT), whose
-`COMPATIBILITY.md` documents the decompilation of Colorful's iGame Center
-libraries. This repository is GPL-3.0-only; the attribution is recorded in
-`NOTICE.md`.
+Tables adapted from upstream [`colorctl`](https://github.com/Curstantine/colorctl)
+(MIT), whose `COMPATIBILITY.md` documents the decompilation of Colorful's iGame
+Center libraries. This repository is GPL-3.0-only; attribution in `NOTICE.md`.

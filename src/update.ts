@@ -125,7 +125,6 @@ export function showUpdateDialog(status: UpdateStatus): Promise<void> {
   });
 }
 
-/** Startup hook: quietly checks once, then offers anything newer. */
 export async function maybeOfferUpdate(): Promise<void> {
   const status = await checkForUpdate();
   if (status?.available) void showUpdateDialog(status);

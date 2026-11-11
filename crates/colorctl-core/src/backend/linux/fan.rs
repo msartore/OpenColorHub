@@ -6,7 +6,6 @@ use crate::curve::{self, FanCurve};
 use crate::error::Result;
 use crate::model::{DeviceInfo, FAN_HEADERS, FanHeader, FanMode, FanSample, Telemetry};
 
-/// Fan + thermal control on supported Colorful boards.
 pub struct LinuxFan {
     sio: SuperIo,
     /// Curves last read or written, indexed by [`FanHeader::index`].

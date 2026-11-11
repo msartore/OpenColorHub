@@ -27,7 +27,6 @@ export interface StateOptions {
   compact?: boolean;
 }
 
-/** A container that swaps between a state and the content it replaces. */
 export interface StateSlot {
   el: HTMLElement;
   show(options: StateOptions): void;

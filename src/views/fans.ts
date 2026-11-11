@@ -1,5 +1,3 @@
-/** Fan control: per-header manual duty, SmartFan curve editing, presets. */
-
 import { api } from "../api";
 import { el } from "../dom";
 import { PROFILES, curveFor, sameCurve } from "../curves";
@@ -343,8 +341,6 @@ export function createFans(ctx: ViewContext): View {
       warningSlot.replaceChildren();
     }
 
-    // Highlight the preset that matches every header, so the user can see at a
-    // glance which profile the board is currently running.
     PROFILES.forEach((profile, index) => {
       // Only the headers that exist decide whether a profile is "running".
       const active =

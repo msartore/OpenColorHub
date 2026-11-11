@@ -1,5 +1,3 @@
-/** Lighting: per-channel colour, brightness, and the 200-LED frame preview. */
-
 import { api } from "../api";
 import { el, fromHex } from "../dom";
 import type { ChannelStatus, Snapshot } from "../types";
@@ -113,9 +111,6 @@ export function createLeds(ctx: ViewContext): View {
 
   const makeCard = (id: string, label: string, name: string, description: string, leds: number): ChannelCard => {
     const colorInput = el("input", { class: "color-input color-input--hidden", type: "color", value: "#22d3ee" });
-    // The hex is the colour control: clicking it opens the picker. A filled
-    // swatch beside it only repeated what the hex already says, in a block of
-    // colour that dominates the card.
     const hexLabel = el(
       "button",
       {
@@ -305,8 +300,7 @@ export function createLeds(ctx: ViewContext): View {
     strip.update(snapshot.channels);
 
     // Until the user picks a colour, the global field shows what the controller
-    // is actually running. Leaving it on a hard-coded cyan made the screen
-    // disagree with every channel card after navigating back to it.
+    // is actually running.
     if (!pickerTouched) {
       const source = snapshot.channels.find((channel) => channel.enabled) ?? snapshot.channels[0];
       if (source) {

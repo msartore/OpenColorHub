@@ -55,5 +55,4 @@ pub const UPSTREAM_NAME: &str = "colorctl";
 pub const UPSTREAM_URL: &str = "https://github.com/Curstantine/colorctl";
 pub const UPSTREAM_AUTHOR: &str = "Curstantine";
 
-/// Version of the core crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

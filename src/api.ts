@@ -1,5 +1,3 @@
-/** IPC bridge: real Tauri commands, or the browser demo backend. */
-
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -32,7 +30,6 @@ import type {
 
 const demo = inTauri() ? null : createDemoBackend();
 
-/** True when the UI is running in a plain browser (design/demo mode). */
 export const isDemo = demo !== null;
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -93,14 +90,12 @@ export const api = {
   deleteSetup: (kind: SetupKind, id: string) => call<SetupList>("delete_setup", { kind, id }),
 };
 
-/** Subscribes to telemetry ticks; returns an unsubscribe function. */
 /** Resolves when the backend finishes probing the hardware. */
 export async function onBackendReady(cb: () => void): Promise<() => void> {
   if (demo) return () => {};
   return listen("backend://ready", () => cb());
 }
 
-/** Subscribes to the PawnIO installer download. */
 export async function onPawnioProgress(
   cb: (progress: PawnioProgress) => void,
 ): Promise<() => void> {
@@ -108,7 +103,7 @@ export async function onPawnioProgress(
   return listen<PawnioProgress>("pawnio://progress", (event) => cb(event.payload));
 }
 
-/** Subscribes to download progress; resolves once the listener is installed. */
+/** Resolves once the listener is installed, so no early progress event is missed. */
 export async function onDriverProgress(
   cb: (progress: DriverProgress) => void,
 ): Promise<() => void> {

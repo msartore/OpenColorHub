@@ -1,16 +1,13 @@
-//! Shared application state: the core service plus persisted settings.
-
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
 use colorctl_core::Service;
 use colorctl_core::settings::Settings;
 
-/// Everything guarded by the single application mutex.
-///
 /// One mutex is deliberate: hardware access must be serialised (register banks
 /// and the HID frame are global resources), and the ticker plus IPC commands
 /// are the only writers.
+///
 /// The hardware probe takes a few hundred milliseconds, so it runs after the
 /// window is on screen. Until it finishes the slot is `Loading` and commands
 /// answer with a "still starting" error the UI can retry.
@@ -40,14 +37,14 @@ impl AppState {
         }
     }
 
-    /// Locks the state, mapping a poisoned mutex to a readable error instead of
-    /// panicking the IPC handler.
     pub fn data_dir(&self) -> PathBuf {
         self.lock()
             .map(|inner| inner.data_dir.clone())
             .unwrap_or_default()
     }
 
+    /// Locks the state, mapping a poisoned mutex to a readable error instead of
+    /// panicking the IPC handler.
     pub fn lock(&self) -> Result<MutexGuard<'_, Inner>, String> {
         self.inner
             .lock()
@@ -56,7 +53,6 @@ impl AppState {
 }
 
 impl Inner {
-    /// Message returned while the probe is still running.
     pub const STARTING: &'static str = "still starting: probing the hardware";
 
     pub fn service(&self) -> Result<&Service, String> {
@@ -75,7 +71,7 @@ impl Inner {
         }
     }
 
-    /// Persists the current settings (atomic write in the core crate).
+    /// Atomic write in the core crate.
     pub fn persist_settings(&self) -> Result<(), String> {
         self.settings
             .save(&self.settings_path)

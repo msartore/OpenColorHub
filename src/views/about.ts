@@ -1,5 +1,3 @@
-/** About: build identity, supported hardware, paths, credits and licences. */
-
 import { api } from "../api";
 import { el } from "../dom";
 import logoUrl from "../assets/logo.png";

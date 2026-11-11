@@ -33,9 +33,7 @@ pub mod linux;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
-/// Fan + thermal backend.
 pub trait FanBackend: Send {
-    /// Identification for the UI.
     fn info(&self) -> DeviceInfo;
 
     /// Reads temperatures, tachometers and programmed duty.
@@ -47,7 +45,6 @@ pub trait FanBackend: Send {
     /// Programs a 4-point SmartFan curve.
     fn set_curve(&mut self, header: FanHeader, curve: &FanCurve) -> std::result::Result<(), Error>;
 
-    /// Whether curves can be programmed (false for read-only backends).
     /// Raw register dump for diagnosing the bank map. Read-only; `None` when
     /// the backend has no such thing to show.
     fn register_dump(&self) -> Option<crate::error::Result<Vec<crate::model::RegisterRead>>> {
@@ -102,7 +99,6 @@ pub trait LedBackend: Send {
         true
     }
 
-    /// Where the state blob lives, when known.
     fn state_path(&self) -> Option<PathBuf> {
         None
     }
@@ -167,7 +163,6 @@ impl FanBackend for UnsupportedFan {
     }
 }
 
-/// Lighting backend counterpart of [`UnsupportedFan`].
 pub struct UnsupportedLed {
     info: DeviceInfo,
     state: RgbState,
@@ -215,7 +210,6 @@ impl LedBackend for UnsupportedLed {
     }
 }
 
-/// The pair of backends currently in use, plus what they can do.
 pub struct BackendSet {
     pub fan: Box<dyn FanBackend>,
     pub led: Box<dyn LedBackend>,
@@ -243,18 +237,10 @@ impl BackendSet {
     }
 }
 
-/// Instantiates the backend pair for `mode`.
-///
 /// `board` is the SMBIOS identity detected at startup. On a board that is
 /// confirmed to be somebody else's, `Auto` refuses to touch port I/O at all:
 /// writing NCT5584D registers on an unrelated Super I/O is exactly the kind of
 /// damage this guard exists to prevent.
-///
-/// * [`BackendMode::Auto`] probes hardware (subject to the board guard) and
-///   falls back to the simulator, recording why in `capabilities.notes`.
-/// * [`BackendMode::Hardware`] never falls back: unavailable hardware surfaces
-///   as a disabled UI with the underlying error.
-/// * [`BackendMode::Simulated`] never touches hardware.
 pub fn build(
     mode: BackendMode,
     state_file: Option<&Path>,
@@ -674,11 +660,8 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(100));
             set = build(BackendMode::Auto, None, &dir, &crate::board::demo_board());
         }
-        // On Linux without root/hardware this is simulated; on other hosts
-        // always simulated. Either way the UI must have something to show.
-        // Both halves are not guaranteed: a device that another process holds
-        // open legitimately reports unavailable, and that is a state the UI
-        // draws properly.
+        // A device that another process holds open legitimately reports
+        // unavailable, and that is a state the UI draws properly.
         assert!(
             set.capabilities.fan_control || set.capabilities.led_control,
             "auto mode left the UI with nothing to show"

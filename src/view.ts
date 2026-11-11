@@ -1,5 +1,3 @@
-/** View contract shared by the five screens. */
-
 import type { ScreenId, SettingsPatch, Settings, Snapshot } from "./types";
 import type { Tone } from "./components/ui";
 
@@ -14,9 +12,7 @@ export interface ViewContext {
   confirmWrite(message: string): boolean;
   navigate(screen: ScreenId): void;
   saveSettings(patch: SettingsPatch): Promise<void>;
-  /** Push a snapshot returned by a command into the app state immediately. */
   applySnapshot(snapshot: Snapshot): void;
-  /** Re-read settings + snapshot from the backend. */
   refresh(): Promise<void>;
 }
 

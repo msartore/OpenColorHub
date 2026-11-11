@@ -1,11 +1,4 @@
 /**
- * Saved presets, behind a save icon.
- *
- * The list was a panel on the screen, which put a save form and a row of
- * buttons in front of the controls people actually came for. It is now one icon
- * button in the screen header that opens a dialog: the presets are there when
- * you want them and gone when you do not.
- *
  * A preset covers one half — fans or lighting — so each screen opens its own
  * list, and applying one writes only that half.
  */
@@ -48,7 +41,6 @@ export interface PresetsButtonOptions {
   kind: SetupKind;
 }
 
-/** Builds the header icon button; clicking it opens the presets dialog. */
 export function presetsButton(ctx: ViewContext, options: PresetsButtonOptions): { el: HTMLButtonElement } {
   const trigger = el(
     "button",

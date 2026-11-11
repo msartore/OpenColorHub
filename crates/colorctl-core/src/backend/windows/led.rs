@@ -31,7 +31,6 @@ pub struct WindowsLed {
 }
 
 impl WindowsLed {
-    /// Finds the controller, opens it and loads the persisted state.
     pub fn open(state_path: PathBuf) -> Result<Self> {
         let info = discover()?;
         let dev = HidDevice::open(info)?;

@@ -1,5 +1,3 @@
-/** Minimal DOM helpers — keeps the views declarative without a framework. */
-
 type Child = Node | string | number | null | undefined | false;
 type Attrs = Record<string, unknown>;
 
@@ -72,7 +70,6 @@ export function clear(node: Element): void {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
-/** Typed `querySelector` with a required result. */
 export function qs<T extends Element>(selector: string): T {
   const node = document.querySelector<T>(selector);
   if (!node) throw new Error(`missing element: ${selector}`);
@@ -88,7 +85,6 @@ export function round(value: number, digits = 0): number {
   return Math.round(value * f) / f;
 }
 
-/** `#rrggbb` from three bytes. */
 export function toHex(color: readonly [number, number, number]): string {
   return `#${color.map((c) => clamp(Math.round(c), 0, 255).toString(16).padStart(2, "0")).join("")}`;
 }
@@ -105,7 +101,6 @@ export function fromHex(hex: string): [number, number, number] {
   ];
 }
 
-/** Whether the app runs inside the Tauri webview or a plain browser. */
 export function inTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }

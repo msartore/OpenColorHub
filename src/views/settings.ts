@@ -1,5 +1,3 @@
-/** Settings: backend selection, polling, display, safety, paths. */
-
 import { api, isDemo } from "../api";
 import { el } from "../dom";
 import type {

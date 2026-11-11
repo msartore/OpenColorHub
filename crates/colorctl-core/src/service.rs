@@ -24,17 +24,12 @@ use crate::state::RgbState;
 /// Smoothing factor for the EMA (0..1; higher = more responsive).
 const EMA_ALPHA: f32 = 0.45;
 
-/// Result of a mutating operation: new state plus a human sentence for the UI.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionResult {
     pub snapshot: Snapshot,
     pub message: String,
 }
 
-/// What a wake-from-sleep re-application achieved.
-///
-/// Reported rather than logged inside the service: the desktop shell owns the
-/// activity feed and decides how a partial restoration is presented.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct WakeReport {
     /// Channels whose duty or curve was written again.
@@ -46,13 +41,11 @@ pub struct WakeReport {
 }
 
 impl WakeReport {
-    /// True when the wake re-applied at least one of the two halves.
     pub fn restored_something(&self) -> bool {
         self.fans > 0 || self.lighting
     }
 }
 
-/// One entry in the in-memory activity feed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Activity {
     pub at_ms: u64,
@@ -69,9 +62,6 @@ const STALL_RPM: u16 = 50;
 const STALL_ALARM_MS: u64 = 5_000;
 
 /// Whether a tick should re-push the frame because the controller went away.
-///
-/// Only a session that lit something has a frame to restore, and a session on a
-/// backend without LED control has no controller to restore it to.
 fn should_recover(led_control: bool, lighting_in_use: bool, device_present: bool) -> bool {
     led_control && lighting_in_use && !device_present
 }
@@ -90,23 +80,17 @@ pub struct Service {
     seen_fans: u8,
     /// When each header first reported 0 rpm while being asked to spin.
     stall_since: [Option<u64>; crate::model::FAN_HEADERS.len()],
-    /// Whether the current stall episode has already been logged.
     stall_alerted: [bool; crate::model::FAN_HEADERS.len()],
-    /// Set once the fans have been handed back to the firmware.
     released: bool,
-    /// Whether this session pushed (or tried to push) a lighting frame.
-    ///
-    /// A sleep re-pushes that frame, but a session that never touched lighting
-    /// leaves the controller on its own pattern: the BIOS is the owner until the
-    /// user asks for something else.
+    /// Whether this session pushed (or tried to push) a lighting frame; a
+    /// resume re-pushes it, but lighting a session never touched is left on the
+    /// BIOS's own pattern.
     lighting_in_use: bool,
     last_read_error: Option<String>,
     activity: Vec<Activity>,
 }
 
 impl Service {
-    /// Builds a service for `settings`, detecting the board and probing
-    /// hardware as configured.
     pub fn new(settings: Settings, data_dir: impl Into<PathBuf>) -> Self {
         let board = board::detect();
         Self::with_board(settings, data_dir, board)
@@ -123,7 +107,6 @@ impl Service {
             &board,
         );
 
-        // Surface the board verdict in the notes the UI renders.
         set.capabilities.notes.insert(
             0,
             format!(
@@ -184,7 +167,6 @@ impl Service {
         &self.capabilities
     }
 
-    /// SMBIOS identity of the board this service was built for.
     pub fn board(&self) -> &BoardInfo {
         &self.board
     }
@@ -205,9 +187,6 @@ impl Service {
         &self.activity
     }
 
-    /// Replaces settings and rebuilds the backends when the target changed.
-    ///
-    /// Returns `true` when the backends were rebuilt.
     pub fn update_settings(&mut self, settings: Settings) -> bool {
         let needs_rebuild = settings.backend != self.settings.backend
             || settings.state_file != self.settings.state_file;
@@ -229,8 +208,6 @@ impl Service {
         needs_rebuild
     }
 
-    /// Rebuilds the backends in place, keeping settings and state.
-    ///
     /// Used after installing a driver: the previous probe already cached its
     /// verdict, so the only way to pick the new device up is to rebuild.
     pub fn reload_backends(&mut self) -> bool {
@@ -260,7 +237,6 @@ impl Service {
         }
     }
 
-    /// Reads telemetry, applying optional smoothing.
     pub fn read_telemetry(&mut self) -> Result<Telemetry> {
         let fresh = self.fan.read()?;
         let telemetry = if self.settings.smoothing {
@@ -307,10 +283,6 @@ impl Service {
         }
     }
 
-    /// Marks the headers that have reported a tach, and only those.
-    ///
-    /// The bit is never cleared: a header that showed 900 rpm a minute ago is a
-    /// real fan that is currently stopped, not an empty socket.
     /// Flags fans that are being asked to spin but report nothing.
     ///
     /// A fan that is commanded 30% and reports 0 rpm for five seconds is either
@@ -467,7 +439,6 @@ impl Service {
         self.led.info()
     }
 
-    /// Sets a raw duty cycle (0-255) on one header.
     pub fn set_fan_pwm(&mut self, header: FanHeader, pwm: u8) -> Result<ActionResult> {
         let percent = crate::units::pwm_to_pct(pwm);
         let clamped = self
@@ -493,7 +464,6 @@ impl Service {
         })
     }
 
-    /// Sets a duty cycle in percent (0-100), honouring the pump floor.
     pub fn set_fan_percent(&mut self, header: FanHeader, percent: u8) -> Result<ActionResult> {
         let clamped = self
             .settings
@@ -501,7 +471,6 @@ impl Service {
         self.set_fan_pwm(header, crate::units::pct(clamped))
     }
 
-    /// Programs a 4-point curve on one header.
     pub fn set_fan_curve(&mut self, header: FanHeader, curve: &FanCurve) -> Result<ActionResult> {
         curve::validate(curve)?;
         if curve.iter().any(|p| p.percent < 60) && self.settings.is_pump(header) {
@@ -518,7 +487,6 @@ impl Service {
         })
     }
 
-    /// Applies a built-in profile to the given headers.
     pub fn apply_profile(
         &mut self,
         headers: &[FanHeader],
@@ -556,12 +524,11 @@ impl Service {
         })
     }
 
-    /// Updates one lighting channel in memory (no HID write yet).
+    /// Stages one channel in memory; no HID write.
     pub fn stage_channel(&mut self, channel: Channel, config: ChannelConfig) {
         self.led.state_mut().set(channel, config);
     }
 
-    /// Stages and applies a single channel.
     pub fn set_channel(
         &mut self,
         channel: Channel,
@@ -591,7 +558,6 @@ impl Service {
         Ok(outcome)
     }
 
-    /// Stages and applies the same colour on every channel.
     pub fn set_all_channels(
         &mut self,
         color: [u8; 3],
@@ -622,7 +588,6 @@ impl Service {
         Ok(outcome)
     }
 
-    /// Scales every lit channel.
     pub fn set_global_brightness(&mut self, brightness: u8) -> Result<ActionResult> {
         self.led.state_mut().set_global_brightness(brightness);
         let mut outcome = self.apply_led()?;
@@ -631,7 +596,6 @@ impl Service {
         Ok(outcome)
     }
 
-    /// Turns a single channel off and applies.
     pub fn turn_off_channel(&mut self, channel: Channel) -> Result<ActionResult> {
         self.led.state_mut().turn_off(channel);
         let mut outcome = self.apply_led()?;
@@ -640,7 +604,7 @@ impl Service {
         Ok(outcome)
     }
 
-    /// Pushes the current lighting state to the controller and saves it.
+    /// Pushes the lighting state to the controller, which persists it.
     pub fn apply_led(&mut self) -> Result<ActionResult> {
         if !self.capabilities.led_control {
             return Err(Error::unavailable(
@@ -655,8 +619,6 @@ impl Service {
         })
     }
 
-    /// Re-asserts what this session programmed, after the machine woke up.
-    ///
     /// A sleep power-cycles the USB bus and reloads the Super I/O's defaults, so
     /// the frame is gone and the fans are back under firmware control — while
     /// everything this process remembers still describes the state it left
@@ -707,8 +669,6 @@ impl Service {
         }
     }
 
-    /// One polling tick for the desktop shell: recover a vanished controller,
-    /// then read the snapshot. A successful recovery records one entry.
     pub fn tick(&mut self) -> Snapshot {
         if let Some(report) = self.recover_if_needed()
             && report.lighting
@@ -721,12 +681,10 @@ impl Service {
         self.snapshot()
     }
 
-    /// Adds an entry to the activity feed (the dashboard's write log).
     pub fn note(&mut self, kind: &str, message: impl Into<String>) {
         self.record(kind, message);
     }
 
-    /// Copies the current state from another service instance (settings reload).
     pub fn reload_led_state(&mut self) {
         let loaded = self
             .led
@@ -799,7 +757,6 @@ mod tests {
         assert!(fans[0].detected, "a spinning header is a fan");
         assert!(!fans[1].detected, "a silent header is an empty socket");
 
-        // The fan is stopped by a curve later on: it keeps its card.
         fans[0].rpm = 0;
         svc.latch_detection(&mut fans);
         assert!(fans[0].detected, "a stopped fan is still a fan");
@@ -816,11 +773,9 @@ mod tests {
         let mut silent = fan_status(FanHeader::Aux0, 0);
         silent.detected = true;
         silent.percent = 50;
-        // Duty too low to prove anything: a fan parked at 0% is not stalled.
         let mut parked = fan_status(FanHeader::Aux1, 0);
         parked.detected = true;
         parked.percent = 0;
-        // Never seen spinning: an empty socket, not a stalled fan.
         let mut empty = fan_status(FanHeader::Aux2, 0);
         empty.detected = false;
         empty.percent = 50;
@@ -832,7 +787,6 @@ mod tests {
             "one sample is not a stall — a fan may be spinning up"
         );
 
-        // Backdate the episode past the alarm window.
         svc.stall_since[FanHeader::Aux0.index()] =
             Some(now_ms().saturating_sub(STALL_ALARM_MS + 1));
         svc.check_stalls(&mut fans);
@@ -842,12 +796,10 @@ mod tests {
         assert!(!fans[2].stalled, "0% duty is not a stall");
         assert!(!fans[3].stalled, "an empty socket is not a stall");
 
-        // A stopped fan reading a couple of counts of noise is still stopped.
         fans[1].rpm = 3;
         svc.check_stalls(&mut fans);
         assert!(fans[1].stalled, "tach noise is not rotation");
 
-        // Recovery clears the flag.
         fans[1].rpm = 700;
         svc.check_stalls(&mut fans);
         assert!(

@@ -1,5 +1,3 @@
-/** Drivers: the vendor's own downloads for this board, fetched from Colorful. */
-
 import { api, onDriverProgress } from "../api";
 import { el } from "../dom";
 import type { DriverList, DriverProgress, DriverRow, Snapshot } from "../types";

@@ -68,7 +68,6 @@ fn is_live_tach(rpm: u16) -> bool {
     rpm != NO_FAN && rpm >= MIN_RPM
 }
 
-/// A Nuvoton hardware monitor reached through PawnIO.
 pub struct PawnIoFan {
     lpc: LpcIo,
     hwm: u16,

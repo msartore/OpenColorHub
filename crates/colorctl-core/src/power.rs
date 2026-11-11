@@ -20,7 +20,6 @@ use std::time::{Duration, SystemTime};
 /// are already in force.
 pub const DEFAULT_GRACE: Duration = Duration::from_millis(500);
 
-/// Watches the gap between successive ticks of a polling loop.
 #[derive(Debug, Clone)]
 pub struct ResumeWatch {
     last: SystemTime,
@@ -60,7 +59,6 @@ impl ResumeWatch {
         self.last = now;
     }
 
-    /// Records a tick at `now`; returns the gap when it followed a suspend.
     pub fn observe(&mut self, now: SystemTime) -> Option<Duration> {
         let previous = std::mem::replace(&mut self.last, now);
         // A clock corrected backwards is not a wake; the replace above already

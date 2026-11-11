@@ -1,5 +1,3 @@
-/** Application shell: state, routing, telemetry loop, toasts. */
-
 import "./styles/app.css";
 
 import { api, onTelemetry } from "./api";
@@ -183,7 +181,6 @@ async function waitForBackend(): Promise<void> {
   }
 }
 
-/** Fades the inline boot overlay once the shell has something to show. */
 function hideBoot(): void {
   const boot = document.getElementById("boot");
   if (!boot) return;
@@ -248,7 +245,6 @@ setTimeout(() => void maybeOfferUpdate(), 2500);
 // Fan control needs a driver on Windows; offer it once the window is settled.
 setTimeout(() => void maybeOfferPawnio(context), 1200);
 
-// Surface unexpected failures instead of leaving a blank window.
 window.addEventListener("error", (event) => {
   if (!appRoot.children.length) {
     appRoot.replaceChildren(

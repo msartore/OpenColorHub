@@ -200,7 +200,6 @@ fn describe(hr: i32) -> String {
     format!("HRESULT 0x{unsigned:08X}")
 }
 
-/// An open PawnIO executor with a module loaded.
 pub struct PawnIo {
     handle: HANDLE,
 }
@@ -210,7 +209,6 @@ pub struct PawnIo {
 unsafe impl Send for PawnIo {}
 
 impl PawnIo {
-    /// Opens the driver and loads the `LpcIO` module.
     pub fn open() -> Result<Self> {
         let api = api()?;
 
@@ -238,7 +236,6 @@ impl PawnIo {
         Ok(Self { handle })
     }
 
-    /// Executes a module function. Returns the output words.
     fn execute(&self, name: &str, input: &[u64], out_words: usize) -> Result<Vec<u64>> {
         let api = api()?;
         let mut out = vec![0u64; out_words.max(1)];

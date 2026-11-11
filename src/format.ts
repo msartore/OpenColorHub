@@ -1,5 +1,3 @@
-/** Display formatting shared by the views. */
-
 import type { TempUnit } from "./types";
 
 export function tempValue(celsius: number | null | undefined, unit: TempUnit): number | null {

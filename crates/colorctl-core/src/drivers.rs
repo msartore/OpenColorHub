@@ -28,7 +28,6 @@ const MOTHERBOARD_MODEL: u32 = 84;
 /// Anything else is rejected rather than followed.
 const ALLOWED_DOMAINS: [&str; 2] = ["colorful.cn", "colorfulgroup.com"];
 
-/// What a catalogue entry is, inferred from its title and file extension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DriverKind {
@@ -83,7 +82,6 @@ impl DriverKind {
     }
 }
 
-/// One downloadable file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DriverFile {
     pub title: String,
@@ -95,7 +93,6 @@ pub struct DriverFile {
     pub published: String,
 }
 
-/// A board's full catalogue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriverCatalogue {
     /// Board name as the site spells it, which may differ in case from SMBIOS.
@@ -111,7 +108,6 @@ pub struct DriverCatalogue {
 /// a dependency and a migration story for no gain.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CachedCatalogue {
-    /// Board name as the vendor spells it.
     pub board: String,
     /// Board name as SMBIOS reported it, so a hardware change invalidates the cache.
     #[serde(default)]
@@ -129,7 +125,6 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// Reads the cached catalogue, or `None` when there is no usable copy.
 pub fn load_cache(path: &Path) -> Option<CachedCatalogue> {
     let text = std::fs::read_to_string(path).ok()?;
     match serde_json::from_str::<CachedCatalogue>(&text) {
@@ -138,7 +133,6 @@ pub fn load_cache(path: &Path) -> Option<CachedCatalogue> {
     }
 }
 
-/// Cached copy for `board`, if it was read for the same machine.
 pub fn load_cache_for(path: &Path, board: &str) -> Option<CachedCatalogue> {
     let cache = load_cache(path)?;
     cache
@@ -161,7 +155,6 @@ pub fn save_cache(path: &Path, cache: &CachedCatalogue) -> Result<()> {
     Ok(())
 }
 
-/// Fetches the catalogue and records when it was read.
 pub fn fetch_and_cache(board: &str, cache_path: &Path) -> Result<CachedCatalogue> {
     let catalogue = fetch_catalogue(board)?;
     let cache = CachedCatalogue {
@@ -175,7 +168,6 @@ pub fn fetch_and_cache(board: &str, cache_path: &Path) -> Result<CachedCatalogue
     Ok(cache)
 }
 
-/// Result of a completed download.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadedFile {
     pub path: PathBuf,
@@ -228,8 +220,6 @@ fn normalise(name: &str) -> String {
         .to_uppercase()
 }
 
-/// Picks the product whose name matches the board.
-///
 /// Exact match after normalisation wins; otherwise the longest product name the
 /// board starts with, which covers boards whose SMBIOS string carries a suffix
 /// the site omits. Shortest-name-first would pick `CVN X570` over
@@ -256,8 +246,8 @@ pub fn pick_product(products: &[(u32, String)], board: &str) -> Option<u32> {
         .map(|(id, _)| *id)
 }
 
-/// Decodes `%XX` escapes without pulling in a dependency. Invalid escapes are
-/// left as written rather than dropped, so a malformed name stays recognisable.
+/// Invalid `%XX` escapes are left as written rather than dropped, so a
+/// malformed name stays recognisable.
 fn percent_decode(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -277,8 +267,6 @@ fn percent_decode(input: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Derives a safe local file name from a download URL.
-///
 /// The name comes from the remote server, so it is treated as hostile: path
 /// separators, drive letters, control characters and trailing dots are all
 /// removed, and a name that reduces to `.`/`..` is rejected.
@@ -326,8 +314,6 @@ pub fn is_allowed_url(url: &str) -> bool {
         .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
 }
 
-/// Turns a catalogue reference into an absolute URL.
-///
 /// Older entries carry site-relative paths (`/uploads/common/...`) rather than
 /// a host; they belong to the same site that served the catalogue.
 pub fn absolute_url(url: &str) -> Option<String> {
@@ -478,7 +464,6 @@ pub fn resolve_product(agent: &ureq::Agent, board: &str) -> Result<(u32, String)
     )))
 }
 
-/// Fetches the catalogue for a board.
 pub fn fetch_catalogue(board: &str) -> Result<DriverCatalogue> {
     let agent = agent();
     let (product_id, name) = resolve_product(&agent, board)?;
@@ -492,13 +477,10 @@ pub fn fetch_catalogue(board: &str) -> Result<DriverCatalogue> {
     })
 }
 
-/// Downloads one entry into `dir`, returning the path and its hash.
 pub fn download(entry: &DriverFile, dir: &Path) -> Result<DownloadedFile> {
     download_with_progress(entry, dir, |_, _| {})
 }
 
-/// Downloads one entry into `dir`, reporting progress as `(received, total)`.
-///
 /// `total` comes from `Content-Length` and is `None` when the server omits it.
 /// The temporary `.part` file keeps a half-written archive from looking like a
 /// usable download; it is renamed only after the transfer completes.
