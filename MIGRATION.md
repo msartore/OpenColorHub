@@ -159,7 +159,7 @@ Every future grant must name the adapter that needs it in this file.
 | Dashboard, Fans, Lighting, Settings, About, Drivers | screens | done |
 | Wake re-assert, suspend handling | `ResumeWatch` + ticker | done (gap detection in the NSH tick loop) |
 | Windows fan control | PawnIO | **hardware gate** (elevation) |
-| Packaging + updater feed | `tauri.conf.json`, release workflow | Windows zip/Inno + CI done; Linux artifacts and the update feed pending |
+| Packaging + updater feed | `tauri.conf.json`, release workflow | Windows + Linux NSH jobs and `latest.json` wired; first tagged run pending |
 
 ## Slice order
 
@@ -189,15 +189,14 @@ app runs after it.
       lighting are re-asserted with retries and the outcome is noted.
 - [x] **9c. Window placement** — the main window's placement is saved in the
       app's storage and restored on launch.
-- [ ] **10a. Packaging + CI (Windows)** — zip, Inno script, CI job.
-- [ ] **10b. Linux packaging + release feed** — tarball + `.desktop`, the
-      `nsh update-manifest` feed and the old-app cutover.
 - [x] **10a. Packaging + CI (Windows)** — zip, Inno installer and CI job,
       verified locally including `OpenColorHub-setup.exe`.
-- [ ] **10b. Release feed** — `nsh update-manifest`, GitHub assets, Linux
-      tarball + `.desktop`, the one-time installer for existing Tauri users.
-- [ ] **11. Hardware verification + cutover** — real board matrix, old shell
-      removed from releases, one-time installer for existing users.
+- [x] **10b. Release feed** — `release.yml` builds the NSH app on Windows and
+      Linux, writes `latest.json` with `nsh update-manifest`, and uploads it
+      with the same release; the release body explains the one-time install for
+      existing Tauri users. First tagged run still pending.
+- [ ] **11. Hardware verification + cutover** — real board matrix, then remove
+      the Tauri jobs and shell from releases.
 - [ ] **12. Post-parity Rust layers** — extract `crates/colorctl-domain` (zero
       dependencies), `colorctl-application` (service + ports), keep
       `colorctl-core` as infrastructure. This is track A on the core, after the
@@ -264,9 +263,14 @@ Last run on this branch (Windows, NSH 0.5.0): `check` clean, `build` clean,
 `test` 40/40 (9 headless screen tests, 13 use-case tests, 18 domain tests), and
 `nsh package --target windows` produced `.nsh/out/OpenColorHub.zip`,
 `OpenColorHub-0.3.0-windows-x86_64.zip` and `OpenColorHub-setup.exe` with Inno
-Setup 6.7.3 installed. `cargo test --workspace` for the old app is untouched.
+Setup 6.7.3 installed. `nsh update-manifest` produced a valid `latest.json` for
+the Windows archive. `cargo test --workspace` for the old app is untouched.
 The app was also run under `nsh run` and checked by eye: Dashboard, Fan control,
 Lighting, Drivers, Settings and About render with live simulated telemetry.
+
+Linux: in a WSL Ubuntu 26.04 checkout, `nsh check nsh` and `nsh build nsh`
+passed; `nsh test` reached the headless-runner build before the WSL VM itself
+faulted (SIGBUS), so the Linux test run still needs a healthy host or the CI job.
 
 The headless tests are the characterization tests for these slices: profile
 tables and pump floor against the core's values, curve clamping, colour/byte

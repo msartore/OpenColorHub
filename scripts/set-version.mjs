@@ -64,6 +64,8 @@ function edit(path, re, label) {
 
 edit("src-tauri/tauri.conf.json", /"version":\s*"([^"]+)"/, "version");
 edit("package.json", /"version":\s*"([^"]+)"/, "version");
+edit("nsh/nsh.json", /"version":\s*"([^"]+)"/, "version");
+edit("nsh/Cargo.toml", /^version = "([^"]+)"/m, "package version");
 
 // package-lock.json is parsed rather than pattern-matched: only two fields
 // describe this package (the top-level version and packages[""]). Every other

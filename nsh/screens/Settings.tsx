@@ -22,6 +22,7 @@ import type {
   TempUnit,
 } from "../app/domain/model";
 import { FAN_HEADERS } from "../app/domain/fan";
+import { boardDisplayName, deviceLabel } from "../app/domain/telemetry";
 import { SETTINGS_RESET_PATCH } from "../app/domain/settings";
 import { KeyValue, Panel } from "../components/ui";
 
@@ -338,6 +339,24 @@ export function SettingsScreen(props: {
         <Text class="text-[11px] text-muted-foreground">
           {BACKENDS.find((backend) => backend.id === draft().backend)?.blurb}
         </Text>
+        <If when={props.store.snapshot()}>
+          {(snapshot) => (
+            <View class="gap-1 border-t border-border pt-2">
+              <KeyValue label="board" value={boardDisplayName(snapshot().board)} />
+              <KeyValue label="support" value={snapshot().board.confidence} />
+              <KeyValue label="fan backend" value={deviceLabel(snapshot().fan_device)} />
+              <KeyValue label="lighting backend" value={deviceLabel(snapshot().led_device)} />
+              <KeyValue
+                label="temperature"
+                value={
+                  snapshot().temperature_c === null
+                    ? "—"
+                    : `${snapshot().temperature_c!.toFixed(1)} °C`
+                }
+              />
+            </View>
+          )}
+        </If>
       </Panel>
 
       <Panel title="Telemetry" subtitle="How often the controller is polled">

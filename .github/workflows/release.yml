@@ -233,9 +233,130 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The Native Shell port: one app per OS, packaged by `nsh`. It runs beside
+  # the Tauri build for the transition release; once the hardware gate passes,
+  # the Tauri jobs above are removed.
+  nsh:
+    name: nsh (${{ matrix.label }})
+    needs: guard
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: nsh-windows-x64
+            target: windows
+          - os: ubuntu-24.04
+            label: nsh-linux-x64
+            target: linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "nsh -> target"
+          key: ${{ matrix.label }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev libwebkitgtk-6.0-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+      - name: Install NSH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm https://nsh.dev/install.ps1 | iex
+          "$env:LOCALAPPDATA\nsh\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Install NSH (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL https://nsh.dev/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Set version from tag
+        run: node scripts/set-version.mjs "${GITHUB_REF_NAME}"
+
+      - name: Package
+        run: nsh package nsh --target ${{ matrix.target }}
+
+      - name: Stage artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force pkg | Out-Null
+          Copy-Item nsh/.nsh/out/*.zip pkg/
+          Copy-Item nsh/.nsh/out/*-setup.exe pkg/
+
+      - name: Stage artifacts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p pkg
+          cp nsh/.nsh/out/*.tar.gz pkg/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.label }}
+          path: pkg/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # One manifest for both NSH archives; `nsh/updater` reads it from the release.
+  nsh-manifest:
+    name: nsh update manifest
+    needs: nsh
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install NSH
+        run: |
+          curl -fsSL https://nsh.dev/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: pkg
+          merge-multiple: true
+
+      - name: Set version from tag
+        run: node scripts/set-version.mjs "${GITHUB_REF_NAME}"
+
+      - name: Write latest.json
+        run: |
+          cd pkg
+          nsh update-manifest *-windows-x86_64.zip *-linux-x86_64.tar.gz \
+            --entry ../nsh \
+            --base-url "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/" \
+            -o .
+          cat latest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nsh-manifest
+          path: pkg/latest.json
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: publish release
-    needs: [build, cli]
+    needs: [build, cli, nsh-manifest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -261,6 +382,7 @@ jobs:
             pkg/*.tar.gz
             pkg/*.deb
             pkg/*.AppImage
+            pkg/latest.json
             pkg/SHA256SUMS.txt
           draft: false
           prerelease: false
@@ -268,7 +390,21 @@ jobs:
           body: |
             Native builds of OpenColorHub `${{ github.ref_name }}`.
 
-            ### Windows
+            ### Native Shell build (new)
+
+            | File | Use |
+            | --- | --- |
+            | `OpenColorHub-setup.exe` | per-user installer, no administrator prompt |
+            | `OpenColorHub-*-windows-x86_64.zip` | unzip anywhere and run `OpenColorHub.exe` |
+            | `OpenColorHub-*-linux-x86_64.tar.gz` | unpack and run `OpenColorHub` |
+            | `latest.json` | update manifest for the app's built-in updater |
+
+            This is the new native shell. **Existing Tauri installs do not update into it** —
+            install this one by hand once; the old updater only replaces its own shell. From
+            this release on, `latest.json` drives updates for the new app. Fan control still
+            needs PawnIO on Windows, and the elevation rules are unchanged.
+
+            ### Tauri build (previous shell)
 
             | File | Use |
             | --- | --- |
