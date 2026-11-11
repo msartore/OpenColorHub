@@ -1,0 +1,24 @@
+{
+  "name": "OpenColorHub",
+  "id": "dev.msartore.opencolorhub",
+  "version": "0.3.0",
+  "build": 1,
+  "rust": ".",
+  "icon": "assets/icon.png",
+  "appearance": "dark",
+  "theme": "theme.json",
+  "singleInstance": true,
+  "window": {
+    "title": "OpenColorHub",
+    "defaultSize": { "width": 1240, "height": 830 },
+    "minSize": { "width": 900, "height": 600 },
+    "defaultVisible": false,
+    "closeOnPress": false
+  },
+  "capabilities": {
+    "clipboard": true,
+    "openUrl": { "schemes": ["https", "mailto"] },
+    "statusBar": true
+  },
+  "updater": { "github": "msartore/OpenColorHub" }
+}

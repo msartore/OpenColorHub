@@ -1,0 +1,67 @@
+name: NSH port
+
+# The Tauri build stays in ci.yml. This workflow builds and tests the parallel
+# NSH app only when it (or the shared core) changes.
+
+on:
+  push:
+    paths:
+      - "nsh/**"
+      - "crates/colorctl-core/**"
+      - ".github/workflows/nsh.yml"
+  pull_request:
+    paths:
+      - "nsh/**"
+      - "crates/colorctl-core/**"
+      - ".github/workflows/nsh.yml"
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: check · build · test (windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "nsh -> target"
+
+      - name: Install NSH
+        run: irm https://nsh.dev/install.ps1 | iex
+
+      - name: Put nsh and cargo on PATH
+        run: |
+          "$env:LOCALAPPDATA\nsh\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Check
+        run: nsh check nsh
+
+      - name: Build
+        run: nsh build nsh
+
+      - name: Inno Setup (the installer `nsh package` runs)
+        run: choco install innosetup --no-progress -y
+
+      - name: Tests (simulator, no hardware)
+        env:
+          OPENCOLORHUB_SIM: "1"
+        run: nsh test nsh
+
+      - name: Package
+        run: nsh package nsh --target windows
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencolorhub-nsh-windows
+          path: |
+            nsh/.nsh/out/*.zip
+            nsh/.nsh/out/*-setup.exe
+          if-no-files-found: warn
