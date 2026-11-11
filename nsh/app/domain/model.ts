@@ -175,6 +175,56 @@ export interface SetupList {
   warning: string | null;
 }
 
+/** What a vendor download is, as classified by the core. */
+export type DriverKind = "bios" | "driver" | "utility" | "manual" | "other";
+
+export interface DriverFile {
+  title: string;
+  kind: DriverKind;
+  url: string;
+  /** Server-provided name, already sanitised for the local filesystem. */
+  file_name: string;
+  /** `YYYY-MM-DD`, empty when the vendor published no date. */
+  published: string;
+}
+
+export interface DriverRow extends DriverFile {
+  /** True when this is firmware newer than the installed BIOS. */
+  newer: boolean;
+}
+
+export interface DriverList {
+  board: string;
+  product_id: number;
+  installed_bios: string;
+  files: DriverRow[];
+  /** When the vendor was last asked, in ms since the epoch. */
+  fetched_at_ms: number;
+  /** True when this came from the local copy rather than the network. */
+  cached: boolean;
+  /** Set when a refresh failed but a cached copy could still be served. */
+  warning: string | null;
+}
+
+export interface DriverProgress {
+  file: string;
+  received: number;
+  total: number | null;
+}
+
+export interface DownloadedFile {
+  path: string;
+  bytes: number;
+  sha256: string;
+}
+
+/** A file already sitting in the download folder. */
+export interface StoredFile {
+  file_name: string;
+  path: string;
+  bytes: number;
+}
+
 export interface BuildMeta {
   version: string;
   tauri: string | null;

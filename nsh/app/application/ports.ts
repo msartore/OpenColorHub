@@ -13,6 +13,10 @@ import type {
   AutostartState,
   ChannelId,
   CurvePoint,
+  DownloadedFile,
+  DriverFile,
+  DriverList,
+  DriverProgress,
   ElevationState,
   FanHeaderId,
   FanProfileId,
@@ -21,6 +25,7 @@ import type {
   SetupKind,
   SetupList,
   Snapshot,
+  StoredFile,
 } from "../domain/model";
 import type { Rgb } from "../domain/lighting";
 
@@ -64,6 +69,16 @@ export interface SetupPort {
   deleteSetup(kind: SetupKind, id: string): Promise<SetupList>;
 }
 
+export interface DriverPort {
+  drivers(refresh: boolean): Promise<DriverList>;
+  downloadDriver(
+    file: DriverFile,
+    onProgress: (progress: DriverProgress) => void,
+  ): Promise<DownloadedFile>;
+  downloadedDrivers(): Promise<StoredFile[]>;
+  revealDriver(path: string): Promise<void>;
+}
+
 export interface SystemPort {
   about(): Promise<AboutInfo>;
   elevation(): Promise<ElevationState>;
@@ -79,4 +94,5 @@ export interface ColorHubPort
     FanPort,
     LightingPort,
     SetupPort,
+    DriverPort,
     SystemPort {}

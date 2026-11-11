@@ -16,6 +16,10 @@ import type {
   AutostartState,
   ChannelId,
   CurvePoint,
+  DownloadedFile,
+  DriverFile,
+  DriverList,
+  DriverProgress,
   ElevationState,
   FanHeaderId,
   FanProfileId,
@@ -24,6 +28,7 @@ import type {
   SetupKind,
   SetupList,
   Snapshot,
+  StoredFile,
 } from "../domain/model";
 import type { Rgb } from "../domain/lighting";
 
@@ -37,6 +42,15 @@ function call<T>(run: () => string): Promise<T> {
     return Promise.resolve(parse<T>(run()));
   } catch (error) {
     return Promise.reject(toAppError(error));
+  }
+}
+
+/** For async members: the native call returns a Promise of the JSON. */
+async function callAsync<T>(run: () => Promise<string>): Promise<T> {
+  try {
+    return parse<T>(await run());
+  } catch (error) {
+    throw toAppError(error);
   }
 }
 
@@ -63,6 +77,34 @@ export function createNativePort(controller: Controller): ColorHubPort {
       call<ActionResult>(() => controller.applySetup(id)),
     deleteSetup: (kind: SetupKind, id: string) =>
       call<SetupList>(() => controller.deleteSetup(kind, id)),
+
+    drivers: (refresh: boolean) =>
+      callAsync<DriverList>(() => controller.driversJson(refresh)),
+    downloadDriver: async (
+      file: DriverFile,
+      onProgress: (progress: DriverProgress) => void,
+    ): Promise<DownloadedFile> => {
+      try {
+        const json = await controller.downloadDriver(JSON.stringify(file), (progress) => {
+          try {
+            onProgress(parse<DriverProgress>(progress));
+          } catch (error) {
+            console.error("driver progress could not be read", error);
+          }
+        });
+        return parse<DownloadedFile>(json);
+      } catch (error) {
+        throw toAppError(error);
+      }
+    },
+    downloadedDrivers: () => call<StoredFile[]>(() => controller.downloadedDriversJson()),
+    revealDriver: async (path: string) => {
+      try {
+        await controller.revealDriver(path);
+      } catch (error) {
+        throw toAppError(error);
+      }
+    },
 
     setFanPercent: (header: FanHeaderId, percent: number) =>
       call<ActionResult>(() => controller.setFanPercent(header, percent)),

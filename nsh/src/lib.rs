@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use colorctl_core::about::{AboutInfo, AboutParams};
+use colorctl_core::drivers::{self, CachedCatalogue, DriverFile};
 use colorctl_core::model::{Channel, ChannelConfig, FanHeader};
 use colorctl_core::service::ActionResult;
 use colorctl_core::settings::{BackendMode, Settings, SettingsPatch};
@@ -141,6 +142,56 @@ fn setup_list(store: SetupStore, kind: SetupKind) -> SetupList {
         warning: store.warning.clone(),
         setups: store.of_kind(kind),
     }
+}
+
+#[derive(serde::Serialize)]
+struct DriverRow {
+    #[serde(flatten)]
+    file: DriverFile,
+    newer: bool,
+}
+
+#[derive(serde::Serialize)]
+struct DriverList {
+    board: String,
+    product_id: u32,
+    installed_bios: String,
+    files: Vec<DriverRow>,
+    fetched_at_ms: u64,
+    cached: bool,
+    warning: Option<String>,
+}
+
+fn driver_list(
+    cache: CachedCatalogue,
+    installed_bios: &str,
+    cached: bool,
+    warning: Option<String>,
+) -> DriverList {
+    let files = cache
+        .files
+        .into_iter()
+        .map(|file| DriverRow {
+            newer: drivers::is_newer_firmware(&file.title, installed_bios),
+            file,
+        })
+        .collect();
+    DriverList {
+        board: cache.board,
+        product_id: cache.product_id,
+        installed_bios: installed_bios.to_string(),
+        files,
+        fetched_at_ms: cache.fetched_at_ms,
+        cached,
+        warning,
+    }
+}
+
+#[derive(serde::Serialize)]
+struct StoredDriverFile {
+    file_name: String,
+    path: String,
+    bytes: u64,
 }
 
 /// The one object TSX holds. Its Rust value lives on the engine thread; the
@@ -509,6 +560,137 @@ impl Controller {
         let mut store = SetupStore::load(self.setups_path()?);
         store.remove(&id).map_err(|error| error.to_string())?;
         to_json(&setup_list(store, kind))
+    }
+
+    /// The vendor catalogue for the detected board, cached first unless asked
+    /// to refresh. A failed refresh returns the cache with a warning, never an
+    /// empty screen. `OPENCOLORHUB_DRIVERS_FIXTURE` serves a file instead, which
+    /// is how headless tests stay off the network.
+    pub async fn drivers_json(this: Instance<Self>, refresh: bool) -> Result<String, String> {
+        if let Some(path) = std::env::var_os("OPENCOLORHUB_DRIVERS_FIXTURE") {
+            return std::fs::read_to_string(&path)
+                .map_err(|error| format!("could not read the driver fixture: {error}"));
+        }
+
+        let Some((board, bios, data_dir)) = this.with(|controller| {
+            let inner = controller.lock().ok()?;
+            let identity = inner.service_ref().ok()?.board().identity.clone()?;
+            Some((identity.name, identity.bios_version, inner.data_dir.clone()))
+        }) else {
+            return Err("this machine did not report a motherboard model".to_string());
+        };
+        if board.trim().is_empty() {
+            return Err("this machine did not report a motherboard model".to_string());
+        }
+
+        let cache_path = data_dir.join("drivers-cache.json");
+        if !refresh
+            && let Some(cache) = drivers::load_cache_for(&cache_path, &board)
+        {
+            return to_json(&driver_list(cache, &bios, true, None));
+        }
+
+        let lookup = board.clone();
+        let path = cache_path.clone();
+        let fetched = blocking(move || drivers::fetch_and_cache(&lookup, &path))
+            .await
+            .map_err(|error| format!("driver lookup panicked: {error}"))?;
+
+        match fetched {
+            Ok(cache) => to_json(&driver_list(cache, &bios, false, None)),
+            Err(error) => match drivers::load_cache_for(&cache_path, &board) {
+                Some(cache) => to_json(&driver_list(cache, &bios, true, Some(error.to_string()))),
+                None => Err(error.to_string()),
+            },
+        }
+    }
+
+    /// Downloads one catalogue file, posting `{file, received, total}` while it
+    /// runs. Nothing is executed; the bytes are written, hashed and reported.
+    pub async fn download_driver(
+        this: Instance<Self>,
+        file_json: String,
+        listener: Callback<String>,
+    ) -> Result<String, String> {
+        let file: DriverFile = serde_json::from_str(&file_json)
+            .map_err(|error| format!("invalid driver file: {error}"))?;
+        let Some(dir) = this.with(|controller| {
+            controller
+                .lock()
+                .ok()
+                .map(|inner| inner.data_dir.join("drivers"))
+        }) else {
+            return Err("the state lock is poisoned — restart OpenColorHub".to_string());
+        };
+
+        let (sender, receiver) = std::sync::mpsc::channel::<String>();
+        let name = file.file_name.clone();
+        let job = blocking(move || {
+            drivers::download_with_progress(&file, &dir, |received, total| {
+                let payload = serde_json::json!({
+                    "file": name,
+                    "received": received,
+                    "total": total,
+                });
+                let _ = sender.send(payload.to_string());
+            })
+        });
+
+        let done = Arc::new(AtomicBool::new(false));
+        let flag = done.clone();
+        spawn(async move {
+            while !flag.load(Ordering::SeqCst) {
+                timer(Duration::from_millis(120)).await;
+                while let Ok(message) = receiver.try_recv() {
+                    listener.post(message);
+                }
+            }
+        });
+
+        let result = job
+            .await
+            .map_err(|error| format!("download panicked: {error}"))?;
+        done.store(true, Ordering::SeqCst);
+        match result {
+            Ok(saved) => to_json(&saved),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
+    /// Files already in the download folder, sorted by name.
+    pub fn downloaded_drivers_json(&self) -> Result<String, String> {
+        let dir = self.lock()?.data_dir.join("drivers");
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return to_json(&Vec::<StoredDriverFile>::new());
+        };
+
+        let mut files: Vec<StoredDriverFile> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                let meta = entry.metadata().ok()?;
+                if !meta.is_file() {
+                    return None;
+                }
+                let file_name = path.file_name()?.to_string_lossy().to_string();
+                if file_name.ends_with(".part") {
+                    return None;
+                }
+                Some(StoredDriverFile {
+                    file_name,
+                    path: path.to_string_lossy().to_string(),
+                    bytes: meta.len(),
+                })
+            })
+            .collect();
+        files.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+        to_json(&files)
+    }
+
+    /// Shows a downloaded file in the system's file manager.
+    pub async fn reveal_driver(this: Instance<Self>, path: String) -> Result<(), String> {
+        let _ = this;
+        reveal_path(path).await
     }
 
     /// Ticks the service off the engine thread and posts a JSON snapshot.

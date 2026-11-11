@@ -15,6 +15,7 @@ import {
   turnOffChannel,
 } from "../application/usecases/lighting";
 import { setAutostart as setAutostartUseCase } from "../application/usecases/system";
+import { loadDrivers } from "../application/usecases/drivers";
 import {
   applySetup as applySetupUseCase,
   deleteSetup as deleteSetupUseCase,
@@ -27,6 +28,10 @@ import type {
   AutostartState,
   ChannelId,
   CurvePoint,
+  DownloadedFile,
+  DriverFile,
+  DriverList,
+  DriverProgress,
   ElevationState,
   FanHeaderId,
   FanProfileId,
@@ -35,6 +40,7 @@ import type {
   SetupKind,
   SetupList,
   Snapshot,
+  StoredFile,
 } from "../domain/model";
 import { isPumpHeader } from "../domain/fan";
 import { hexToRgb } from "../domain/lighting";
@@ -75,6 +81,16 @@ export interface SetupCommands {
   remove(kind: SetupKind, id: string): Promise<SetupList>;
 }
 
+export interface DriverCommands {
+  list(refresh: boolean): Promise<DriverList>;
+  download(
+    file: DriverFile,
+    onProgress: (progress: DriverProgress) => void,
+  ): Promise<DownloadedFile>;
+  stored(): Promise<StoredFile[]>;
+  reveal(path: string): Promise<void>;
+}
+
 export interface AppStore {
   snapshot: Accessor<Snapshot | null>;
   settings: Accessor<Settings>;
@@ -85,6 +101,7 @@ export interface AppStore {
   lighting: LightingCommands;
   system: SystemCommands;
   setups: SetupCommands;
+  drivers: DriverCommands;
   /** Loads settings, the first snapshot and build facts, then subscribes. */
   start(): Promise<void>;
   refresh(): Promise<void>;
@@ -182,6 +199,13 @@ export function createStore(port: ColorHubPort): AppStore {
     remove: (kind, id) => deleteSetupUseCase(port, kind, id),
   };
 
+  const drivers: DriverCommands = {
+    list: (refresh) => loadDrivers(port, refresh),
+    download: (file, onProgress) => port.downloadDriver(file, onProgress),
+    stored: () => port.downloadedDrivers(),
+    reveal: (path) => port.revealDriver(path),
+  };
+
   return {
     snapshot,
     settings,
@@ -192,6 +216,7 @@ export function createStore(port: ColorHubPort): AppStore {
     lighting,
     system,
     setups,
+    drivers,
 
     async start() {
       try {

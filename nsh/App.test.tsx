@@ -87,3 +87,14 @@ test("a fan preset saves from the dialog", async () => {
   expect(app.texts().some((text) => text.includes("saved"))).toBe(true);
   expect(app.texts()).toContain("Bench");
 });
+
+test("the driver catalogue groups vendor files", async () => {
+  const app = await open("./App.tsx");
+  await app.press("Drivers");
+  await app.waitFor("Firmware");
+  expect(app.texts()).toContain("BIOS 1.0.7");
+  expect(app.texts()).toContain("Drivers");
+  expect(app.texts()).toContain("Manuals");
+  expect(app.texts().some((text) => text.includes("Show all 6 firmware"))).toBe(true);
+  expect(app.texts().some((text) => text.includes("Firmware update available"))).toBe(true);
+});

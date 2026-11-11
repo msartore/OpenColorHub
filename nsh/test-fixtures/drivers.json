@@ -1,0 +1,90 @@
+{
+  "board": "CVN X570M GAMING PRO",
+  "product_id": 1234,
+  "installed_bios": "1016",
+  "files": [
+    {
+      "title": "BIOS 1.0.7",
+      "kind": "bios",
+      "url": "https://www.colorfulgroup.com/bios/1.0.7.zip",
+      "file_name": "bios-1.0.7.zip",
+      "published": "2025-01-10",
+      "newer": false
+    },
+    {
+      "title": "BIOS 1.0.8",
+      "kind": "bios",
+      "url": "https://www.colorfulgroup.com/bios/1.0.8.zip",
+      "file_name": "bios-1.0.8.zip",
+      "published": "2025-02-10",
+      "newer": false
+    },
+    {
+      "title": "BIOS 1.0.9",
+      "kind": "bios",
+      "url": "https://www.colorfulgroup.com/bios/1.0.9.zip",
+      "file_name": "bios-1.0.9.zip",
+      "published": "2025-03-10",
+      "newer": false
+    },
+    {
+      "title": "BIOS 1.0.10",
+      "kind": "bios",
+      "url": "https://www.colorfulgroup.com/bios/1.0.10.zip",
+      "file_name": "bios-1.0.10.zip",
+      "published": "2025-04-10",
+      "newer": false
+    },
+    {
+      "title": "BIOS 1.0.11",
+      "kind": "bios",
+      "url": "https://www.colorfulgroup.com/bios/1.0.11.zip",
+      "file_name": "bios-1.0.11.zip",
+      "published": "2025-05-10",
+      "newer": true
+    },
+    {
+      "title": "BIOS 1.0.12",
+      "kind": "bios",
+      "url": "https://www.colorfulgroup.com/bios/1.0.12.zip",
+      "file_name": "bios-1.0.12.zip",
+      "published": "2025-06-10",
+      "newer": true
+    },
+    {
+      "title": "AMD Chipset Driver",
+      "kind": "driver",
+      "url": "https://www.colorfulgroup.com/drivers/chipset.zip",
+      "file_name": "chipset.zip",
+      "published": "2025-01-01",
+      "newer": false
+    },
+    {
+      "title": "Realtek Audio Driver",
+      "kind": "driver",
+      "url": "https://www.colorfulgroup.com/drivers/audio.zip",
+      "file_name": "audio.zip",
+      "published": "2025-01-02",
+      "newer": false
+    },
+    {
+      "title": "iGameCenter",
+      "kind": "utility",
+      "url": "https://www.colorfulgroup.com/drivers/igamecenter.zip",
+      "file_name": "igamecenter.zip",
+      "published": "2025-01-03",
+      "newer": false
+    },
+    {
+      "title": "Motherboard Manual",
+      "kind": "manual",
+      "url": "https://www.colorfulgroup.com/manual/manual.pdf",
+      "file_name": "manual.pdf",
+      "published": "2024-12-01",
+      "newer": false
+    }
+  ],
+  "fetched_at_ms": 1735689600000,
+  "cached": true,
+  "warning": null
+}

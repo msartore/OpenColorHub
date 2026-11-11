@@ -10,9 +10,9 @@ import { createDeps } from "./app/composition/deps";
 import { Shell, type ScreenId, type Toast } from "./components/Shell";
 import { About } from "./screens/About";
 import { Dashboard } from "./screens/Dashboard";
+import { Drivers } from "./screens/Drivers";
 import { Fans } from "./screens/Fans";
 import { Lighting } from "./screens/Lighting";
-import { Placeholder } from "./screens/Placeholder";
 import { SettingsScreen } from "./screens/Settings";
 import trayIcon from "./assets/icon.png";
 
@@ -111,16 +111,8 @@ function App() {
           <If when={screen() === "about"}>
             <About store={deps.store} toast={toast} />
           </If>
-          <If
-            when={
-              screen() !== "dashboard" &&
-              screen() !== "fans" &&
-              screen() !== "leds" &&
-              screen() !== "settings" &&
-              screen() !== "about"
-            }
-          >
-            <Placeholder screen={screen()} />
+          <If when={screen() === "drivers"}>
+            <Drivers store={deps.store} toast={toast} />
           </If>
         </If>
       </If>
