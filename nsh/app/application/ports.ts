@@ -18,6 +18,8 @@ import type {
   FanProfileId,
   Settings,
   SettingsPatch,
+  SetupKind,
+  SetupList,
   Snapshot,
 } from "../domain/model";
 import type { Rgb } from "../domain/lighting";
@@ -55,6 +57,13 @@ export interface LightingPort {
   applyLed(): Promise<ActionResult>;
 }
 
+export interface SetupPort {
+  listSetups(kind: SetupKind): Promise<SetupList>;
+  saveSetup(kind: SetupKind, name: string, id?: string): Promise<SetupList>;
+  applySetup(id: string): Promise<ActionResult>;
+  deleteSetup(kind: SetupKind, id: string): Promise<SetupList>;
+}
+
 export interface SystemPort {
   about(): Promise<AboutInfo>;
   elevation(): Promise<ElevationState>;
@@ -69,4 +78,5 @@ export interface ColorHubPort
     SettingsPort,
     FanPort,
     LightingPort,
+    SetupPort,
     SystemPort {}

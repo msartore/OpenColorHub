@@ -145,6 +145,36 @@ export interface AutostartState {
   detail: string;
 }
 
+/** A preset covers one half of the machine, never both. */
+export type SetupKind = "fans" | "lighting";
+
+export interface SetupFanSetting {
+  header: FanHeaderId;
+  percent: number;
+  curve: CurvePoint[] | null;
+}
+
+export interface SetupChannelSetting {
+  channel: ChannelId;
+  color: [number, number, number];
+  brightness: number;
+  enabled: boolean;
+}
+
+export interface Setup {
+  id: string;
+  name: string;
+  kind: SetupKind;
+  saved_at_ms: number;
+  fans: SetupFanSetting[];
+  channels: SetupChannelSetting[];
+}
+
+export interface SetupList {
+  setups: Setup[];
+  warning: string | null;
+}
+
 export interface BuildMeta {
   version: string;
   tauri: string | null;

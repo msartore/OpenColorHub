@@ -51,7 +51,7 @@ nsh/
 │   ├── composition/         store.ts (app-state facade), deps.ts (the root)
 │   └── presentation/        format.ts (display only)
 ├── components/              Shell, Panel, Stat, Bar, Chip, notices
-├── screens/                 Dashboard, Fans, placeholders for the unported four
+├── screens/                 Dashboard, Fans, Lighting, Settings, About; Drivers pending
 ├── theme.json               the old palette as shadcn/NSH tokens
 └── assets/                  icon, later tray/fonts
 ```
@@ -138,26 +138,26 @@ Every future grant must name the adapter that needs it in this file.
 | Feature | Tauri command / behavior | NSH state |
 | --- | --- | --- |
 | Telemetry snapshot | `get_snapshot`, `telemetry` | done |
-| Settings read/write | `get_settings`, `save_settings` | done (native), screen pending |
-| About | `get_about` | done (native), screen pending |
+| Settings read/write | `get_settings`, `save_settings` | done |
+| About | `get_about` | done |
 | Activity | `get_activity` | done |
 | Reload lighting state | `reload_state` | done |
 | Fan duty | `set_fan_percent` | done |
-| Fan curve | `set_fan_curve` | native done, curve editor pending |
+| Fan curve | `set_fan_curve` | done |
 | Fan profiles | `apply_profile` | done |
 | Fan PWM | `set_fan_pwm` | pending (no UI uses it) |
-| Lighting | `set_channel`, `set_all_channels`, `set_brightness`, `turn_off_channel`, `apply_led` | pending |
+| Lighting | `set_channel`, `set_all_channels`, `set_brightness`, `turn_off_channel`, `apply_led` | done |
 | Setups | `list/save/apply/delete_setup` | pending |
 | Drivers | `get_drivers`, `download_driver`, `downloaded_drivers`, `reveal_driver` + progress | pending |
 | PawnIO | `pawnio_status`, `install_pawnio` + progress | pending |
-| Elevation | `get_elevation`, `request_elevation` | pending; relaunch available in core |
-| Autostart | `get_autostart`, `set_autostart` | pending |
-| External links | `open_external` | pending (`openUrl`) |
+| Elevation | `get_elevation`, `request_elevation` | done (shows state, relaunches, quits on success) |
+| Autostart | `get_autostart`, `set_autostart` | done (enabling also turns on re-apply) |
+| External links | `open_external` | done (`openUrl`, https grant) |
 | Self-update | `update_check`, `update_install` | pending; replaced by `nsh/updater` |
 | Tray, close-to-tray, single instance, `--minimized` | `tray.rs`, plugin, `lib.rs` | scaffolded |
-| Keyboard shortcuts 1–6, last screen | `main.ts` | pending |
-| Dashboard, Fans | screens | done (fans without curve editor) |
-| Lighting, Drivers, Settings, About screens | screens | pending |
+| Keyboard shortcuts 1–6, last screen | `main.ts` | last screen persists; shortcuts pending |
+| Dashboard, Fans, Lighting, Settings, About | screens | done |
+| Drivers screen | screen | pending |
 | Wake re-assert, suspend handling | `ResumeWatch` + ticker | pending: move the watch into the NSH tick loop |
 | Windows fan control | PawnIO | **hardware gate** (elevation) |
 | Packaging + updater feed | `tauri.conf.json`, release workflow | pending |
@@ -172,11 +172,11 @@ app runs after it.
       first snapshot, tick loop, live numbers, activity.
 - [x] **2. Fans: duty, pump floor, profiles** — use-case guard, confirm dialog,
       toast, pump exemption, warnings.
-- [ ] **2b. Curve editor** — four draggable points, apply/revert, dirty flag,
-      pump-curve refusal (the Rust command already enforces it).
-- [ ] **3. Lighting** — six channel cards, global colour + brightness, frame
-      preview, stage/apply.
-- [ ] **4. Settings + About** — backend mode, poll interval, units, accent,
+- [x] **2b. Curve editor** — four points, drag or numeric fields, apply/revert,
+      dirty flag, pump-curve refusal.
+- [x] **3. Lighting** — six channel cards, global colour + brightness, 200-LED
+      frame preview, per-channel apply/off.
+- [x] **4. Settings + About** — backend mode, poll interval, units, accent,
       smoothing, pump binding, low-duty threshold, paths, elevation, autostart.
 - [ ] **5. Setups** — fans/lighting presets, save/update/apply/delete.
 - [ ] **6. Drivers** — cached-then-refreshed catalogue, grouping, firmware
@@ -243,16 +243,29 @@ nsh package nsh --target windows
 ```
 
 Last run on this branch (Windows, NSH 0.5.0): `check` clean, `build` clean,
-`test` 12/12 (2 headless screen tests, 5 use-case tests, 5 domain tests), and
+`test` 28/28 (7 headless screen tests, 11 use-case tests, 10 domain tests), and
 `nsh package --target windows` produced `.nsh/out/OpenColorHub.zip` with the
 release runner and the Inno script. The `-setup.exe` needs Inno Setup 6, which
 was not installed in this environment; CI installs it before packaging.
 `cargo test --workspace` for the old app is untouched.
 
-The headless tests are the characterization tests for this slice: profile
-tables and pump floor against the core's values, validation refusals, a fake
-port proving the use case clamps before the transport, and a real headless app
-proving a profile write reaches `Service` through the controller.
+The headless tests are the characterization tests for these slices: profile
+tables and pump floor against the core's values, curve clamping, colour/byte
+conversions, frame expansion, validation refusals, fake ports proving the use
+cases clamp before the transport, and a real headless app proving fan, curve
+and lighting writes reach `Service` through the controller.
+
+## Known deviations to settle before parity
+
+- **Accent colour** is stored but not applied at run time: NSH's theme tokens
+  are compile time. Either generate the theme from `settings.accent` at startup
+  or drop the preference; the Settings copy says so today.
+- **The update panel** is not in Settings yet; it lands with the `nsh/updater`
+  slice, together with the feed cutover.
+- **Curve editor** uses a native Canvas with press/drag and numeric fields; it
+  has no keyboard point selection yet (Tab reaches the fields).
+- **Browser demo** is gone; the simulator (`OPENCOLORHUB_SIM=1`) and headless
+  tests replace it. A web target still needs a wasm build of the core.
 
 ## Definition of done
 

@@ -14,7 +14,9 @@ use std::time::Duration;
 
 use colorctl_core::about::{AboutInfo, AboutParams};
 use colorctl_core::model::{Channel, ChannelConfig, FanHeader};
+use colorctl_core::service::ActionResult;
 use colorctl_core::settings::{BackendMode, Settings, SettingsPatch};
+use colorctl_core::setups::{Setup, SetupKind, SetupStore};
 use colorctl_core::{CURVE_POINTS, CurvePoint, FanCurve, FanProfile, Service};
 use colorctl_core::{autostart, platform};
 use nsh_core::prelude::*;
@@ -36,6 +38,12 @@ struct Inner {
 }
 
 fn app_dirs() -> (PathBuf, PathBuf) {
+    // Tests and CI point this at a scratch directory so a headless run cannot
+    // rewrite the user's real settings or presets.
+    if let Some(root) = std::env::var_os("OPENCOLORHUB_DATA_DIR") {
+        let root = PathBuf::from(root);
+        return (root.join("config"), root.join("data"));
+    }
     if let Some(root) = portable_root() {
         return (root.join("config"), root.join("data"));
     }
@@ -112,6 +120,27 @@ fn parse_color(json: &str) -> Result<[u8; 3], String> {
 
 fn parse_level(percent: u32, label: &str) -> Result<u8, String> {
     u8::try_from(percent).map_err(|_| format!("{label} {percent}% is outside 0–100%"))
+}
+
+fn parse_setup_kind(id: &str) -> Result<SetupKind, String> {
+    match id {
+        "fans" => Ok(SetupKind::Fans),
+        "lighting" => Ok(SetupKind::Lighting),
+        other => Err(format!("unknown setup kind: {other}")),
+    }
+}
+
+#[derive(serde::Serialize)]
+struct SetupList {
+    setups: Vec<Setup>,
+    warning: Option<String>,
+}
+
+fn setup_list(store: SetupStore, kind: SetupKind) -> SetupList {
+    SetupList {
+        warning: store.warning.clone(),
+        setups: store.of_kind(kind),
+    }
 }
 
 /// The one object TSX holds. Its Rust value lives on the engine thread; the
@@ -423,6 +452,65 @@ impl Controller {
         to_json(&result)
     }
 
+    /// Presets of one half — `"fans"` or `"lighting"` — newest first.
+    pub fn list_setups(&self, kind: String) -> Result<String, String> {
+        let kind = parse_setup_kind(&kind)?;
+        let store = SetupStore::load(self.setups_path()?);
+        to_json(&setup_list(store, kind))
+    }
+
+    /// Captures what is running now as a preset. An `id` replaces that preset.
+    pub fn save_setup(
+        &self,
+        kind: String,
+        name: String,
+        id: Option<String>,
+    ) -> Result<String, String> {
+        let kind = parse_setup_kind(&kind)?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("a preset needs a name".to_string());
+        }
+
+        let path = self.setups_path()?;
+        let mut inner = self.lock()?;
+        let mut setup = Setup::capture(inner.service_mut()?, kind, name);
+        if let Some(id) = id {
+            setup.id = id;
+        }
+        drop(inner);
+
+        let mut store = SetupStore::load(&path);
+        store.upsert(setup).map_err(|error| error.to_string())?;
+        to_json(&setup_list(store, kind))
+    }
+
+    /// Replays a preset into the service; only its own half is written.
+    pub fn apply_setup(&self, id: String) -> Result<String, String> {
+        let store = SetupStore::load(self.setups_path()?);
+        let setup = store
+            .all()
+            .iter()
+            .find(|entry| entry.id == id)
+            .cloned()
+            .ok_or_else(|| "that preset no longer exists".to_string())?;
+
+        let mut inner = self.lock()?;
+        let message = setup
+            .apply(inner.service_mut()?)
+            .map_err(|error| error.to_string())?;
+        let snapshot = inner.service_mut()?.snapshot();
+        to_json(&ActionResult { snapshot, message })
+    }
+
+    /// Removes a preset; the list comes back for the open dialog.
+    pub fn delete_setup(&self, kind: String, id: String) -> Result<String, String> {
+        let kind = parse_setup_kind(&kind)?;
+        let mut store = SetupStore::load(self.setups_path()?);
+        store.remove(&id).map_err(|error| error.to_string())?;
+        to_json(&setup_list(store, kind))
+    }
+
     /// Ticks the service off the engine thread and posts a JSON snapshot.
     ///
     /// An async member runs as a task, so `timer` and `blocking` work here.
@@ -478,6 +566,10 @@ impl Controller {
         self.inner
             .lock()
             .map_err(|_| "internal state lock poisoned — restart OpenColorHub".to_string())
+    }
+
+    fn setups_path(&self) -> Result<PathBuf, String> {
+        Ok(self.lock()?.data_dir.join("setups.json"))
     }
 }
 

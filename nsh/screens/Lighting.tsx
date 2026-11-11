@@ -23,6 +23,7 @@ import {
   isHexColor,
 } from "../app/domain/lighting";
 import { confirmWrite } from "../components/confirm";
+import { SetupsDialog } from "../components/SetupsDialog";
 import { Chip, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
@@ -226,6 +227,7 @@ export function Lighting(props: {
   const globalHex = signal("#22d3ee");
   const globalBright = signal(80);
   const touched = signal(false);
+  const presetsOpen = signal(false);
 
   effect(() => {
     const list = channels();
@@ -313,13 +315,22 @@ export function Lighting(props: {
 
   return (
     <View class="gap-4">
-      <View class="gap-1">
-        <Text class="text-xl font-semibold text-foreground">Lighting</Text>
-        <Text class="text-xs text-muted-foreground">
-          {channels().length === 0
-            ? (device()?.error ?? "The controller reported no lighting channels.")
-            : `${channels().length} channels · ${LED_TOTAL} LEDs in the frame`}
-        </Text>
+      <View class="flex-row items-center justify-between gap-3">
+        <View class="gap-1">
+          <Text class="text-xl font-semibold text-foreground">Lighting</Text>
+          <Text class="text-xs text-muted-foreground">
+            {channels().length === 0
+              ? (device()?.error ?? "The controller reported no lighting channels.")
+              : `${channels().length} channels · ${LED_TOTAL} LEDs in the frame`}
+          </Text>
+        </View>
+        <Button
+          testID="lighting-presets"
+          class="rounded-[7px] border border-border px-3 py-1.5"
+          onPress={() => presetsOpen.set(true)}
+        >
+          <Text class="text-xs text-foreground">Presets</Text>
+        </Button>
       </View>
 
       <Panel title="Global colour" subtitle="Every channel, one colour">
@@ -438,6 +449,14 @@ export function Lighting(props: {
           </Text>
         </Panel>
       </If>
+
+      <SetupsDialog
+        kind="lighting"
+        open={presetsOpen}
+        onOpenChange={presetsOpen.set}
+        store={props.store}
+        toast={props.toast}
+      />
     </View>
   );
 }

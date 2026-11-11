@@ -23,6 +23,7 @@ import {
 import { dutyColor, fanModeLabel, formatRpm } from "../app/presentation/format";
 import { confirmWrite } from "../components/confirm";
 import { CurveChart } from "../components/CurveChart";
+import { SetupsDialog } from "../components/SetupsDialog";
 import { Bar, Chip, Notice, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
@@ -242,6 +243,8 @@ export function Fans(props: {
     dutyWarnings(summary(), props.store.settings().low_duty_warning),
   );
 
+  const presetsOpen = signal(false);
+
   const temperature = (): number | null => props.store.snapshot()?.temperature_c ?? null;
 
   const onDuty = async (header: FanHeaderId, percent: number): Promise<void> => {
@@ -296,13 +299,22 @@ export function Fans(props: {
 
   return (
     <View class="gap-4">
-      <View class="gap-1">
-        <Text class="text-xl font-semibold text-foreground">Fan control</Text>
-        <Text class="text-xs text-muted-foreground">
-          {summary().length === 0
-            ? "No header is reporting a speed."
-            : `${summary().length} of ${props.store.snapshot()?.fans.length ?? 0} headers in use`}
-        </Text>
+      <View class="flex-row items-center justify-between gap-3">
+        <View class="gap-1">
+          <Text class="text-xl font-semibold text-foreground">Fan control</Text>
+          <Text class="text-xs text-muted-foreground">
+            {summary().length === 0
+              ? "No header is reporting a speed."
+              : `${summary().length} of ${props.store.snapshot()?.fans.length ?? 0} headers in use`}
+          </Text>
+        </View>
+        <Button
+          testID="fan-presets"
+          class="rounded-[7px] border border-border px-3 py-1.5"
+          onPress={() => presetsOpen.set(true)}
+        >
+          <Text class="text-xs text-foreground">Presets</Text>
+        </Button>
       </View>
 
       <If when={warnings().stalled.length > 0}>
@@ -378,6 +390,14 @@ export function Fans(props: {
           </Panel>
         </If>
       </View>
+
+      <SetupsDialog
+        kind="fans"
+        open={presetsOpen}
+        onOpenChange={presetsOpen.set}
+        store={props.store}
+        toast={props.toast}
+      />
     </View>
   );
 }

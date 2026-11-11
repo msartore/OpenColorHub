@@ -21,6 +21,8 @@ import type {
   FanProfileId,
   Settings,
   SettingsPatch,
+  SetupKind,
+  SetupList,
   Snapshot,
 } from "../domain/model";
 import type { Rgb } from "../domain/lighting";
@@ -52,6 +54,15 @@ export function createNativePort(controller: Controller): ColorHubPort {
     autostart: () => call<AutostartState>(() => controller.autostartJson()),
     setAutostart: (enabled: boolean) =>
       call<AutostartState>(() => controller.setAutostart(enabled)),
+
+    listSetups: (kind: SetupKind) =>
+      call<SetupList>(() => controller.listSetups(kind)),
+    saveSetup: (kind: SetupKind, name: string, id?: string) =>
+      call<SetupList>(() => controller.saveSetup(kind, name, id ?? null)),
+    applySetup: (id: string) =>
+      call<ActionResult>(() => controller.applySetup(id)),
+    deleteSetup: (kind: SetupKind, id: string) =>
+      call<SetupList>(() => controller.deleteSetup(kind, id)),
 
     setFanPercent: (header: FanHeaderId, percent: number) =>
       call<ActionResult>(() => controller.setFanPercent(header, percent)),

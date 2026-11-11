@@ -74,3 +74,16 @@ test("about reports the detected board and build", async () => {
   expect(app.texts()).toContain("Upstream");
   expect(app.texts().some((text) => text.includes("CVN"))).toBe(true);
 });
+
+test("a fan preset saves from the dialog", async () => {
+  const app = await open("./App.tsx");
+  await app.press("Fan control");
+  await app.waitFor("Profiles");
+  await app.press("id:fan-presets");
+  await app.waitFor("Fan presets");
+  await app.type("Preset name", "Bench");
+  await app.press("Save preset");
+  await app.wait(300);
+  expect(app.texts().some((text) => text.includes("saved"))).toBe(true);
+  expect(app.texts()).toContain("Bench");
+});

@@ -15,6 +15,12 @@ import {
   turnOffChannel,
 } from "../application/usecases/lighting";
 import { setAutostart as setAutostartUseCase } from "../application/usecases/system";
+import {
+  applySetup as applySetupUseCase,
+  deleteSetup as deleteSetupUseCase,
+  listSetups as listSetupsUseCase,
+  saveSetup as saveSetupUseCase,
+} from "../application/usecases/setups";
 import type {
   AboutInfo,
   ActionResult,
@@ -26,6 +32,8 @@ import type {
   FanProfileId,
   Settings,
   SettingsPatch,
+  SetupKind,
+  SetupList,
   Snapshot,
 } from "../domain/model";
 import { isPumpHeader } from "../domain/fan";
@@ -60,6 +68,13 @@ export interface SystemCommands {
   setAutostart(enabled: boolean): Promise<AutostartState>;
 }
 
+export interface SetupCommands {
+  list(kind: SetupKind): Promise<SetupList>;
+  save(kind: SetupKind, name: string, id?: string): Promise<SetupList>;
+  apply(id: string): Promise<string>;
+  remove(kind: SetupKind, id: string): Promise<SetupList>;
+}
+
 export interface AppStore {
   snapshot: Accessor<Snapshot | null>;
   settings: Accessor<Settings>;
@@ -69,6 +84,7 @@ export interface AppStore {
   fans: FanCommands;
   lighting: LightingCommands;
   system: SystemCommands;
+  setups: SetupCommands;
   /** Loads settings, the first snapshot and build facts, then subscribes. */
   start(): Promise<void>;
   refresh(): Promise<void>;
@@ -156,6 +172,16 @@ export function createStore(port: ColorHubPort): AppStore {
     },
   };
 
+  const setups: SetupCommands = {
+    list: (kind) => listSetupsUseCase(port, kind),
+    save: (kind, name, id) => saveSetupUseCase(port, kind, name, id),
+    async apply(id) {
+      const result = await applySetupUseCase(port, id);
+      return applyResult(result);
+    },
+    remove: (kind, id) => deleteSetupUseCase(port, kind, id),
+  };
+
   return {
     snapshot,
     settings,
@@ -165,6 +191,7 @@ export function createStore(port: ColorHubPort): AppStore {
     fans,
     lighting,
     system,
+    setups,
 
     async start() {
       try {
