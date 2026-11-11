@@ -201,7 +201,7 @@ export function Drivers(props: {
           else={
             <Button
               testID={`driver-download-${file.file_name}`}
-              class="rounded-[6px] bg-primary px-2.5 py-1"
+              class="rounded-[6px] bg-primary px-2.5 py-1 disabled:opacity-40"
               disabled={downloading}
               onPress={() => void startDownload(file)}
             >
@@ -237,7 +237,7 @@ export function Drivers(props: {
         </View>
         <Button
           testID="driver-refresh"
-          class="rounded-[7px] border border-border px-3 py-1.5"
+          class="rounded-[7px] border border-border px-3 py-1.5 disabled:opacity-40"
           disabled={loading()}
           onPress={() => void load(true)}
         >

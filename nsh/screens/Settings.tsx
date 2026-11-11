@@ -300,7 +300,7 @@ export function SettingsScreen(props: {
               </If>
               <Button
                 testID="updates-install"
-                class="rounded-[7px] bg-primary px-3 py-1.5"
+                class="rounded-[7px] bg-primary px-3 py-1.5 disabled:opacity-40"
                 disabled={installing()}
                 onPress={() => void install()}
               >
@@ -314,7 +314,7 @@ export function SettingsScreen(props: {
         <View class="flex-row gap-2">
           <Button
             testID="updates-check"
-            class="rounded-[7px] border border-border px-3 py-1.5"
+            class="rounded-[7px] border border-border px-3 py-1.5 disabled:opacity-40"
             disabled={checking()}
             onPress={() => void check()}
           >

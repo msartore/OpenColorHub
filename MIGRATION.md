@@ -147,20 +147,19 @@ Every future grant must name the adapter that needs it in this file.
 | Fan profiles | `apply_profile` | done |
 | Fan PWM | `set_fan_pwm` | pending (no UI uses it) |
 | Lighting | `set_channel`, `set_all_channels`, `set_brightness`, `turn_off_channel`, `apply_led` | done |
-| Setups | `list/save/apply/delete_setup` | pending |
-| Drivers | `get_drivers`, `download_driver`, `downloaded_drivers`, `reveal_driver` + progress | pending |
-| PawnIO | `pawnio_status`, `install_pawnio` + progress | pending |
+| Setups | `list/save/apply/delete_setup` | done |
+| Drivers | `get_drivers`, `download_driver`, `downloaded_drivers`, `reveal_driver` + progress | done (fixture in tests) |
+| PawnIO | `pawnio_status`, `install_pawnio` + progress | done |
 | Elevation | `get_elevation`, `request_elevation` | done (shows state, relaunches, quits on success) |
 | Autostart | `get_autostart`, `set_autostart` | done (enabling also turns on re-apply) |
 | External links | `open_external` | done (`openUrl`, https grant) |
-| Self-update | `update_check`, `update_install` | pending; replaced by `nsh/updater` |
+| Self-update | `update_check`, `update_install` | done with `nsh/updater` (feed cutover pending) |
 | Tray, close-to-tray, single instance, `--minimized` | `tray.rs`, plugin, `lib.rs` | scaffolded |
-| Keyboard shortcuts 1–6, last screen | `main.ts` | last screen persists; shortcuts pending |
-| Dashboard, Fans, Lighting, Settings, About | screens | done |
-| Drivers screen | screen | pending |
-| Wake re-assert, suspend handling | `ResumeWatch` + ticker | pending: move the watch into the NSH tick loop |
+| Keyboard shortcuts 1–6, last screen | `main.ts` | done (`mod+1..6`, last screen restored) |
+| Dashboard, Fans, Lighting, Settings, About, Drivers | screens | done |
+| Wake re-assert, suspend handling | `ResumeWatch` + ticker | done (gap detection in the NSH tick loop) |
 | Windows fan control | PawnIO | **hardware gate** (elevation) |
-| Packaging + updater feed | `tauri.conf.json`, release workflow | pending |
+| Packaging + updater feed | `tauri.conf.json`, release workflow | Windows zip/Inno + CI done; Linux artifacts and the update feed pending |
 
 ## Slice order
 
@@ -178,15 +177,25 @@ app runs after it.
       frame preview, per-channel apply/off.
 - [x] **4. Settings + About** — backend mode, poll interval, units, accent,
       smoothing, pump binding, low-duty threshold, paths, elevation, autostart.
-- [ ] **5. Setups** — fans/lighting presets, save/update/apply/delete.
-- [ ] **6. Drivers** — cached-then-refreshed catalogue, grouping, firmware
+- [x] **5. Setups** — fans/lighting presets, save/update/apply/delete.
+- [x] **6. Drivers** — cached-then-refreshed catalogue, grouping, firmware
       collapse, download progress, reveal in folder.
-- [ ] **7. PawnIO** — status, install, installer progress, restart-as-admin path.
-- [ ] **8. Updates** — `nsh/updater`, manifest publishing, progress UI, cutover.
-- [ ] **9. Desktop polish** — keyboard shortcuts, last screen, window placement,
-      reduced motion, high-DPI checks.
-- [ ] **10. Packaging + CI** — Windows Inno/zip, Linux tarball + `.desktop`,
-      Windows CI job, release assets, update feed.
+- [x] **7. PawnIO** — status, install, installer progress, restart-as-admin path.
+- [x] **8. Updates** — `nsh/updater` check/download/install; the release feed and
+      the old-app cutover remain.
+- [x] **9. Desktop polish** — keyboard shortcuts, last screen. Reduced-motion
+      checks remain.
+- [x] **9b. Wake/suspend** — `ResumeWatch` in the NSH tick loop; fans and
+      lighting are re-asserted with retries and the outcome is noted.
+- [x] **9c. Window placement** — the main window's placement is saved in the
+      app's storage and restored on launch.
+- [ ] **10a. Packaging + CI (Windows)** — zip, Inno script, CI job.
+- [ ] **10b. Linux packaging + release feed** — tarball + `.desktop`, the
+      `nsh update-manifest` feed and the old-app cutover.
+- [x] **10a. Packaging + CI (Windows)** — zip, Inno installer and CI job,
+      verified locally including `OpenColorHub-setup.exe`.
+- [ ] **10b. Release feed** — `nsh update-manifest`, GitHub assets, Linux
+      tarball + `.desktop`, the one-time installer for existing Tauri users.
 - [ ] **11. Hardware verification + cutover** — real board matrix, old shell
       removed from releases, one-time installer for existing users.
 - [ ] **12. Post-parity Rust layers** — extract `crates/colorctl-domain` (zero
@@ -237,17 +246,27 @@ $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
 nsh check nsh        # cargo check + tsc against .nsh/types
 nsh build nsh        # bundle, asset and class checks
 $env:OPENCOLORHUB_SIM = "1"
+$env:OPENCOLORHUB_DATA_DIR = Join-Path $env:TEMP "opencolorhub-nsh-tests"
+$env:OPENCOLORHUB_DRIVERS_FIXTURE = Join-Path (Get-Location) "test-fixtures/drivers.json"
+Remove-Item -Recurse -Force $env:OPENCOLORHUB_DATA_DIR -ErrorAction SilentlyContinue
 nsh test nsh         # Rust crate tests + TSX domain/use-case/headless screen tests
 nsh run nsh          # the desktop target
 nsh package nsh --target windows
 ```
 
+The two test variables matter: `OPENCOLORHUB_DATA_DIR` keeps a headless run
+from rewriting the user's settings, presets and simulator state, and
+`OPENCOLORHUB_DRIVERS_FIXTURE` serves a fixed catalogue so tests never touch the
+network. Start from an empty data directory; the last-screen restore is real
+behaviour and a reused directory carries the previous run's screen.
+
 Last run on this branch (Windows, NSH 0.5.0): `check` clean, `build` clean,
-`test` 28/28 (7 headless screen tests, 11 use-case tests, 10 domain tests), and
-`nsh package --target windows` produced `.nsh/out/OpenColorHub.zip` with the
-release runner and the Inno script. The `-setup.exe` needs Inno Setup 6, which
-was not installed in this environment; CI installs it before packaging.
-`cargo test --workspace` for the old app is untouched.
+`test` 40/40 (9 headless screen tests, 13 use-case tests, 18 domain tests), and
+`nsh package --target windows` produced `.nsh/out/OpenColorHub.zip`,
+`OpenColorHub-0.3.0-windows-x86_64.zip` and `OpenColorHub-setup.exe` with Inno
+Setup 6.7.3 installed. `cargo test --workspace` for the old app is untouched.
+The app was also run under `nsh run` and checked by eye: Dashboard, Fan control,
+Lighting, Drivers, Settings and About render with live simulated telemetry.
 
 The headless tests are the characterization tests for these slices: profile
 tables and pump floor against the core's values, curve clamping, colour/byte
@@ -266,6 +285,9 @@ and lighting writes reach `Service` through the controller.
   has no keyboard point selection yet (Tab reaches the fields).
 - **Browser demo** is gone; the simulator (`OPENCOLORHUB_SIM=1`) and headless
   tests replace it. A web target still needs a wasm build of the core.
+- **Buttons inside a `Dialog`** are not hit by the headless driver (their text
+  is not in the modal's tree). Dialog actions use a `View` with `role="button"`
+  and `onPress`; regular screen buttons are unaffected.
 
 ## Definition of done
 

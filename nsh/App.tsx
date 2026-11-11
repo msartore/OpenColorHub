@@ -3,8 +3,8 @@
  * native adapter and the store; screens receive them, never a `Controller`.
  */
 
-import { Text, View, cleanup, effect, keymap, mount, signal } from "nsh";
-import { Application, Tray, currentWindow } from "nsh/desktop";
+import { Text, View, Storage, cleanup, effect, keymap, mount, signal } from "nsh";
+import { Application, Tray, Window, currentWindow } from "nsh/desktop";
 
 import { createDeps } from "./app/composition/deps";
 import { SCREENS, Shell, type ScreenId, type Toast } from "./components/Shell";
@@ -60,8 +60,23 @@ function App() {
   });
 
   const win = currentWindow();
+  const main = Window.get("main") ?? win;
   if (!deps.controller.minimized) win.show();
   win.on("closePress", () => win.hide());
+
+  // Restore where the user left the window, and keep that placement current.
+  void Storage.getItem("window").then((saved) => {
+    if (!saved) return;
+    try {
+      main.setPlacement(JSON.parse(saved));
+    } catch {
+      // A placement from another display layout is simply ignored.
+    }
+  });
+  effect(() => {
+    const state = main.state();
+    if (state) void Storage.setItem("window", JSON.stringify(state.placement));
+  });
 
   Tray.set({
     icon: trayIcon,

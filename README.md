@@ -5,6 +5,11 @@
 Fan and ARGB control for Colorful AMD motherboards: a Tauri 2 desktop app and a
 `colorctl` CLI over one hardware core.
 
+> **Native Shell port in progress.** A parallel NSH app lives in
+> [`nsh/`](nsh/README.md), built on the same `colorctl-core`. The Tauri build
+> remains the shipping app until the parity gate in
+> [`MIGRATION.md`](MIGRATION.md) passes.
+
 Two blocks: the **Nuvoton Super I/O** (fan headers, 4-point curves, tachometers,
 board temperature) and the **Colorful RGB controller** (200 LEDs on six
 channels: onboard shroud, two 12V RGB headers, three 5V ARGB headers).

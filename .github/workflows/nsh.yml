@@ -51,9 +51,12 @@ jobs:
         run: choco install innosetup --no-progress -y
 
       - name: Tests (simulator, no hardware)
-        env:
-          OPENCOLORHUB_SIM: "1"
-        run: nsh test nsh
+        run: |
+          $env:OPENCOLORHUB_SIM = "1"
+          $env:OPENCOLORHUB_DATA_DIR = Join-Path $env:RUNNER_TEMP "opencolorhub-nsh-tests"
+          $env:OPENCOLORHUB_DRIVERS_FIXTURE = Join-Path $env:GITHUB_WORKSPACE "nsh/test-fixtures/drivers.json"
+          Remove-Item -Recurse -Force $env:OPENCOLORHUB_DATA_DIR -ErrorAction SilentlyContinue
+          nsh test nsh
 
       - name: Package
         run: nsh package nsh --target windows

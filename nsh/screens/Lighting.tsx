@@ -195,7 +195,7 @@ function ChannelCard(props: {
       <View class="flex-row items-center gap-2">
         <Button
           testID={`channel-apply-${props.channel().id}`}
-          class="rounded-[6px] bg-primary px-3 py-1.5"
+          class="rounded-[6px] bg-primary px-3 py-1.5 disabled:opacity-40"
           disabled={!enabled()}
           onPress={() => void apply()}
         >

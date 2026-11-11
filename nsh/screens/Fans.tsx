@@ -37,7 +37,7 @@ function curveLabel(points: readonly CurvePoint[]): string {
 function FanCard(props: {
   fan: Accessor<FanStatus>;
   temperature: Accessor<number | null>;
-  onDuty: (header: FanHeaderId, percent: number) => Promise<void>;
+  onDuty: (header: FanHeaderId, percent: number) => Promise<boolean>;
   onCurve: (header: FanHeaderId, points: CurvePoint[]) => Promise<boolean>;
 }) {
   const initial = props.fan().curve ?? DEFAULT_CURVE;
@@ -136,7 +136,9 @@ function FanCard(props: {
         onChangeEnd={(event) => {
           const value = Array.isArray(event.value) ? event.value[0] : event.value;
           dragging.set(false);
-          void props.onDuty(props.fan().header, value);
+          void props.onDuty(props.fan().header, value).then((applied) => {
+            if (!applied) dutyDraft.set(props.fan().percent);
+          });
         }}
       >
         <Text class="text-[11px] text-muted-foreground">
@@ -207,7 +209,7 @@ function FanCard(props: {
         <View class="flex-row items-center gap-2">
           <Button
             testID={`curve-apply-${props.fan().header}`}
-            class="rounded-[6px] bg-primary px-3 py-1.5"
+            class="rounded-[6px] bg-primary px-3 py-1.5 disabled:opacity-40"
             disabled={!dirty()}
             onPress={() => void apply()}
           >
@@ -215,7 +217,7 @@ function FanCard(props: {
           </Button>
           <Button
             testID={`curve-revert-${props.fan().header}`}
-            class="rounded-[6px] border border-border px-3 py-1.5"
+            class="rounded-[6px] border border-border px-3 py-1.5 disabled:opacity-40"
             disabled={!dirty()}
             onPress={revert}
           >
@@ -258,15 +260,22 @@ export function Fans(props: {
 
   const temperature = (): number | null => props.store.snapshot()?.temperature_c ?? null;
 
-  const onDuty = async (header: FanHeaderId, percent: number): Promise<void> => {
+  const onDuty: (header: FanHeaderId, percent: number) => Promise<boolean> = async (
+    header,
+    percent,
+  ) => {
     const fan = props.store.snapshot()?.fans.find((candidate) => candidate.header === header);
     const label = fan?.label ?? header;
-    if (!(await confirmWrite(props.store.settings(), `Set ${label} to ${percent}%?`))) return;
+    if (!(await confirmWrite(props.store.settings(), `Set ${label} to ${percent}%?`))) {
+      return false;
+    }
     try {
       const message = await props.store.fans.setDuty(header, percent);
       props.toast(message, "ok");
+      return true;
     } catch (error) {
       props.toast(`Set failed: ${String(error)}`, "danger");
+      return false;
     }
   };
 

@@ -18,7 +18,9 @@ use colorctl_core::model::{Channel, ChannelConfig, FanHeader};
 use colorctl_core::service::ActionResult;
 use colorctl_core::settings::{BackendMode, Settings, SettingsPatch};
 use colorctl_core::setups::{Setup, SetupKind, SetupStore};
-use colorctl_core::{CURVE_POINTS, CurvePoint, FanCurve, FanProfile, Service};
+use colorctl_core::{
+    CURVE_POINTS, CurvePoint, FanCurve, FanProfile, ResumeWatch, Service, WakeReport,
+};
 use colorctl_core::{autostart, pawnio_install, platform};
 use nsh_core::prelude::*;
 
@@ -36,6 +38,9 @@ struct Inner {
     settings_path: PathBuf,
     settings_warning: Option<String>,
     data_dir: PathBuf,
+    /// Watches the gap between ticks: a long one is a suspend, and the
+    /// hardware forgets its state across it.
+    watch: ResumeWatch,
 }
 
 fn app_dirs() -> (PathBuf, PathBuf) {
@@ -129,6 +134,42 @@ fn parse_setup_kind(id: &str) -> Result<SetupKind, String> {
         "lighting" => Ok(SetupKind::Lighting),
         other => Err(format!("unknown setup kind: {other}")),
     }
+}
+
+/// Re-applies fans and lighting after a resume, retrying while the USB
+/// controller re-enumerates. Runs on a blocking thread; notes the outcome so
+/// the Dashboard's activity list explains the gap.
+fn reassert_after_wake(inner: &Arc<Mutex<Inner>>) -> Option<String> {
+    let mut guard = inner.lock().ok()?;
+    let service = guard.service.as_mut()?;
+
+    let mut report = WakeReport::default();
+    for attempt in 0..6 {
+        report = service.reassert_after_wake();
+        if report.errors.is_empty() {
+            break;
+        }
+        if attempt + 1 < 6 {
+            std::thread::sleep(Duration::from_millis(700));
+        }
+    }
+
+    let message = if !report.errors.is_empty() {
+        format!(
+            "Could not re-apply after wake — {}",
+            report.errors.join("; ")
+        )
+    } else if report.restored_something() {
+        match (report.fans, report.lighting) {
+            (0, _) => "Re-applied lighting after wake".to_string(),
+            (fans, true) => format!("Re-applied {fans} fans and lighting after wake"),
+            (fans, false) => format!("Re-applied {fans} fans after wake"),
+        }
+    } else {
+        "Woke; nothing needed re-applying".to_string()
+    };
+    service.note("wake", message.clone());
+    Some(message)
 }
 
 #[derive(serde::Serialize)]
@@ -259,6 +300,7 @@ impl Controller {
                 settings_path,
                 settings_warning: warning,
                 data_dir,
+                watch: ResumeWatch::new(Duration::from_millis(1000)),
             })),
             minimized: std::env::args().any(|arg| arg == "--minimized"),
             stopped: Arc::new(AtomicBool::new(false)),
@@ -584,9 +626,7 @@ impl Controller {
         }
 
         let cache_path = data_dir.join("drivers-cache.json");
-        if !refresh
-            && let Some(cache) = drivers::load_cache_for(&cache_path, &board)
-        {
+        if !refresh && let Some(cache) = drivers::load_cache_for(&cache_path, &board) {
             return to_json(&driver_list(cache, &bios, true, None));
         }
 
@@ -745,10 +785,10 @@ impl Controller {
             .map_err(|error| error.to_string())?;
 
         this.with(|controller| {
-            if let Ok(mut inner) = controller.lock() {
-                if let Ok(service) = inner.service_mut() {
-                    service.reload_backends();
-                }
+            if let Ok(mut inner) = controller.lock()
+                && let Ok(service) = inner.service_mut()
+            {
+                service.reload_backends();
             }
         });
         to_json(&platform::pawnio_status())
@@ -769,10 +809,32 @@ impl Controller {
                 .map(|inner| inner.settings.poll_interval_ms)
                 .unwrap_or(1000)
                 .clamp(250, 10_000);
+            // Mark immediately before the sleep, so the gap the next tick
+            // measures is the sleep itself and not the work after it.
+            if let Ok(mut inner) = inner.lock() {
+                inner.watch.set_interval(Duration::from_millis(interval));
+                inner.watch.mark();
+            }
             timer(Duration::from_millis(interval)).await;
             if stopped.load(Ordering::SeqCst) {
                 break;
             }
+
+            // A tick well past its interval means the machine was asleep. The
+            // Super I/O and the USB controller come back without the settings
+            // this session wrote, so re-assert them before the next snapshot.
+            let slept = inner
+                .lock()
+                .ok()
+                .and_then(|mut inner| inner.watch.observe_now());
+            if let Some(slept) = slept {
+                let job = inner.clone();
+                let report = blocking(move || reassert_after_wake(&job)).await;
+                if let Ok(Some(message)) = report {
+                    eprintln!("opencolorhub: woke after {}s: {message}", slept.as_secs());
+                }
+            }
+
             let job = inner.clone();
             let ticked = blocking(move || {
                 let mut inner = job.lock().ok()?;
