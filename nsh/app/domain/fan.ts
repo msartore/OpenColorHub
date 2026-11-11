@@ -179,6 +179,41 @@ export function curveSignature(curve: readonly CurvePoint[] | null): string {
   return curve ? curve.map((point) => `${point.temp_c}:${point.percent}`).join(",") : "";
 }
 
+/** Exact equality (no PWM tolerance): what a draft should be compared against. */
+export function curvesEqual(
+  a: readonly CurvePoint[],
+  b: readonly CurvePoint[],
+): boolean {
+  return a.length === b.length && a.every((point, index) => point.temp_c === b[index].temp_c && point.percent === b[index].percent);
+}
+
+/**
+ * Moves one point, keeping the table valid: temperatures stay outside their
+ * neighbours and inside 0–120 °C, duty inside 0–100. The DOM editor did the
+ * same clamp while dragging; doing it in domain makes it testable.
+ */
+export function setCurvePoint(
+  curve: readonly CurvePoint[],
+  index: number,
+  patch: Partial<CurvePoint>,
+): CurvePoint[] {
+  const next = curve.map((point) => ({ ...point }));
+  if (index < 0 || index >= next.length) return next;
+
+  const current = next[index];
+  const temp = patch.temp_c ?? current.temp_c;
+  const percent = patch.percent ?? current.percent;
+  const lower = index === 0 ? 0 : next[index - 1].temp_c + 1;
+  const rawUpper = index === next.length - 1 ? MAX_TEMP_C : next[index + 1].temp_c - 1;
+  const upper = Math.max(lower, rawUpper);
+
+  next[index] = {
+    temp_c: Math.min(upper, Math.max(lower, Math.round(temp))),
+    percent: Math.min(100, Math.max(0, Math.round(percent))),
+  };
+  return next;
+}
+
 /** A profile is active when every detected fan sits on its own curve. */
 export function isProfileActive(
   presentFans: readonly FanStatus[],

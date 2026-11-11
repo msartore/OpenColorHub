@@ -1,13 +1,28 @@
-/** Fan control: live duty, the pump floor, profiles and the write guard. */
+/** Fan control: live duty, the pump floor, profiles and the four-point curve. */
 
 import { Text, View, computed, effect, signal } from "nsh";
-import { AlertDialog, Button, Slider } from "nsh/base";
+import { AlertDialog, Button, NumberInput, Slider } from "nsh/base";
 import type { Accessor } from "nsh";
 
 import type { AppStore } from "../app/composition/store";
-import type { FanHeaderId, FanProfileId, FanStatus, Settings } from "../app/domain/model";
-import { PROFILES, PUMP_FLOOR_PERCENT, dutyWarnings, isProfileActive } from "../app/domain/fan";
+import type {
+  CurvePoint,
+  FanHeaderId,
+  FanProfileId,
+  FanStatus,
+  Settings,
+} from "../app/domain/model";
+import {
+  DEFAULT_CURVE,
+  PROFILES,
+  PUMP_FLOOR_PERCENT,
+  curveSignature,
+  dutyWarnings,
+  isProfileActive,
+  setCurvePoint,
+} from "../app/domain/fan";
 import { dutyColor, fanModeLabel, formatRpm } from "../app/presentation/format";
+import { CurveChart } from "../components/CurveChart";
 import { Bar, Chip, Notice, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
@@ -25,21 +40,58 @@ async function confirmWrite(settings: Settings, message: string): Promise<boolea
   return answer.action === "write";
 }
 
+function curveLabel(points: readonly CurvePoint[]): string {
+  return points.map((point) => `${point.temp_c} °C · ${point.percent}%`).join("   ");
+}
+
 function FanCard(props: {
   fan: Accessor<FanStatus>;
+  temperature: Accessor<number | null>;
   onDuty: (header: FanHeaderId, percent: number) => Promise<void>;
+  onCurve: (header: FanHeaderId, points: CurvePoint[]) => Promise<boolean>;
 }) {
-  const draft = signal(props.fan().percent);
+  const initial = props.fan().curve ?? DEFAULT_CURVE;
+  const draft = signal<CurvePoint[]>(initial.map((point) => ({ ...point })));
+  const dirty = signal(false);
+  const editing = signal(false);
+  const dutyDraft = signal(props.fan().percent);
   const dragging = signal(false);
+  let lastSignature = curveSignature(props.fan().curve);
 
   effect(() => {
     const percent = props.fan().percent;
-    if (!dragging()) draft.set(percent);
+    if (!dragging()) dutyDraft.set(percent);
   });
 
-  const commit = (value: number): void => {
-    dragging.set(false);
-    void props.onDuty(props.fan().header, value);
+  // A new curve from the board (a profile, another client) replaces an
+  // untouched draft; a draft being edited is never overwritten by telemetry.
+  effect(() => {
+    const curve = props.fan().curve;
+    const signature = curveSignature(curve);
+    if (signature === lastSignature) return;
+    lastSignature = signature;
+    if (dirty()) return;
+    draft.set(curve ? curve.map((point) => ({ ...point })) : DEFAULT_CURVE.map((point) => ({ ...point })));
+    dirty.set(false);
+  });
+
+  const move = (index: number, patch: Partial<CurvePoint>): void => {
+    draft.set(setCurvePoint(draft(), index, patch));
+    dirty.set(true);
+  };
+
+  const revert = (): void => {
+    const source = props.fan().curve ?? DEFAULT_CURVE;
+    draft.set(source.map((point) => ({ ...point })));
+    dirty.set(false);
+  };
+
+  const apply = async (): Promise<void> => {
+    const applied = await props.onCurve(props.fan().header, draft());
+    if (applied) {
+      dirty.set(false);
+      editing.set(false);
+    }
   };
 
   return (
@@ -77,7 +129,7 @@ function FanCard(props: {
       <Bar percent={props.fan().percent} color={dutyColor(props.fan().percent)} />
 
       <Slider
-        value={draft()}
+        value={dutyDraft()}
         min={0}
         max={100}
         step={1}
@@ -89,11 +141,12 @@ function FanCard(props: {
         onChange={(event) => {
           const value = Array.isArray(event.value) ? event.value[0] : event.value;
           dragging.set(true);
-          draft.set(value);
+          dutyDraft.set(value);
         }}
         onChangeEnd={(event) => {
           const value = Array.isArray(event.value) ? event.value[0] : event.value;
-          commit(value);
+          dragging.set(false);
+          void props.onDuty(props.fan().header, value);
         }}
       >
         <Text class="text-[11px] text-muted-foreground">
@@ -102,6 +155,89 @@ function FanCard(props: {
             : "Manual duty"}
         </Text>
       </Slider>
+
+      <View class="flex-row items-center justify-between gap-2">
+        <Text class="text-[11px] text-muted-foreground">
+          SmartFan curve · {props.fan().curve ? curveLabel(props.fan().curve!) : "not set"}
+        </Text>
+        <View class="flex-row items-center gap-1">
+          <If when={dirty()}>
+            <Chip label="unsaved" tone="warn" />
+          </If>
+          <Button
+            testID={`curve-edit-${props.fan().header}`}
+            class="rounded-[6px] border border-border px-2 py-1"
+            onPress={() => editing.set(!editing())}
+          >
+            <Text class="text-[11px] text-foreground">
+              {editing() ? "Hide points" : "Edit points"}
+            </Text>
+          </Button>
+        </View>
+      </View>
+
+      <CurveChart
+        testID={`curve-${props.fan().header}`}
+        curve={draft}
+        temperature={props.temperature}
+        onMove={move}
+      />
+
+      <If when={editing()}>
+        <View class="flex-row gap-2">
+          <Each of={draft()} key="index">
+            {(point, index) => (
+              <View class="gap-1" style={{ flex: 1 }}>
+                <Text class="text-[10px] text-muted-foreground">{`P${index() + 1}`}</Text>
+                <NumberInput
+                  value={point().temp_c}
+                  min={0}
+                  max={110}
+                  step={1}
+                  accessibilityLabel={`${props.fan().label} point ${index() + 1} temperature`}
+                  inputClass="h-7 rounded-[6px] border border-border bg-muted px-1 text-center text-xs text-foreground"
+                  suffix={<Text class="text-[10px] text-muted-foreground">°C</Text>}
+                  onChange={({ value }) => move(index(), { temp_c: value ?? point().temp_c })}
+                />
+                <NumberInput
+                  value={point().percent}
+                  min={0}
+                  max={100}
+                  step={1}
+                  accessibilityLabel={`${props.fan().label} point ${index() + 1} duty`}
+                  inputClass="h-7 rounded-[6px] border border-border bg-muted px-1 text-center text-xs text-foreground"
+                  suffix={<Text class="text-[10px] text-muted-foreground">%</Text>}
+                  onChange={({ value }) => move(index(), { percent: value ?? point().percent })}
+                />
+              </View>
+            )}
+          </Each>
+        </View>
+
+        <View class="flex-row items-center gap-2">
+          <Button
+            testID={`curve-apply-${props.fan().header}`}
+            class="rounded-[6px] bg-primary px-3 py-1.5"
+            disabled={!dirty()}
+            onPress={() => void apply()}
+          >
+            <Text class="text-[11px] text-primary-foreground">Apply curve</Text>
+          </Button>
+          <Button
+            testID={`curve-revert-${props.fan().header}`}
+            class="rounded-[6px] border border-border px-3 py-1.5"
+            disabled={!dirty()}
+            onPress={revert}
+          >
+            <Text class="text-[11px] text-foreground">Revert</Text>
+          </Button>
+          <If when={props.fan().pump}>
+            <Text class="text-[10px] text-[#fbbf24]">
+              {`A pump curve must stay at or above ${PUMP_FLOOR_PERCENT}%`}
+            </Text>
+          </If>
+        </View>
+      </If>
     </View>
   );
 }
@@ -119,6 +255,8 @@ export function Fans(props: {
     dutyWarnings(summary(), props.store.settings().low_duty_warning),
   );
 
+  const temperature = (): number | null => props.store.snapshot()?.temperature_c ?? null;
+
   const onDuty = async (header: FanHeaderId, percent: number): Promise<void> => {
     const fan = props.store.snapshot()?.fans.find((candidate) => candidate.header === header);
     const label = fan?.label ?? header;
@@ -128,6 +266,26 @@ export function Fans(props: {
       props.toast(message, "ok");
     } catch (error) {
       props.toast(`Set failed: ${String(error)}`, "danger");
+    }
+  };
+
+  const onCurve = async (header: FanHeaderId, points: CurvePoint[]): Promise<boolean> => {
+    const fan = props.store.snapshot()?.fans.find((candidate) => candidate.header === header);
+    if (
+      !(await confirmWrite(
+        props.store.settings(),
+        `Set the ${fan?.label ?? header} curve to ${curveLabel(points)}?`,
+      ))
+    ) {
+      return false;
+    }
+    try {
+      const message = await props.store.fans.setCurve(header, points);
+      props.toast(message, "ok");
+      return true;
+    } catch (error) {
+      props.toast(`Curve rejected: ${String(error)}`, "danger");
+      return false;
     }
   };
 
@@ -208,15 +366,20 @@ export function Fans(props: {
           </Each>
         </View>
         <Text class="text-[11px] text-muted-foreground">
-          Per-header curve editing (the draggable four-point editor) is the next
-          slice. Manual duty, the pump floor and profiles are live.
+          Profiles replace every header's curve. Drag a point to make your own, or use
+          the point fields for exact values.
         </Text>
       </Panel>
 
       <View class="gap-3">
         <Each of={summary()} key={(fan) => fan.header}>
           {(fan) => (
-            <FanCard fan={fan} onDuty={onDuty} />
+            <FanCard
+              fan={fan}
+              temperature={temperature}
+              onDuty={onDuty}
+              onCurve={onCurve}
+            />
           )}
         </Each>
         <If when={summary().length === 0}>

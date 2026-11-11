@@ -1,6 +1,6 @@
 import { expect, test } from "nsh/test";
 
-import { clampDuty, curveFor, evaluateCurve, isProfileActive, validateCurve } from "./fan";
+import { clampDuty, curveFor, curvesEqual, evaluateCurve, isProfileActive, setCurvePoint, validateCurve } from "./fan";
 import type { FanStatus } from "./model";
 
 test("profiles mirror the core's tables", () => {
@@ -79,4 +79,27 @@ test("a profile is active only when every detected fan is on it", () => {
     ),
   ).toBe(true);
   expect(isProfileActive([fan("sys", curveFor("quiet", false))], "standard")).toBe(false);
+});
+
+test("moving a point keeps it between its neighbours", () => {
+  const curve = curveFor("standard", false);
+  const moved = setCurvePoint(curve, 1, { temp_c: 90, percent: 130 });
+  expect(moved[1]).toEqual({ temp_c: 59, percent: 100 });
+  expect(moved[2]).toEqual(curve[2]);
+
+  const first = setCurvePoint(curve, 0, { temp_c: 40 });
+  expect(first[0].temp_c).toBe(39);
+
+  const last = setCurvePoint(curve, 3, { temp_c: 10 });
+  expect(last[3].temp_c).toBe(61);
+
+  expect(setCurvePoint(curve, 1, { percent: -20 })[1].percent).toBe(0);
+});
+
+test("draft equality is exact, unlike the chip's 1-point tolerance", () => {
+  const curve = curveFor("standard", false);
+  expect(curvesEqual(curve, curve.map((point) => ({ ...point })))).toBe(true);
+  const nudged = curve.map((point) => ({ ...point }));
+  nudged[1].percent += 1;
+  expect(curvesEqual(curve, nudged)).toBe(false);
 });
