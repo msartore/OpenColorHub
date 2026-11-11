@@ -24,9 +24,7 @@ test("the colour dialog writes the selected colour", async () => {
   app.onDialog(() => "Write");
   await app.press("Lighting");
   await app.waitFor("Frame preview");
-  await app.press("Change");
   await app.press("id:color-preset-1");
-  await app.press("Done");
   await app.press("id:lighting-apply-all");
   await app.wait(350);
   expect(app.texts().some((text) => text.includes("#e879f9"))).toBe(true);

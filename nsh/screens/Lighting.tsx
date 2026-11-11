@@ -277,7 +277,6 @@ export function Lighting(props: {
   const globalBright = signal(80);
   const touched = signal(false);
   const presetsOpen = signal(false);
-  const globalPickerOpen = signal(false);
 
   effect(() => {
     const list = channels();
@@ -393,12 +392,6 @@ export function Lighting(props: {
           <Text class="text-sm font-mono text-muted-foreground">
             {globalHex().toUpperCase()}
           </Text>
-          <Button
-            class="rounded-[6px] border border-border px-2.5 py-1"
-            onPress={() => globalPickerOpen.set(true)}
-          >
-            <Text class="text-[11px] text-foreground">Change</Text>
-          </Button>
 
           <View style={{ width: 240 }} class="gap-1">
             <Slider
@@ -449,20 +442,29 @@ export function Lighting(props: {
           </View>
         </View>
 
-        <View class="flex-row items-center gap-1.5" style={{ flexWrap: "wrap" }}>
-          <Each of={PRESETS} key="index">
-            {(preset) => (
-              <ColorSwatch
-                color={preset()}
-                accessibilityLabel={preset()}
-                class="h-6 w-6 rounded-[4px] border border-border"
-                onPress={({ color }) => {
-                  touched.set(true);
-                  globalHex.set(color);
-                }}
-              />
-            )}
-          </Each>
+        <View class="flex-row items-start gap-4" style={{ flexWrap: "wrap" }}>
+          <View class="flex-row items-center gap-1.5" style={{ flexWrap: "wrap" }}>
+            <Each of={PRESETS} key="index">
+              {(preset) => (
+                <ColorSwatch
+                  color={preset()}
+                  accessibilityLabel={preset()}
+                  class="h-6 w-6 rounded-[4px] border border-border"
+                  onPress={({ color }) => {
+                    touched.set(true);
+                    globalHex.set(color);
+                  }}
+                />
+              )}
+            </Each>
+          </View>
+          <ColorEditor
+            value={globalHex}
+            onChange={(value) => {
+              touched.set(true);
+              globalHex.set(value);
+            }}
+          />
         </View>
       </Panel>
 
@@ -511,33 +513,6 @@ export function Lighting(props: {
         store={props.store}
         toast={props.toast}
       />
-
-      <Dialog
-        open={globalPickerOpen()}
-        onOpenChange={({ open }) => globalPickerOpen.set(open)}
-        accessibilityLabel="Global colour"
-        class="rounded-[12px] border border-border bg-popover p-4 gap-3"
-        style={{ width: dialogWidth(280) }}
-        backdropClass="bg-black/40"
-      >
-        <Text class="text-sm font-semibold text-foreground">Global colour</Text>
-        <ColorEditor
-          value={globalHex}
-          onChange={(value) => {
-            touched.set(true);
-            globalHex.set(value);
-          }}
-        />
-        <View class="flex-row justify-end">
-          <View
-            role="button"
-            class="rounded-[6px] border border-border px-3 py-1.5"
-            onPress={() => globalPickerOpen.set(false)}
-          >
-            <Text class="text-[11px] text-foreground">Done</Text>
-          </View>
-        </View>
-      </Dialog>
     </View>
   );
 }
