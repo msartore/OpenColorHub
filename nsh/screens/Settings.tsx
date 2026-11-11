@@ -24,6 +24,7 @@ import type {
 import { FAN_HEADERS } from "../app/domain/fan";
 import { boardDisplayName, deviceLabel } from "../app/domain/telemetry";
 import { SETTINGS_RESET_PATCH } from "../app/domain/settings";
+import { isNarrow } from "../app/presentation/layout";
 import { KeyValue, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
@@ -265,7 +266,21 @@ export function SettingsScreen(props: {
     <View class="gap-4">
       <Text class="text-xl font-semibold text-foreground">Settings</Text>
 
-      <Panel title="Updates" subtitle="GitHub releases, verified before they replace the app">
+      <View
+        class="gap-4"
+        style={{
+          flexDirection: isNarrow() ? "column" : "row",
+          alignItems: "flex-start",
+        }}
+      >
+        <View
+          class="gap-4"
+          style={{
+            flex: isNarrow() ? undefined : 1,
+            width: isNarrow() ? "100%" : undefined,
+          }}
+        >
+          <Panel title="Updates" subtitle="GitHub releases, verified before they replace the app">
         <View class="gap-1">
           <KeyValue label="version" value={shell.version ?? "development"} />
           <KeyValue label="NSH runtime" value={shell.nshVersion} />
@@ -312,7 +327,7 @@ export function SettingsScreen(props: {
             </View>
           )}
         </If>
-        <View class="flex-row gap-2">
+        <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
           <Button
             testID="updates-check"
             class="rounded-[7px] border border-border px-3 py-1.5 disabled:opacity-40"
@@ -399,7 +414,7 @@ export function SettingsScreen(props: {
       <Panel title="Display" subtitle="Units and accent colour">
         <View class="gap-2">
           <Text class="text-xs text-muted-foreground">Temperature unit</Text>
-          <View class="flex-row gap-2">
+          <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
             <Each of={UNITS} key={(unit) => unit.id}>
               {(unit) => (
                 <Choice
@@ -417,7 +432,7 @@ export function SettingsScreen(props: {
             Accent colour — stored for the themed build; NSH's tokens are fixed at
             compile time, so the current window keeps the default green.
           </Text>
-          <View class="flex-row gap-2">
+          <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
             <Each of={ACCENTS} key="index">
               {(hex) => (
                 <Button
@@ -436,6 +451,14 @@ export function SettingsScreen(props: {
         </View>
       </Panel>
 
+        </View>
+        <View
+          class="gap-4"
+          style={{
+            flex: isNarrow() ? undefined : 1,
+            width: isNarrow() ? "100%" : undefined,
+          }}
+        >
       <Panel title="Safety" subtitle="Guard rails for real hardware">
         <Switch
           checked={draft().confirm_writes}
@@ -540,9 +563,10 @@ export function SettingsScreen(props: {
               : elevation()!.detail}
         </Text>
         <If when={elevation() !== null && !elevation()!.elevated && elevation()!.can_request}>
-          <View class="flex-row gap-2">
+          <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
             <Button
               class="rounded-[7px] bg-primary px-3 py-1.5"
+              style={{ width: 220, alignSelf: "flex-start" }}
               onPress={() => void elevate()}
             >
               <Text class="text-xs text-primary-foreground">Restart as administrator</Text>
@@ -560,7 +584,7 @@ export function SettingsScreen(props: {
       </Panel>
 
       <Panel title="Maintenance" subtitle="Recovery actions">
-        <View class="flex-row gap-2">
+        <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
           <Button
             class="rounded-[7px] border border-border px-3 py-1.5"
             onPress={() => void reload()}
@@ -578,6 +602,8 @@ export function SettingsScreen(props: {
           Resetting only touches preferences — fan curves and colours are left alone.
         </Text>
       </Panel>
+        </View>
+      </View>
     </View>
   );
 }

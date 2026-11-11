@@ -25,6 +25,7 @@ import {
 import { confirmWrite } from "../components/confirm";
 import { SetupsDialog } from "../components/SetupsDialog";
 import { Chip, Panel } from "../components/ui";
+import { channelWidth } from "../app/presentation/layout";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -114,7 +115,7 @@ function ChannelCard(props: {
   return (
     <View
       class="rounded-[10px] border border-border bg-card p-3 gap-2"
-      style={{ width: "32%" }}
+      style={{ width: channelWidth() }}
     >
       <View class="flex-row items-start justify-between gap-2">
         <View class="gap-0.5" style={{ flexShrink: 1 }}>
@@ -192,7 +193,7 @@ function ChannelCard(props: {
         <Text class="text-[11px] text-muted-foreground">Brightness</Text>
       </Slider>
 
-      <View class="flex-row items-center gap-2">
+      <View class="flex-row items-center gap-2" style={{ flexWrap: "wrap" }}>
         <Button
           testID={`channel-apply-${props.channel().id}`}
           class="rounded-[6px] bg-primary px-3 py-1.5 disabled:opacity-40"

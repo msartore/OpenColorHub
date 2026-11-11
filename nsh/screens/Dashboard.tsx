@@ -14,6 +14,7 @@ import {
 } from "../app/domain/telemetry";
 import type { TemperatureStats } from "../app/domain/telemetry";
 import { dutyColor, fanModeLabel, formatClock, formatRpm, formatTemp } from "../app/presentation/format";
+import { layoutSize, statWidth } from "../app/presentation/layout";
 import { Bar, Chip, KeyValue, Panel, Stat } from "../components/ui";
 
 const HISTORY = 120;
@@ -101,7 +102,7 @@ export function Dashboard(props: { store: AppStore }) {
             </View>
 
             <View class="flex-row gap-3" style={{ flexWrap: "wrap" }}>
-              <View style={{ width: "32%" }}>
+              <View style={{ width: statWidth() }}>
                 <Stat
                   label="Average duty"
                   value={String(snapshot().avg_percent)}
@@ -110,7 +111,7 @@ export function Dashboard(props: { store: AppStore }) {
                   tone={snapshot().avg_percent > 85 ? "warn" : "ok"}
                 />
               </View>
-              <View style={{ width: "32%" }}>
+              <View style={{ width: statWidth() }}>
                 <Stat
                   label="Total rpm"
                   value={formatRpm(summary()?.totalRpm ?? 0)}
@@ -118,7 +119,7 @@ export function Dashboard(props: { store: AppStore }) {
                   hint={`${summary()?.idle ?? 0} idle`}
                 />
               </View>
-              <View style={{ width: "32%" }}>
+              <View style={{ width: statWidth() }}>
                 <Stat
                   label="Channels lit"
                   value={String(summary()?.lit.length ?? 0)}
@@ -126,7 +127,7 @@ export function Dashboard(props: { store: AppStore }) {
                   tone={summary()?.lit.length ? "ok" : "muted"}
                 />
               </View>
-              <View style={{ width: "32%" }}>
+              <View style={{ width: statWidth() }}>
                 <Stat
                   label="Curve driven"
                   value={String(summary()?.curved ?? 0)}
@@ -135,7 +136,13 @@ export function Dashboard(props: { store: AppStore }) {
               </View>
             </View>
 
-            <View class="flex-row gap-4" style={{ alignItems: "flex-start" }}>
+            <View
+              class="gap-4"
+              style={{
+                flexDirection: layoutSize() === "narrow" ? "column" : "row",
+                alignItems: "flex-start",
+              }}
+            >
               <View style={{ flex: 1 }}>
                 <Panel title="Fan headers" subtitle="Live tachometer and duty">
                   <View class="gap-2">

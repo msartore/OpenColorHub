@@ -10,6 +10,7 @@ import type { Accessor } from "nsh";
 import type { AppStore } from "../app/composition/store";
 import type { Setup, SetupKind } from "../app/domain/model";
 import { summarizeSetup } from "../app/domain/setup";
+import { dialogWidth } from "../app/presentation/layout";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -174,7 +175,7 @@ export function SetupsDialog(props: {
       onOpenChange={({ open }) => props.onOpenChange(open)}
       accessibilityLabel={noun()}
       class="rounded-[12px] border border-border bg-popover p-4 gap-3"
-      style={{ width: 560 }}
+      style={{ width: dialogWidth(560) }}
       backdropClass="bg-black/40"
     >
       <Text class="text-base font-semibold text-foreground">{noun()}</Text>
@@ -218,7 +219,7 @@ export function SetupsDialog(props: {
               <Text class="text-[10px] font-mono text-muted-foreground">
                 {stamp(setup().saved_at_ms)}
               </Text>
-              <View class="flex-row items-center gap-1.5">
+              <View class="flex-row items-center gap-1.5" style={{ flexWrap: "wrap" }}>
                 <Action
                   testID={`setup-apply-${setup().id}`}
                   label={busy() === setup().id ? "Working…" : "Apply"}

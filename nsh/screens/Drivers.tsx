@@ -227,7 +227,7 @@ export function Drivers(props: {
 
   return (
     <View class="gap-4">
-      <View class="flex-row items-center justify-between gap-3">
+      <View class="flex-row items-center justify-between gap-3" style={{ flexWrap: "wrap" }}>
         <View class="gap-1">
           <Text class="text-xl font-semibold text-foreground">Drivers</Text>
           <Text class="text-xs text-muted-foreground">
@@ -282,6 +282,7 @@ export function Drivers(props: {
             <Text class="text-[11px] font-mono text-muted-foreground">{message()}</Text>
             <Button
               class="rounded-[7px] border border-border px-3 py-1.5"
+              style={{ alignSelf: "flex-start" }}
               onPress={() => void load(true)}
             >
               <Text class="text-xs text-foreground">Try again</Text>
@@ -324,6 +325,7 @@ export function Drivers(props: {
               <If when={rows.collapsed}>
                 <Button
                   class="rounded-[7px] border border-border px-3 py-1.5"
+                  style={{ width: 250, alignSelf: "flex-start" }}
                   onPress={() => toggleKind(group().kind)}
                 >
                   <Text class="text-xs text-foreground">
@@ -334,6 +336,7 @@ export function Drivers(props: {
               <If when={!rows.collapsed && expanded().includes(group().kind) && group().kind === "bios"}>
                 <Button
                   class="rounded-[7px] border border-border px-3 py-1.5"
+                  style={{ width: 150, alignSelf: "flex-start" }}
                   onPress={() => toggleKind(group().kind)}
                 >
                   <Text class="text-xs text-foreground">Show newest</Text>

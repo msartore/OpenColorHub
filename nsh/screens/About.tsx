@@ -74,7 +74,7 @@ export function About(props: {
               unknown for this install.
             </Text>
             <Text class="text-[11px] font-mono text-muted-foreground">{message()}</Text>
-            <Button class="rounded-[7px] border border-border px-3 py-1.5" onPress={() => void load()}>
+            <Button class="rounded-[7px] border border-border px-3 py-1.5" style={{ alignSelf: "flex-start" }} onPress={() => void load()}>
               <Text class="text-xs text-foreground">Try again</Text>
             </Button>
           </Panel>
@@ -165,6 +165,7 @@ export function About(props: {
                   </View>
                   <Button
                     class="rounded-[7px] border border-border px-3 py-1.5"
+                    style={{ width: 160, alignSelf: "flex-start" }}
                     onPress={() => copy(info().paths.data_dir)}
                   >
                     <Text class="text-xs text-foreground">Copy data dir</Text>
@@ -179,6 +180,7 @@ export function About(props: {
               </Text>
               <Button
                 class="rounded-[7px] border border-border px-3 py-1.5"
+                style={{ alignSelf: "flex-start" }}
                 onPress={() => openUpstream(info().upstream.url)}
               >
                 <Text class="text-xs text-foreground">{info().upstream.url}</Text>

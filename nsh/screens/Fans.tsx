@@ -22,6 +22,7 @@ import {
   setCurvePoint,
 } from "../app/domain/fan";
 import { dutyColor, fanModeLabel, formatRpm } from "../app/presentation/format";
+import { curvePointWidth, fanCardWidth } from "../app/presentation/layout";
 import { confirmWrite } from "../components/confirm";
 import { CurveChart } from "../components/CurveChart";
 import { PawnioDialog } from "../components/PawnioDialog";
@@ -92,12 +93,12 @@ function FanCard(props: {
           : "rounded-[10px] border border-border bg-card p-3 gap-2"
       }
     >
-      <View class="flex-row items-start justify-between gap-2">
+      <View class="flex-row items-start justify-between gap-2" style={{ flexWrap: "wrap" }}>
         <View class="gap-0.5">
           <Text class="text-sm font-semibold text-foreground">{props.fan().label}</Text>
           <Text class="text-[11px] text-muted-foreground">{props.fan().description}</Text>
         </View>
-        <View class="flex-row items-center gap-1">
+        <View class="flex-row items-center gap-1" style={{ flexWrap: "wrap" }}>
           <If when={props.fan().stalled}>
             <Chip label="stalled" tone="danger" />
           </If>
@@ -176,10 +177,10 @@ function FanCard(props: {
       />
 
       <If when={editing()}>
-        <View class="flex-row gap-2">
+        <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
           <Each of={draft()} key="index">
             {(point, index) => (
-              <View class="gap-1" style={{ flex: 1 }}>
+              <View class="gap-1" style={{ width: curvePointWidth() }}>
                 <Text class="text-[10px] text-muted-foreground">{`P${index() + 1}`}</Text>
                 <NumberInput
                   value={point().temp_c}
@@ -319,7 +320,7 @@ export function Fans(props: {
 
   return (
     <View class="gap-4">
-      <View class="flex-row items-center justify-between gap-3">
+      <View class="flex-row items-center justify-between gap-3" style={{ flexWrap: "wrap" }}>
         <View class="gap-1">
           <Text class="text-xl font-semibold text-foreground">Fan control</Text>
           <Text class="text-xs text-muted-foreground">
@@ -382,6 +383,7 @@ export function Fans(props: {
             <Button
               testID="pawnio-open"
               class="rounded-[6px] bg-primary px-2.5 py-1"
+              style={{ width: 220, alignSelf: "flex-start" }}
               onPress={() => pawnioOpen.set(true)}
             >
               <Text class="text-[11px] text-primary-foreground">
@@ -424,16 +426,15 @@ export function Fans(props: {
       </Panel>
 
       <View class="gap-3">
-        <Each of={summary()} key={(fan) => fan.header}>
-          {(fan) => (
-            <FanCard
-              fan={fan}
-              temperature={temperature}
-              onDuty={onDuty}
-              onCurve={onCurve}
-            />
-          )}
-        </Each>
+        <View class="flex-row gap-3" style={{ flexWrap: "wrap" }}>
+          <Each of={summary()} key={(fan) => fan.header}>
+            {(fan) => (
+              <View style={{ width: fanCardWidth() }}>
+                <FanCard fan={fan} temperature={temperature} onDuty={onDuty} onCurve={onCurve} />
+              </View>
+            )}
+          </Each>
+        </View>
         <If when={summary().length === 0}>
           <Panel title="No fans detected">
             <Text class="text-xs text-muted-foreground">
