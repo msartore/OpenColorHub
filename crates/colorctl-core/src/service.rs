@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::active::{self, ActiveSetup, RestoreReport};
 use crate::backend::{self, FanBackend, LedBackend};
 use crate::board::{self, BoardInfo};
 use crate::curve::{self, FanCurve, FanProfile};
@@ -74,6 +75,10 @@ pub struct Service {
     board: BoardInfo,
     settings: Settings,
     data_dir: PathBuf,
+    /// The live setup is written here after every successful hardware write so
+    /// the next process — a restart, an update, an elevation relaunch — can put
+    /// the machine back the way the user left it.
+    active_path: PathBuf,
     smoothed: Option<Telemetry>,
     /// Bit per header index, set once that header reports a tach. Latched so a
     /// fan stopped by a 0% curve or a 0 rpm reading does not lose its card.
@@ -107,6 +112,13 @@ impl Service {
             &board,
         );
 
+        // Keep the live setup beside the CCTL state file, so a CLI write and a
+        // GUI launch that share `rgb.state` share this too.
+        let active_path = set
+            .led
+            .state_path()
+            .map(|path| path.with_file_name("active-setup.json"))
+            .unwrap_or_else(|| data_dir.join("active-setup.json"));
         set.capabilities.notes.insert(
             0,
             format!(
@@ -128,6 +140,7 @@ impl Service {
             capabilities: set.capabilities,
             board,
             settings,
+            active_path,
             data_dir,
             smoothed: None,
             seen_fans: 0,
@@ -156,7 +169,70 @@ impl Service {
             return;
         }
         self.released = true;
-        self.fan.release();
+        if self.settings.release_fans_on_exit {
+            self.fan.release();
+            self.record("fan", "Fans handed back to firmware on exit");
+        }
+    }
+
+    /// Duties and curves the fan backends are actually driving. The active
+    /// setup stores only these, never the zero-duty placeholder of an untouched
+    /// header.
+    pub fn programmed_fans(&self) -> Vec<crate::setups::FanSetting> {
+        self.fan.programmed()
+    }
+
+    /// Saves the live setup after a successful write. Best effort: a full disk
+    /// must never turn a hardware write that already succeeded into an error.
+    fn persist_active(&mut self) {
+        let setup = ActiveSetup::capture(self);
+        if let Err(error) = setup.persist(&self.active_path) {
+            let message = format!("Could not save the active setup: {error}");
+            // A failing disk must not turn a successful write into an error, and
+            // repeating the same line on every change would flood the log.
+            if self
+                .activity
+                .last()
+                .is_none_or(|entry| entry.message != message)
+            {
+                self.record("settings", message);
+            }
+        }
+    }
+
+    /// Path of the persisted live setup.
+    pub fn active_path(&self) -> &Path {
+        &self.active_path
+    }
+
+    /// Replays the stored setup in a fresh process. Fans and lighting are
+    /// independent: a failure in one half is reported but does not stop the
+    /// other, and every successful write re-persists the file.
+    pub fn restore_active(&mut self) -> RestoreReport {
+        let Some(setup) = ActiveSetup::load(&self.active_path) else {
+            return RestoreReport::default();
+        };
+        let report = active::restore(&setup, self);
+        if report.restored_something() {
+            let message = match (report.fans, report.lighting) {
+                (0, _) => "Restored saved lighting at launch".to_string(),
+                (fans, true) => {
+                    format!("Restored saved setup at launch — {fans} fans and lighting")
+                }
+                (fans, false) => format!("Restored saved setup at launch — {fans} fans"),
+            };
+            self.record("restore", message);
+        }
+        if !report.errors.is_empty() {
+            self.record(
+                "restore",
+                format!(
+                    "Could not fully restore the saved setup: {}",
+                    report.errors.join("; ")
+                ),
+            );
+        }
+        report
     }
 
     pub fn settings(&self) -> &Settings {
@@ -198,6 +274,11 @@ impl Service {
                 &self.data_dir,
                 &self.board,
             );
+            self.active_path = set
+                .led
+                .state_path()
+                .map(|path| path.with_file_name("active-setup.json"))
+                .unwrap_or_else(|| self.data_dir.join("active-setup.json"));
             self.fan = set.fan;
             self.led = set.led;
             self.capabilities = set.capabilities;
@@ -217,6 +298,11 @@ impl Service {
             &self.data_dir,
             &self.board,
         );
+        self.active_path = set
+            .led
+            .state_path()
+            .map(|path| path.with_file_name("active-setup.json"))
+            .unwrap_or_else(|| self.data_dir.join("active-setup.json"));
         self.fan = set.fan;
         self.led = set.led;
         self.capabilities = set.capabilities;
@@ -451,6 +537,7 @@ impl Service {
         };
 
         self.fan.set_pwm(header, effective)?;
+        self.persist_active();
         let message = format!(
             "{} set to PWM {} (~{}%)",
             header.label(),
@@ -479,6 +566,7 @@ impl Service {
             ));
         }
         self.fan.set_curve(header, curve)?;
+        self.persist_active();
         let message = format!("{} curve set to {}", header.label(), curve::format(curve));
         self.record("fan", message.clone());
         Ok(ActionResult {
@@ -511,6 +599,7 @@ impl Service {
                 Error::backend("No headers were programmed (empty selection)")
             }));
         }
+        self.persist_active();
         let message = format!(
             "Applied '{}' profile to {} header{}",
             profile.label(),
@@ -613,6 +702,7 @@ impl Service {
         }
         self.led.apply()?;
         self.lighting_in_use = true;
+        self.persist_active();
         Ok(ActionResult {
             snapshot: self.snapshot(),
             message: "Lighting applied".to_string(),
@@ -670,6 +760,29 @@ impl Service {
     }
 
     pub fn tick(&mut self) -> Snapshot {
+        // A Super I/O reset need not move the wall clock. The backend's own
+        // health probe catches it on the next tick and replays the live setup.
+        if !self.fan.healthy() {
+            let report = self.reassert_after_wake();
+            let message = if report.errors.is_empty() {
+                format!(
+                    "Re-applied the saved setup after the fan controller returned — {} fans, lighting: {}",
+                    report.fans, report.lighting
+                )
+            } else {
+                format!(
+                    "Fan controller did not answer — {}",
+                    report.errors.join("; ")
+                )
+            };
+            if self
+                .activity
+                .last()
+                .is_none_or(|entry| entry.message != message)
+            {
+                self.record("wake", message);
+            }
+        }
         if let Some(report) = self.recover_if_needed()
             && report.lighting
         {
@@ -725,6 +838,85 @@ mod tests {
             ..Settings::default()
         };
         (Service::new(settings, dir.clone()), dir)
+    }
+
+    fn restart(dir: &std::path::Path) -> Service {
+        let settings = Settings {
+            backend: BackendMode::Simulated,
+            smoothing: false,
+            ..Settings::default()
+        };
+        Service::new(settings, dir)
+    }
+
+    #[test]
+    fn settings_default_to_restoring_and_keeping_the_setup() {
+        let defaults = Settings::default();
+        assert!(defaults.restore_setup_on_startup);
+        assert!(!defaults.release_fans_on_exit);
+    }
+
+    #[test]
+    fn the_live_setup_survives_a_restart() {
+        let (mut first, dir) = service("restart");
+        first.set_fan_percent(FanHeader::Cpu, 63).unwrap();
+        first
+            .set_channel(Channel::Led, ChannelConfig::rgb([9, 8, 7], 55), true)
+            .unwrap();
+        assert!(dir.join("active-setup.json").exists());
+
+        let mut second = restart(&dir);
+        let report = second.restore_active();
+        assert!(report.found);
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert_eq!(report.fans, 1);
+        assert!(report.lighting);
+
+        let snapshot = second.snapshot();
+        let cpu = snapshot
+            .fans
+            .iter()
+            .find(|fan| fan.header == FanHeader::Cpu)
+            .unwrap();
+        assert_eq!(cpu.percent, 63);
+        assert_eq!(snapshot.channels[0].color, [9, 8, 7]);
+        assert!(
+            second.activity().iter().any(|entry| entry.kind == "restore"
+                && entry.message.contains("Restored saved setup at launch")),
+            "the restore is visible in the activity feed"
+        );
+    }
+
+    #[test]
+    fn shutdown_hands_fans_back_only_when_asked() {
+        let (mut svc, _dir) = service("release");
+        svc.set_fan_percent(FanHeader::Cpu, 40).unwrap();
+        svc.shutdown();
+        assert!(
+            !svc.activity()
+                .iter()
+                .any(|entry| entry.message.contains("handed back")),
+            "the default keeps the user's setup in force"
+        );
+
+        let dir =
+            std::env::temp_dir().join(format!("opencolorhub-svc-release-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let settings = Settings {
+            backend: BackendMode::Simulated,
+            release_fans_on_exit: true,
+            ..Settings::default()
+        };
+        let mut explicit = Service::new(settings, dir);
+        explicit.set_fan_percent(FanHeader::Cpu, 40).unwrap();
+        explicit.shutdown();
+        assert!(
+            explicit
+                .activity()
+                .iter()
+                .any(|entry| entry.message.contains("handed back"))
+        );
     }
 
     fn fan_status(header: FanHeader, rpm: u16) -> FanStatus {

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use colorctl_core::Service;
 use colorctl_core::settings::{POLL_DEFAULT_MS, POLL_MAX_MS, POLL_MIN_MS, Settings};
-use colorctl_core::{ResumeWatch, WakeReport};
+use colorctl_core::{PowerWatcher, RestoreReport, ResumeWatch, WakeReport};
 use tauri::{Emitter, Manager};
 
 use crate::state::{AppState, Inner, ServiceSlot};
@@ -56,6 +56,7 @@ pub fn run() {
             let probe_settings = settings.clone();
             let probe_data = data_dir.clone();
             let reapply_led = settings.reapply_led_on_launch;
+            let restore_setup = settings.restore_setup_on_startup;
 
             app.manage(AppState::new(Inner {
                 service: ServiceSlot::Loading,
@@ -88,6 +89,20 @@ pub fn run() {
                         return;
                     }
                 };
+                // Restore the live setup before the first snapshot: a restart,
+                // update or elevation relaunch must come back the way it was.
+                let report = if restore_setup {
+                    restore_at_launch(&mut service)
+                } else {
+                    RestoreReport::default()
+                };
+                if report.found {
+                    eprintln!(
+                        "opencolorhub: restored saved setup — {} fans, lighting: {}",
+                        report.fans, report.lighting
+                    );
+                }
+
                 let snapshot = service.snapshot();
                 let board = snapshot.board.clone();
                 eprintln!(
@@ -117,7 +132,11 @@ pub fn run() {
                     },
                 );
 
-                if reapply_led {
+                // Installs upgrading from an older build have `rgb.state` but no
+                // active-setup file yet; push that blob so lighting survives the
+                // first launch after the update.
+                let has_saved_lighting = service.state_path().is_some_and(|path| path.is_file());
+                if !report.lighting && (reapply_led || has_saved_lighting) {
                     match service.apply_led() {
                         Ok(result) => eprintln!("opencolorhub: {}", result.message),
                         Err(error) => {
@@ -205,11 +224,28 @@ pub fn run() {
 const WAKE_ATTEMPTS: usize = 6;
 const WAKE_RETRY_DELAY: Duration = Duration::from_millis(700);
 
+/// Replays the persisted live setup in a fresh process, retrying while a
+/// re-enumerating controller settles. A clean restore breaks on the first try.
+fn restore_at_launch(service: &mut Service) -> RestoreReport {
+    let mut report = RestoreReport::default();
+    for attempt in 0..WAKE_ATTEMPTS {
+        report = service.restore_active();
+        if report.errors.is_empty() {
+            break;
+        }
+        if attempt + 1 < WAKE_ATTEMPTS {
+            thread::sleep(WAKE_RETRY_DELAY);
+        }
+    }
+    report
+}
+
 /// A plain OS thread keeps this independent of the async runtime: the work is
 /// blocking port I/O, which should never sit on a tokio worker.
 fn spawn_ticker(app: tauri::AppHandle) {
     thread::spawn(move || {
         let mut watch = ResumeWatch::new(Duration::from_millis(POLL_DEFAULT_MS));
+        let power = PowerWatcher::new();
         loop {
             let interval = {
                 let state = app.state::<AppState>();
@@ -225,11 +261,21 @@ fn spawn_ticker(app: tauri::AppHandle) {
             watch.mark();
             thread::sleep(interval);
 
-            // The hardware does not keep its state across a suspend, and neither
-            // does the USB handle; the gap between ticks is the only signal the
-            // process gets that it has been asleep.
-            if let Some(slept) = watch.observe_now() {
-                reapply_after_wake(&app, slept);
+            // The hardware does not keep its state across a suspend. An OS power
+            // notification is authoritative; the wall-clock gap remains a
+            // fallback when the notification service is unavailable.
+            let slept = watch.observe_now();
+            let notified = power.take_resume();
+            if notified {
+                // Re-sync so the same wake is not handled twice.
+                watch.mark();
+            }
+            if slept.is_some() || notified {
+                reapply_after_wake(
+                    &app,
+                    slept.map(|gap| gap.as_secs()).unwrap_or(0),
+                    if notified { "OS resume" } else { "clock gap" },
+                );
             }
 
             let snapshot = {
@@ -258,7 +304,7 @@ fn spawn_ticker(app: tauri::AppHandle) {
 
 /// Locks the state for one attempt at a time, so an IPC command can still get in
 /// between retries instead of waiting out the whole sequence.
-fn reapply_after_wake(app: &tauri::AppHandle, slept: Duration) {
+fn reapply_after_wake(app: &tauri::AppHandle, seconds: u64, source: &str) {
     let mut report = WakeReport::default();
     for attempt in 0..WAKE_ATTEMPTS {
         match reassert_once(app) {
@@ -293,7 +339,7 @@ fn reapply_after_wake(app: &tauri::AppHandle, slept: Duration) {
         )
     };
 
-    eprintln!("opencolorhub: woke after {}s: {message}", slept.as_secs());
+    eprintln!("opencolorhub: woke ({source}, {seconds}s): {message}");
     let state = app.state::<AppState>();
     if let Ok(mut inner) = state.lock()
         && let Ok(service) = inner.service_mut()

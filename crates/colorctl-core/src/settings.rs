@@ -92,6 +92,13 @@ pub struct Settings {
     pub temp_unit: TempUnit,
     /// Exponential smoothing of RPM/temperature readings.
     pub smoothing: bool,
+    /// Replay the persisted live setup — fan duties/curves and lighting — at
+    /// every launch, regardless of `reapply_led_on_launch` or autostart.
+    pub restore_setup_on_startup: bool,
+    /// Hand fans back to the chip's SmartFan when the app exits cleanly.
+    /// Off by default: the stored setup is meant to stay in force.
+    #[serde(default)]
+    pub release_fans_on_exit: bool,
     pub reapply_led_on_launch: bool,
     pub confirm_writes: bool,
     /// UI accent colour (`#rrggbb`).
@@ -114,6 +121,8 @@ impl Default for Settings {
             poll_interval_ms: POLL_DEFAULT_MS,
             temp_unit: TempUnit::default(),
             smoothing: true,
+            restore_setup_on_startup: true,
+            release_fans_on_exit: false,
             reapply_led_on_launch: false,
             confirm_writes: true,
             accent: "#4ade80".to_string(),
@@ -185,6 +194,12 @@ impl Settings {
         if let Some(v) = patch.smoothing {
             self.smoothing = v;
         }
+        if let Some(v) = patch.restore_setup_on_startup {
+            self.restore_setup_on_startup = v;
+        }
+        if let Some(v) = patch.release_fans_on_exit {
+            self.release_fans_on_exit = v;
+        }
         if let Some(v) = patch.reapply_led_on_launch {
             self.reapply_led_on_launch = v;
         }
@@ -232,6 +247,8 @@ pub struct SettingsPatch {
     pub poll_interval_ms: Option<u64>,
     pub temp_unit: Option<TempUnit>,
     pub smoothing: Option<bool>,
+    pub restore_setup_on_startup: Option<bool>,
+    pub release_fans_on_exit: Option<bool>,
     pub reapply_led_on_launch: Option<bool>,
     pub confirm_writes: Option<bool>,
     pub accent: Option<String>,

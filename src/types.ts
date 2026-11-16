@@ -140,6 +140,8 @@ export interface Settings {
   poll_interval_ms: number;
   temp_unit: TempUnit;
   smoothing: boolean;
+  restore_setup_on_startup: boolean;
+  release_fans_on_exit: boolean;
   reapply_led_on_launch: boolean;
   confirm_writes: boolean;
   accent: string;

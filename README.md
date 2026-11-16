@@ -42,8 +42,11 @@ labelled. → [Platform notes](docs/PLATFORM.md)
 | **About** — the board this build detected | |
 
 Settings covers backend, elevation, units, safety confirmations, poll interval,
-startup and updates. Closing the window hides it to the tray; **Quit** is the only
-exit; relaunching brings the running instance forward.
+startup and updates. Fan duties/curves and lighting are saved as an active setup
+and re-applied at every launch and after sleep, so a shutdown or restart does not
+drop your configuration; the named presets are separate, manual snapshots.
+Closing the window hides it to the tray; **Quit** is the only exit; relaunching
+brings the running instance forward.
 
 ## Install
 

@@ -64,10 +64,25 @@ pub trait FanBackend: Send {
         Ok(0)
     }
 
+    /// Duties and curves this backend is currently driving, so `Service` can
+    /// persist the live setup after a write and replay it in a new process.
+    /// Empty when nothing was programmed — a fresh app must not write 0% to
+    /// headers nobody asked it to drive.
+    fn programmed(&self) -> Vec<crate::setups::FanSetting> {
+        Vec::new()
+    }
+
+    /// Whether the chip or device behind this backend still answers. A false
+    /// result makes the shell re-apply the stored setup on the next tick, even
+    /// when the wall clock shows no suspend (a driver or bus reset, say).
+    fn healthy(&mut self) -> bool {
+        true
+    }
+
     /// Hands the fan back to the firmware before the process goes away.
     ///
-    /// Called only by the desktop app's exit path: the CLI writes a duty and
-    /// exits on purpose, so releasing there would undo the command.
+    /// Called only by the desktop app's exit path, and only when the user has
+    /// left `release_fans_on_exit` on: the default now keeps the setup in force.
     fn release(&mut self) {}
 }
 

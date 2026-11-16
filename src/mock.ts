@@ -115,6 +115,8 @@ const DEFAULT_SETTINGS: Settings = {
   poll_interval_ms: 1000,
   temp_unit: "celsius",
   smoothing: true,
+  restore_setup_on_startup: true,
+  release_fans_on_exit: false,
   reapply_led_on_launch: false,
   confirm_writes: false,
   accent: "#4ade80",

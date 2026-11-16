@@ -125,6 +125,31 @@ impl FanBackend for LinuxFan {
         }
         Ok(written)
     }
+
+    fn programmed(&self) -> Vec<crate::setups::FanSetting> {
+        let mut out = Vec::new();
+        for header in FAN_HEADERS {
+            let slot = header.index();
+            if let Some(duty) = self.manual[slot] {
+                out.push(crate::setups::FanSetting {
+                    header,
+                    percent: crate::units::pwm_to_pct(duty),
+                    curve: None,
+                });
+            } else if let Some(curve) = self.curves[slot] {
+                out.push(crate::setups::FanSetting {
+                    header,
+                    percent: 0,
+                    curve: Some(curve),
+                });
+            }
+        }
+        out
+    }
+
+    fn healthy(&mut self) -> bool {
+        self.sio.read_pwm(crate::model::FanHeader::Cpu).is_ok()
+    }
 }
 
 #[cfg(test)]

@@ -150,11 +150,14 @@ Suspend power-cycles the USB bus, so the RGB controller returns on its own
 pattern, and reloads the Super I/O from firmware defaults, putting every header
 back under BIOS fan control. Neither chip remembers what this app wrote.
 
-Two checks:
+Three checks, any of which re-applies the live setup:
 
-* Every tick asks the open controller whether it still answers. A resume, hub
-  power dip or controller reset invalidates the handle silently, caught on the
-  next second.
+* The OS reports the resume directly: a suspend/resume callback on Windows, and
+  logind's `PrepareForSleep(false)` signal on the system bus on Linux. If the OS
+  service is unavailable the watcher is inert and the next two checks carry on.
+* Every tick asks the open controller — and now the Super I/O as well — whether
+  it still answers. A resume, hub power dip or controller reset invalidates the
+  handle silently, caught on the next second.
 * A tick more than half a second beyond its poll interval means the process was
   suspended; it measures wall clock.
 
@@ -167,8 +170,12 @@ Only what the session applied is restored. Untouched lighting is left alone; a
 header nobody set keeps its firmware behaviour. Success appears as a `wake` entry
 in the Dashboard activity log.
 
-Waking is separate from **Re-apply lighting at launch**: that switch covers a
-fresh start; a wake is always re-applied.
+A fresh start now restores the whole live setup from `active-setup.json` — fans
+and lighting — regardless of the old **Re-apply lighting at launch** switch.
+That switch remains as a fallback, and an existing `rgb.state` is pushed on the
+first launch after upgrading even when there is no active-setup file yet.
+Waking is always re-applied, and `restore_setup_on_startup` in Settings can turn
+launch restore off if a machine must come up in its BIOS state.
 
 ## Tray
 

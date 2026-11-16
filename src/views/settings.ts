@@ -199,9 +199,23 @@ export function createSettings(ctx: ViewContext): View {
 
   const reapplyToggle = toggle({
     label: "Re-apply lighting at launch",
-    description: "Push the stored CCTL state to the controller when the app starts.",
+    description: "Fallback for installs with no saved setup yet: push the stored CCTL state.",
     checked: draft.reapply_led_on_launch,
     onChange: (checked) => void persist({ reapply_led_on_launch: checked }),
+  });
+
+  const restoreToggle = toggle({
+    label: "Restore saved setup at startup",
+    description: "Re-apply the last fan and lighting settings on every launch.",
+    checked: draft.restore_setup_on_startup,
+    onChange: (checked) => void persist({ restore_setup_on_startup: checked }),
+  });
+
+  const releaseToggle = toggle({
+    label: "Release fans on exit",
+    description: "Hand control back to the BIOS instead of keeping your setup.",
+    checked: draft.release_fans_on_exit,
+    onChange: (checked) => void persist({ release_fans_on_exit: checked }),
   });
 
   const pumpSelect = select<FanHeaderId | "none">({
@@ -254,6 +268,8 @@ export function createSettings(ctx: ViewContext): View {
         temp_unit: "celsius",
         smoothing: true,
         confirm_writes: true,
+        restore_setup_on_startup: true,
+        release_fans_on_exit: false,
         reapply_led_on_launch: false,
         accent: "#4ade80",
         low_duty_warning: 20,
@@ -424,6 +440,8 @@ export function createSettings(ctx: ViewContext): View {
         body: [
           confirmToggle.el,
           reapplyToggle.el,
+          restoreToggle.el,
+          releaseToggle.el,
           lowDuty.el,
           pumpSelect.el,
           inlineNote("A channel bound as a pump is floored at 60%, so a stopped pump cannot be commanded."),
@@ -507,6 +525,8 @@ export function createSettings(ctx: ViewContext): View {
     smoothing.setChecked(settings.smoothing);
     confirmToggle.setChecked(settings.confirm_writes);
     reapplyToggle.setChecked(settings.reapply_led_on_launch);
+    restoreToggle.setChecked(settings.restore_setup_on_startup);
+    releaseToggle.setChecked(settings.release_fans_on_exit);
     lowDuty.setValue(settings.low_duty_warning);
     pumpSelect.setValue(settings.pump_header ?? "none");
     unitSwitch.setValue(settings.temp_unit);

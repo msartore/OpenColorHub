@@ -79,6 +79,14 @@ target moves by three or more steps.
   `RgbState::to_leds()` expands it to the 200-LED frame.
 * **Settings** — `<app config>/settings.json`, atomic write (temp file + rename);
   unknown or corrupt files degrade to defaults with a warning.
+* **Active setup** — `<state dir>/active-setup.json`: the duties and curves the
+  backends are actually driving plus the lighting frame on the controller.
+  Rewritten after every successful hardware write and replayed at launch, so a
+  shutdown, restart, update or elevation relaunch restores what the user left.
+  Sits beside `rgb.state`, so the CLI and the app share it when they share that
+  file. `restore_setup_on_startup` (default on) can disable the replay;
+  `release_fans_on_exit` (default off) decides whether exit hands fans to the
+  chip's SmartFan.
 * **Simulator** — `sim-fan.json` beside it, preserved across restarts.
 * **Portable mode** — an `opencolorhub.portable` marker next to the executable
   redirects config and data into `config/` and `data/`.
