@@ -172,7 +172,7 @@ mod tests {
         svc.set_fan_percent(FanHeader::Cpu, 55).unwrap();
         svc.set_all_channels([10, 20, 30], 70, true).unwrap();
 
-        let setup = ActiveSetup::capture(&mut svc);
+        let setup = ActiveSetup::capture(&svc);
         assert_eq!(setup.fans.len(), 1, "only the header set this session");
         assert_eq!(setup.fans[0].header, FanHeader::Cpu);
         assert_eq!(setup.fans[0].percent, 55);
@@ -195,7 +195,7 @@ mod tests {
             .set_channel(Channel::Led, ChannelConfig::rgb([1, 2, 3], 66), true)
             .unwrap();
 
-        let setup = ActiveSetup::capture(&mut source);
+        let setup = ActiveSetup::capture(&source);
         let path = dir.join("active-setup.json");
         setup.persist(&path).unwrap();
         let loaded = ActiveSetup::load(&path).expect("reload");

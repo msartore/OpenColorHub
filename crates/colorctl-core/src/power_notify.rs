@@ -187,10 +187,10 @@ mod platform {
     }
 
     fn bus_path() -> Option<String> {
-        if let Ok(address) = std::env::var("DBUS_SYSTEM_BUS_ADDRESS") {
-            if let Some(path) = address.strip_prefix("unix:path=") {
-                return Some(path.split(',').next()?.to_string());
-            }
+        if let Ok(address) = std::env::var("DBUS_SYSTEM_BUS_ADDRESS")
+            && let Some(path) = address.strip_prefix("unix:path=")
+        {
+            return Some(path.split(',').next()?.to_string());
         }
         for path in [
             "/run/dbus/system_bus_socket",
@@ -351,7 +351,7 @@ mod platform {
     }
 
     fn pad(buffer: &mut Vec<u8>, alignment: usize) {
-        while buffer.len() % alignment != 0 {
+        while !buffer.len().is_multiple_of(alignment) {
             buffer.push(0);
         }
     }
@@ -452,7 +452,7 @@ mod platform {
         let body_len = u32::from_ne_bytes(message[8..12].try_into().ok()?) as usize;
         let fields_len = u32::from_ne_bytes(message[16..20].try_into().ok()?) as usize;
         let total = align_up(align_up(20, 8) + fields_len, 8) + body_len;
-        if total < 20 || total > 1 << 20 {
+        if !(20..=(1 << 20)).contains(&total) {
             return None;
         }
         message.extend_from_slice(&read_exact(fd, total - 20, stop)?);
@@ -463,10 +463,7 @@ mod platform {
         if message.len() < 16 || message[1] != 4 {
             return None; // 4 = signal
         }
-        let fields_len = match message.get(16..20) {
-            Some(bytes) => u32::from_ne_bytes(bytes.try_into().ok()?) as usize,
-            None => return None,
-        };
+        let fields_len = u32::from_ne_bytes(message.get(16..20)?.try_into().ok()?) as usize;
         let end = 24usize.saturating_add(fields_len).min(message.len());
         let mut cursor = 24usize;
         let mut member = None;
@@ -597,11 +594,11 @@ mod tests {
             &platform::string_value("PrepareForSleep"),
         );
         signal.extend_from_slice(&(fields.len() as u32).to_ne_bytes());
-        while signal.len() % 8 != 0 {
+        while !signal.len().is_multiple_of(8) {
             signal.push(0);
         }
         signal.extend_from_slice(&fields);
-        while signal.len() % 8 != 0 {
+        while !signal.len().is_multiple_of(8) {
             signal.push(0);
         }
         signal.extend_from_slice(&0u32.to_ne_bytes());
