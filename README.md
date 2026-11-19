@@ -39,10 +39,10 @@ user-mode API and an exact PCI-ID model catalogue. → [Platform notes](docs/PLA
 | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Fan control](docs/screenshots/fans.png) |
 | **Dashboard** — gauge with session history, six live metrics, fan and channel detail | **Fan control** — per-channel curves, presets |
-| ![Lighting](docs/screenshots/leds.png) | ![Drivers](docs/screenshots/drivers.png) |
-| **Lighting** — two expandable colour groups (board / GPU), six channels, 200-LED frame | **Drivers** — vendor downloads, nothing executed |
-| ![About](docs/screenshots/about.png) | |
-| **About** — the board this build detected | |
+| ![Lighting](docs/screenshots/leds.png) | ![GPU LED](docs/screenshots/gpu-leds.png) |
+| **Lighting** — two expandable colour groups (board / GPU), six channels, 200-LED frame | **GPU LED** — detected card profile, three zones, per-zone effects |
+| ![Drivers](docs/screenshots/drivers.png) | ![About](docs/screenshots/about.png) |
+| **Drivers** — vendor downloads, nothing executed | **About** — the board this build detected |
 
 Settings covers backend, elevation, units, safety confirmations, poll interval,
 startup, GPU LED control and updates. Fan duties/curves and lighting are saved as an active setup
