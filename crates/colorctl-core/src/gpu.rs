@@ -21,6 +21,8 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+// Only the Windows vendor transports cache their dynamically loaded API.
+#[cfg(windows)]
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
@@ -567,7 +569,7 @@ mod amd {
                     }
                     let sym = |n: &str| {
                         let c: Vec<u8> = n.bytes().chain(std::iter::once(0)).collect();
-                        GetProcAddress(lib, c.as_ptr())
+                        GetProcAddress(lib, c.as_ptr()).map(|f| f as usize)
                     };
                     let (create, destroy, count, write) = (
                         sym("ADL2_Main_Control_Create"),
@@ -580,11 +582,11 @@ mod amd {
                     }
                     return Some(Api {
                         _lib: lib,
-                        destroy: std::mem::transmute(destroy.unwrap()),
-                        count: std::mem::transmute(count.unwrap()),
-                        write: std::mem::transmute(write.unwrap()),
+                        destroy: std::mem::transmute::<usize, MainDestroy>(destroy.unwrap()),
+                        count: std::mem::transmute::<usize, AdapterCount>(count.unwrap()),
+                        write: std::mem::transmute::<usize, WriteI2c>(write.unwrap()),
                         // create is used once below, not stored
-                        _create: std::mem::transmute(create.unwrap()),
+                        _create: std::mem::transmute::<usize, MainCreate>(create.unwrap()),
                     });
                 }
             }
@@ -599,7 +601,10 @@ mod amd {
         api: &'static Api,
         context: *mut c_void,
     }
+    // All ADL calls are serialised behind the service mutex, so sharing the
+    // context across transports is safe as long as Arc can send it.
     unsafe impl Send for AdlContext {}
+    unsafe impl Sync for AdlContext {}
     impl Drop for AdlContext {
         fn drop(&mut self) {
             unsafe { (self.api.destroy)(self.context) };
@@ -727,7 +732,7 @@ mod nvidia {
                     }
                     let sym = |n: &str| {
                         let c: Vec<u8> = n.bytes().chain(std::iter::once(0)).collect();
-                        GetProcAddress(lib, c.as_ptr())
+                        GetProcAddress(lib, c.as_ptr()).map(|f| f as usize)
                     };
                     let (init, enumerate, write) = (
                         sym("NvAPI_Initialize"),
@@ -743,8 +748,8 @@ mod nvidia {
                     }
                     return Some(Api {
                         _lib: lib,
-                        enum_gpus: std::mem::transmute(enumerate.unwrap()),
-                        write: std::mem::transmute(write.unwrap()),
+                        enum_gpus: std::mem::transmute::<usize, EnumGpus>(enumerate.unwrap()),
+                        write: std::mem::transmute::<usize, WriteEx>(write.unwrap()),
                     });
                 }
             }
@@ -886,7 +891,7 @@ mod intel {
                     }
                     let sym = |n: &str| {
                         let c: Vec<u8> = n.bytes().chain(std::iter::once(0)).collect();
-                        GetProcAddress(lib, c.as_ptr())
+                        GetProcAddress(lib, c.as_ptr()).map(|f| f as usize)
                     };
                     let (init, close, ed, eo, i2c) = (
                         sym("ctlInit"),
@@ -916,10 +921,10 @@ mod intel {
                     // box; IGCL has no per-backend close in this transport.
                     return Some(Api {
                         _lib: lib,
-                        _close: std::mem::transmute(close.unwrap()),
-                        enum_devices: std::mem::transmute(ed.unwrap()),
-                        enum_outputs: std::mem::transmute(eo.unwrap()),
-                        i2c: std::mem::transmute(i2c.unwrap()),
+                        _close: std::mem::transmute::<usize, CtlClose>(close.unwrap()),
+                        enum_devices: std::mem::transmute::<usize, Enumerate>(ed.unwrap()),
+                        enum_outputs: std::mem::transmute::<usize, Enumerate>(eo.unwrap()),
+                        i2c: std::mem::transmute::<usize, I2CAccess>(i2c.unwrap()),
                         _handle: handle,
                     });
                 }
@@ -1005,9 +1010,8 @@ mod intel {
 mod linux_i2c {
     use super::*;
     use std::ffi::CString;
-    use std::os::unix::ffi::OsStrExt;
 
-    const I2C_SLAVE: u64 = 0x0703;
+    const I2C_SLAVE: libc::c_ulong = 0x0703;
 
     struct LinuxI2c {
         fd: i32,
@@ -1026,7 +1030,8 @@ mod linux_i2c {
             format!("i2c-{}", self.bus)
         }
         fn write_block(&mut self, addr: u8, data: &[u8]) -> Result<()> {
-            if unsafe { libc::ioctl(self.fd, I2C_SLAVE as _, addr as _) } < 0 {
+            // ioctl is variadic: the variadic argument needs a concrete type.
+            if unsafe { libc::ioctl(self.fd, I2C_SLAVE, addr as libc::c_ulong) } < 0 {
                 return Err(Error::backend(format!("I2C_SLAVE 0x{addr:02x} failed")));
             }
             let n = unsafe { libc::write(self.fd, data.as_ptr() as *const _, data.len()) };

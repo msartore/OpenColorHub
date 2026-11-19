@@ -1,0 +1,3 @@
+#!/bin/sh
+# Second line of defence: a commit made with --no-verify is still checked here.
+exec sh "$(dirname "$0")/check.sh"

@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "tauri": "tauri",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "hooks:install": "node scripts/install-hooks.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1"

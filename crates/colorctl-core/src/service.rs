@@ -869,10 +869,11 @@ impl Service {
         }
 
         self.reassert_lighting(&mut report);
-        if self.settings.gpu_led_enabled && self.gpu.state().enabled {
-            if let Err(error) = self.gpu.reassert() {
-                report.errors.push(format!("gpu: {error}"));
-            }
+        if self.settings.gpu_led_enabled
+            && self.gpu.state().enabled
+            && let Err(error) = self.gpu.reassert()
+        {
+            report.errors.push(format!("gpu: {error}"));
         }
         report
     }
