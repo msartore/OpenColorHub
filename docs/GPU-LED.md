@@ -28,7 +28,7 @@ Detection is also what fixes duplicate entries: ADL reports one adapter per
 display, so transports are paired with physical PCI cards instead of creating
 one UI entry per monitor.
 
-Three zones are exposed:
+Up to three zones are exposed (two on Intel Arc cards):
 
 | Zone | Channel ID | Notes |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ API:
 
 | Vendor | Windows | Linux |
 | --- | --- | --- |
-| AMD | `atiadlxx.dll` → `ADL2_Display_WriteAndReadI2C`, I²C line 1 | `/dev/i2c-*` on an AMDGPU OEM adapter |
+| AMD | `atiadlxx.dll` → `ADL2_Display_WriteAndReadI2C`, line `ADL_DL_I2C_LINE_OEM` (1), action `ADL_DL_I2C_ACTIONWRITE` (2) | `/dev/i2c-*` on an AMDGPU OEM adapter |
 | NVIDIA | `nvapi.dll` → `NvAPI_I2CWriteEx`, port 1, non-DDC | `/dev/i2c-*` on an NVIDIA adapter where exposed |
 | Intel | `ControlLib.dll` / `igcl.dll` → `ctlI2CAccess` | `Synopsys DesignWare I2C adapter` |
 
@@ -65,8 +65,20 @@ administrator rights, which the app already requires.
 ## State
 
 GPU zone colours and effects are stored in `gpu-led.state` beside `rgb.state`,
-so the CLI and the desktop app share it the same way. "Sync from board" copies
-the first enabled onboard channel's colour into every GPU zone.
+so the CLI and the desktop app share it the same way. It is replayed at launch
+and re-applied after sleep. Named lighting presets cover the motherboard channels
+only; GPU zones live in this file instead.
+
+## In the UI
+
+The Lighting screen has two expandable groups, **Motherboard** and **GPU**, each
+with one main colour and a **Sync** button in its header (outside the details).
+Clicking **Sync** opens a modal listing every lit source — motherboard channels
+and GPU zones — with its colour swatch and hex value; choosing one copies that
+colour to every zone in the other group. Expanding a group reveals the individual
+cards: GPU zone cards use the same card layout as the motherboard channels, with
+click-to-open colour picker, effect selector, brightness slider and **Apply /
+Off** buttons. Edits stage in the UI; only **Apply** writes to the hardware.
 
 ## Limitations
 

@@ -1,7 +1,7 @@
 # Presets
 
 A **preset** is a saved half of the machine you can restore in one click. Fan and
-lighting presets live behind the **save icon** in the header of the **Fan
+lighting presets live behind the **bookmark icon** in the header of the **Fan
 control** and **Lighting** screens; it opens a dialog with the list, the actions
 and the save form.
 
@@ -80,6 +80,10 @@ profile.
 
 - A preset covers one half only. To restore a whole machine state, apply one of
   each.
+- Lighting presets capture the motherboard channels only. GPU zones are stored
+  separately in `gpu-led.state` and are restored at launch and after sleep; they
+  are not part of named presets. Use **Sync** on the Lighting screen to copy a
+  colour between the two groups.
 - Applying a curve to a board whose SmartFan registers are unmapped fails that
   header with an explanation rather than doing nothing (the same guard as the Fan
   control screen).

@@ -6,6 +6,11 @@ it against `SHA256SUMS.txt` from the same release, swaps it in and restarts.
 **Settings → Updates → Check now** forces a check. Nothing updates without the
 dialog being accepted.
 
+The dialog renders the release body as Markdown, not raw text: headings, tables,
+lists, quotes, inline code and links. `src/markdown.ts` builds DOM nodes with
+`textContent` only, so notes from GitHub cannot inject HTML; unsupported syntax
+falls back to plain text. The first 8000 characters of the body are shown.
+
 ## How the swap works
 
 Windows refuses to overwrite a running image but allows *renaming* it:
@@ -40,18 +45,18 @@ add the check to `update_ipc.rs`.
 metadata, runtime version and the updater's idea of "current" agree.
 
 ```bash
-git tag -a v0.3.0 -m "OpenColorHub 0.3.0"
-git push origin v0.3.0
+git tag -a v0.5.0 -m "OpenColorHub 0.5.0"
+git push origin v0.5.0
 ```
 
-A build tagged `v0.3.0` that still reports `0.2.0` makes the self-updater offer
+A build tagged `v0.5.0` that still reports `0.4.6` makes the self-updater offer
 the same release on every launch, forever.
 
 The same script runs locally:
 
 ```bash
-node scripts/set-version.mjs v0.3.0
-pwsh scripts/build-release.ps1 -Tag v0.3.0 -Portable
+node scripts/set-version.mjs v0.5.0
+pwsh scripts/build-release.ps1 -Tag v0.5.0 -Portable
 ```
 
 Both platforms build, `dist/` is staged flat, and the release carries the NSIS

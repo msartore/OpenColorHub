@@ -2,12 +2,14 @@
 
 ![OpenColorHub](docs/assets/banner.png)
 
-Fan and ARGB control for Colorful AMD motherboards: a Tauri 2 desktop app and a
-`colorctl` CLI over one hardware core.
+Fan and ARGB control for Colorful AMD motherboards, plus optional GPU RGB:
+a Tauri 2 desktop app and a `colorctl` CLI over one hardware core.
 
-Two blocks: the **Nuvoton Super I/O** (fan headers, 4-point curves, tachometers,
-board temperature) and the **Colorful RGB controller** (200 LEDs on six
-channels: onboard shroud, two 12V RGB headers, three 5V ARGB headers).
+Two board blocks: the **Nuvoton Super I/O** (fan headers, 4-point curves,
+tachometers, board temperature) and the **Colorful RGB controller** (200 LEDs on
+six channels: onboard shroud, two 12V RGB headers, three 5V ARGB headers). A
+third, optional block drives GPU LEDs on ASRock AMD and Intel Arc cards through
+the vendor's own I²C API. → [GPU LED](docs/GPU-LED.md)
 
 SMBIOS identifies the board before any write, against a verified catalogue; a
 non-Colorful machine never has its Super I/O touched.
@@ -19,16 +21,17 @@ and app can alternate without losing lighting state.
 
 ## Platforms
 
-| Platform | Fans | Lighting |
-| --- | --- | --- |
-| **Linux** | ✅ `/dev/port` — root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` |
-| **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO without it | ✅ SetupAPI + `hid.dll`, no driver |
+| Platform | Fans | Board lighting | GPU lighting |
+| --- | --- | --- | --- |
+| **Linux** | ✅ `/dev/port` — root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` | ✅ `/dev/i2c-*` on a GPU adapter |
+| **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO without it | ✅ SetupAPI + `hid.dll`, no driver | ✅ AMD ADL / NVIDIA NVAPI / Intel IGCL |
 
 Windows needs a signed driver to broker `IN`/`OUT`. PawnIO is **not bundled**: on
 launch and from Fan control the app fetches PawnIO's installer from the project's
 releases, checks a pinned SHA-256 and runs it, so its UI and UAC prompt appear.
 Nothing installs silently. Without it: HWiNFO telemetry, then the simulator, both
-labelled. → [Platform notes](docs/PLATFORM.md)
+labelled. GPU lighting needs no extra driver — it uses the GPU vendor's own
+user-mode API and an exact PCI-ID model catalogue. → [Platform notes](docs/PLATFORM.md)
 
 ## Screenshots
 
@@ -37,12 +40,12 @@ labelled. → [Platform notes](docs/PLATFORM.md)
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Fan control](docs/screenshots/fans.png) |
 | **Dashboard** — gauge with session history, six live metrics, fan and channel detail | **Fan control** — per-channel curves, presets |
 | ![Lighting](docs/screenshots/leds.png) | ![Drivers](docs/screenshots/drivers.png) |
-| **Lighting** — six channels, 200-LED frame | **Drivers** — vendor downloads, nothing executed |
+| **Lighting** — two expandable colour groups (board / GPU), six channels, 200-LED frame | **Drivers** — vendor downloads, nothing executed |
 | ![About](docs/screenshots/about.png) | |
 | **About** — the board this build detected | |
 
 Settings covers backend, elevation, units, safety confirmations, poll interval,
-startup and updates. Fan duties/curves and lighting are saved as an active setup
+startup, GPU LED control and updates. Fan duties/curves and lighting are saved as an active setup
 and re-applied at every launch and after sleep, so a shutdown or restart does not
 drop your configuration; the named presets are separate, manual snapshots.
 Closing the window hides it to the tray; **Quit** is the only exit; relaunching

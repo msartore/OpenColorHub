@@ -2,10 +2,10 @@
 
 ## What works where
 
-| Platform | Fan control | Lighting |
-| --- | --- | --- |
-| **Linux** | ✅ `/dev/port`, needs root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` for `2F4C:1000` |
-| **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO when PawnIO is absent | ✅ SetupAPI + `hid.dll`, no driver |
+| Platform | Fan control | Board lighting | GPU lighting |
+| --- | --- | --- | --- |
+| **Linux** | ✅ `/dev/port`, needs root or `CAP_SYS_RAWIO` | ✅ `/dev/hidraw` for `2F4C:1000` | ✅ `/dev/i2c-*` on an AMDGPU / Intel / NVIDIA adapter (`i2c-dev`) |
+| **Windows** | ✅ PawnIO sandboxed driver · ⚪ read-only via HWiNFO when PawnIO is absent | ✅ SetupAPI + `hid.dll`, no driver | ✅ AMD ADL, NVIDIA NVAPI or Intel IGCL |
 
 ## Lighting without root
 
@@ -112,13 +112,42 @@ collection — same VID/PID, never written to. Feature-report firmware:
 `OPENCOLORHUB_HID_TRANSPORT=feature`; the backend falls back automatically when
 the output-report write fails.
 
+## GPU RGB
+
+GPU lighting is a separate, optional backend. It writes the ASRock Nuvoton
+controller frame (12 bytes to I²C address `0x36`) through the GPU vendor's own
+user-mode API — no bundled driver, no PawnIO module:
+
+| Vendor | Windows | Linux |
+| --- | --- | --- |
+| AMD | `atiadlxx.dll` → `ADL2_Display_WriteAndReadI2C`, line `ADL_DL_I2C_LINE_OEM` (1) | `/dev/i2c-*` on an AMDGPU OEM adapter |
+| NVIDIA | `nvapi.dll` → `NvAPI_I2CWriteEx`, port 1, non-DDC | NVIDIA adapter where exposed |
+| Intel | `ControlLib.dll` / `igcl.dll` → `ctlI2CAccess` | `Synopsys DesignWare I2C adapter` |
+
+Windows GPU I²C writes need elevation; the app's manifest already requires it.
+On Linux the user needs access to `/dev/i2c-*` (the `i2c-dev` module and the usual
+`i2c` group or a udev rule). Without a detected GPU the Lighting screen simply
+omits the GPU section; board lighting is unaffected.
+
+Each display adapter's PCI vendor, device and subsystem IDs are read from SetupAPI
+(Windows) or sysfs (Linux) and matched against a 49-model ASRock catalogue. The
+matched profile decides the model name, zone count (three, or two for Intel Arc),
+I²C address and maximum effect. ADL reports one adapter per display, so transports
+are paired with physical cards instead of producing one card per monitor.
+
+The **ARGB header** zone is a 5V output for external devices. It has no onboard
+LEDs, so it is normal for it to show no change while **Top / side** and **Fan**
+respond. GPU state lives in `gpu-led.state` beside `rgb.state` and is restored at
+launch and after sleep. → [GPU LED](GPU-LED.md)
+
 ## Elevation
 
 The manifest requests `requireAdministrator`: UAC before the process starts,
 declining means the app does not run, nothing is persisted.
 
 `pawnio_open` returns `ERROR_ACCESS_DENIED` unelevated, so fan control needs
-elevation; RGB and HWiNFO work without it.
+elevation; board RGB and HWiNFO work without it. GPU I²C writes (ADL, NVAPI,
+IGCL) need elevation like fan control, which the manifest already provides.
 
 Settings → Privileges shows the state and offers a one-shot *Restart as
 administrator*; builds carrying the manifest never show it.
@@ -162,9 +191,10 @@ Three checks, any of which re-applies the live setup:
   suspended; it measures wall clock.
 
 Either re-pushes the lighting frame and rewrites every duty or curve this session
-set, including the manual-mode bit, because the chip returned to automatic. A
-re-enumerating controller refuses the frame; the write is retried for a few
-seconds before it is reported.
+set, including the manual-mode bit, because the chip returned to automatic. The
+GPU zones are re-applied from `gpu-led.state` on the same path. A re-enumerating
+controller refuses the frame; the write is retried for a few seconds before it is
+reported.
 
 Only what the session applied is restored. Untouched lighting is left alone; a
 header nobody set keeps its firmware behaviour. Success appears as a `wake` entry

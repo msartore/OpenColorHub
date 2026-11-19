@@ -9,13 +9,14 @@ instead:
 
 | Crate | Depends on | Responsibility |
 | --- | --- | --- |
-| `colorctl-core` | `serde`, `thiserror`, `libc` (Linux), `windows-sys` (Windows) | model, curves, CCTL state, settings, backends, board guard, elevation, service façade |
+| `colorctl-core` | `serde`, `thiserror`, `libc` (Linux), `windows-sys` (Windows) | model, curves, CCTL state, GPU state and model catalogue, settings, backends, board guard, elevation, service façade |
 | `colorctl-cli` | core + `clap` | `colorctl` binary, upstream-compatible syntax |
 | `src-tauri` (`opencolorhub`) | core + `tauri` + `ureq` | IPC commands, telemetry thread, self-updater, window |
 | `src/` (TypeScript) | `@tauri-apps/api` | UI, browser demo backend |
 
 `colorctl-core` builds and tests pass on Windows and Linux; the platform boundary
-is one trait pair (`FanBackend`, `LedBackend`), not `#[cfg]` through the UI.
+is the trait pair (`FanBackend`, `LedBackend`) plus the self-contained
+`GpuLedBackend`, not `#[cfg]` through the UI.
 
 ## The backend boundary
 
@@ -48,6 +49,12 @@ pub trait LedBackend: Send {
   block when PawnIO is absent. Writes refused.
 * `backend::sim::{SimFan, SimLed}` — deterministic synthetic telemetry plus a
   real `CCTL` state file on disk.
+* `gpu::GpuLedBackend` — a third, optional backend for GPU RGB. It owns the
+  detected vendor transports and their state; `gpu_catalogue` resolves a card's
+  PCI subsystem ID to a per-model profile (zones, I²C address, effects). The
+  transports call vendor libraries dynamically (`atiadlxx.dll`, `nvapi.dll`,
+  `ControlLib.dll`/`igcl.dll`) or `/dev/i2c-*`; no kernel module or bundled
+  driver is involved. The 0x36 wire format is in `gpu::build_frame`.
 
 `PawnIo` resolves the five exports with `LoadLibraryW`/`GetProcAddress` and
 degrades to "not installed" rather than failing the build; `LpcIo` implements the
@@ -87,6 +94,9 @@ target moves by three or more steps.
   file. `restore_setup_on_startup` (default on) can disable the replay;
   `release_fans_on_exit` (default off) decides whether exit hands fans to the
   chip's SmartFan.
+* **GPU** — `<state dir>/gpu-led.state`, JSON keyed by
+  `"<device>:<zone>"` so adding or removing a card does not shift the other
+  devices' colours. Restored with the active setup and re-applied on resume.
 * **Simulator** — `sim-fan.json` beside it, preserved across restarts.
 * **Portable mode** — an `opencolorhub.portable` marker next to the executable
   redirects config and data into `config/` and `data/`.
@@ -99,8 +109,11 @@ target moves by three or more steps.
 * curve validation (4 points, strictly ascending, 0–100%);
 * optional EMA smoothing of temperature/RPM;
 * an activity ring buffer in the UI;
+* GPU zone writes, board-to-GPU colour sync and the `gpu_led_enabled` toggle,
+  holding the detected transports behind the service mutex;
 * `ActionResult { snapshot, message }` per mutation, so the UI never re-reads
-  stale state.
+  stale state. The GPU mutations are `set_gpu_zone`, `apply_gpu` and
+  `sync_gpu_from_board`; all GPU state is inside `Snapshot.gpu_led`.
 
 ## Elevation
 
@@ -175,8 +188,10 @@ Either re-applies the lost lighting and fan settings
 (`Service::reassert_after_wake`) before the next snapshot.
 
 Commands are thin: lock, call the service, map the error to a `String` the UI
-shows verbatim. `save_settings` rebuilds backends only when the mode or state path
-changed, then pushes a fresh snapshot.
+shows verbatim. `save_settings` rebuilds backends only when the mode, state path
+or GPU toggle changed, then pushes a fresh snapshot. `set_gpu_zone`, `apply_gpu`
+and `sync_gpu_from_board` expose the GPU backend with the same `ActionResult`
+pattern as the board mutations.
 
 `capabilities/default.json` grants only `core:default` — no filesystem, shell or
 HTTP plugins. The webview cannot open `/dev/port` or write next to the executable.
@@ -189,7 +204,15 @@ focus from sliders and colour pickers mid-drag.
 
 * `main.ts` — state, hash router, toast stack, keyboard shortcuts (⌘/Ctrl+1…5).
 * `views/*` — one module per screen; each exposes `{ el, update(snapshot) }`.
-* `update.ts` — release check, modal, download progress.
+* `update.ts` — release check, modal, download progress; release notes are
+  rendered from Markdown by `markdown.ts`, a DOM-only parser (no `innerHTML`)
+  supporting headings, tables, lists, quotes, code and links.
+* `views/leds.ts` — Lighting is two expandable groups (Motherboard / GPU), each
+  with one main colour and a header-level **Sync** button that opens a modal to
+  pick the source colour. Expanding reveals the channel / GPU-zone cards; GPU
+  cards use the same card structure as board channels.
+* `components/icons.ts` — Tabler glyphs, including the group chevron and the
+  bookmark used by the preset buttons.
 * `components/charts.ts` — SVG temperature gauge, draggable 4-point curve editor,
   200-LED frame preview.
 * `mock.ts` — same command names and data shapes as the Rust side, so
@@ -277,9 +300,10 @@ rest follow whichever worked.
 
 ## Testing strategy
 
-* `cargo test` — 102 core tests plus 2 updater tests: state round-trip against a
+* `cargo test` — 164 core tests plus 2 updater tests: state round-trip against a
   byte-exact fixture, curve interpolation and validation, pump floors, LED range
-  coverage, settings clamping, sim persistence, version comparison.
+  coverage, settings clamping, sim persistence, GPU frame construction, PCI
+  catalogue lookup and fallback, version comparison.
 * `npm run build` — `tsc --noEmit` then a Vite build; the type layer is the
   contract between Rust serde representations and the UI.
 * Headless UI verification — the browser demo is driven over CDP (click, read
