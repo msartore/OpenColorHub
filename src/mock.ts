@@ -21,6 +21,8 @@ import type {
   AboutInfo,
   ActivityEntry,
   BoardInfo,
+  GpuStatus,
+  GpuZoneState,
   Settings,
   SettingsPatch,
   Snapshot,
@@ -101,9 +103,23 @@ interface FanConfig {
 interface DemoState {
   fans: Record<FanHeaderId, FanConfig>;
   channels: Record<ChannelId, ChannelConfig>;
+  gpu: Record<string, GpuZoneState>;
   settings: Settings;
   activity: ActivityEntry[];
 }
+
+const GPU_ZONES: { id: string; label: string; channel: number; leds: number }[] = [
+  { id: "argb_header", label: "ARGB header", channel: 0x03, leds: 1 },
+  { id: "top_side", label: "Top / side", channel: 0x06, leds: 1 },
+  { id: "fan", label: "Fan", channel: 0x07, leds: 1 },
+];
+
+const GPU_MODE_LABELS: Record<number, string> = {
+  0x01: "Static", 0x02: "Breathing", 0x03: "Strobe", 0x04: "RGB cycle",
+  0x05: "Random", 0x07: "Color shift", 0x08: "Visor", 0x09: "Stacking",
+  0x0a: "Fill wave", 0x0b: "Traveling wave", 0x0c: "Marquee color",
+  0x0d: "Marquee random", 0x0e: "Color wave", 0x0f: "Rainbow",
+};
 
 export interface DemoBackend {
   invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T>;
@@ -118,6 +134,7 @@ const DEFAULT_SETTINGS: Settings = {
   restore_setup_on_startup: true,
   release_fans_on_exit: false,
   reapply_led_on_launch: false,
+  gpu_led_enabled: true,
   confirm_writes: false,
   accent: "#4ade80",
   state_file: null,
@@ -131,7 +148,14 @@ function defaultState(): DemoState {
   for (const h of HEADERS) fans[h.id] = { pwm: 128, mode: "manual", curve: null };
   const channels = {} as Record<ChannelId, ChannelConfig>;
   for (const c of CHANNELS) channels[c.id] = { color: [0, 0, 0], brightness: 0, enabled: false };
-  return { fans, channels, settings: { ...DEFAULT_SETTINGS }, activity: [] };
+  const gpu: Record<string, GpuZoneState> = {};
+  for (const z of GPU_ZONES) {
+    gpu[`sim0:${z.id}`] = {
+      color: [255, 255, 255], mode: 0x01, speed: 0x80,
+      brightness: 0xff, direction: 0, enabled: true,
+    };
+  }
+  return { fans, channels, gpu, settings: { ...DEFAULT_SETTINGS }, activity: [] };
 }
 
 function load(): DemoState {
@@ -143,6 +167,7 @@ function load(): DemoState {
     return {
       fans: { ...base.fans, ...(parsed.fans ?? {}) },
       channels: { ...base.channels, ...(parsed.channels ?? {}) },
+      gpu: { ...base.gpu, ...(parsed.gpu ?? {}) },
       settings: { ...base.settings, ...(parsed.settings ?? {}) },
       activity: parsed.activity ?? [],
     };
@@ -246,6 +271,47 @@ export function createDemoBackend(): DemoBackend {
       };
     });
 
+  const gpuStatus = (): GpuStatus => {
+    const zones = GPU_ZONES.map((z) => {
+      const s = state.gpu[`sim0:${z.id}`] ?? {
+        color: [255, 255, 255] as [number, number, number],
+        mode: 0x01, speed: 0x80, brightness: 0xff, direction: 0, enabled: true,
+      };
+      return {
+        ...s,
+        id: z.id,
+        label: z.label,
+        channel: z.channel,
+        leds: z.leds,
+        hex: toHex(s.color),
+        mode_label: GPU_MODE_LABELS[s.mode] ?? "Unknown",
+        enabled: s.enabled && state.settings.gpu_led_enabled,
+      };
+    });
+    return {
+      enabled: state.settings.gpu_led_enabled,
+      devices: [{
+        id: "sim0",
+        name: "Simulated GPU RGB",
+        vendor: "simulated",
+        transport: "browser demo",
+        model: "Simulated GPU RGB",
+        note: "Demo profile — exact PCI-ID detection runs in the desktop app",
+        i2c_address: 0x36,
+        max_mode: 0x0f,
+        zones,
+      }],
+      device: {
+        name: "Simulated GPU RGB",
+        detail: "AMD / NVIDIA / Intel transports are not exercised in the browser",
+        path: "localStorage://opencolorhub.demo",
+        available: true,
+        simulated: true,
+        error: null,
+      },
+    };
+  };
+
   const snapshot = (): Snapshot => {
     const tempC = temperature();
     const fans = fanStatuses(tempC);
@@ -256,6 +322,7 @@ export function createDemoBackend(): DemoBackend {
       temperature_register: null,
       fans,
       channels: channelStatuses(),
+      gpu_led: gpuStatus(),
       fan_device: {
         name: "Simulated Super I/O",
         detail: "Browser demo — no hardware is touched",
@@ -441,6 +508,34 @@ export function createDemoBackend(): DemoBackend {
       case "apply_led":
         persist();
         return result("Lighting applied") as T;
+
+      case "set_gpu_zone": {
+        const device = args.device as string;
+        const zone = args.zone as string;
+        const config = args.config as GpuZoneState;
+        state.gpu[`${device}:${zone}`] = config;
+        persist();
+        record("gpu", `GPU ${zone} set to ${toHex(config.color)}`);
+        return result(`GPU ${zone} set to ${toHex(config.color)}`) as T;
+      }
+
+      case "apply_gpu":
+        persist();
+        record("gpu", "GPU lighting applied");
+        return result("GPU lighting applied") as T;
+
+      case "sync_gpu_from_board": {
+        const source = Object.values(state.channels).find((c) => c.enabled)?.color ?? [255, 255, 255];
+        let count = 0;
+        for (const z of GPU_ZONES) {
+          const key = `sim0:${z.id}`;
+          state.gpu[key] = { ...(state.gpu[key] ?? { color: [255, 255, 255], mode: 0x01, speed: 0x80, brightness: 0xff, direction: 0, enabled: true }), color: source, enabled: true };
+          count += 1;
+        }
+        persist();
+        record("gpu", `Synced ${count} GPU zone(s) with the board colour`);
+        return result(`Synced ${count} GPU zone(s) with the board colour`) as T;
+      }
 
       case "open_external":
         return undefined as T;

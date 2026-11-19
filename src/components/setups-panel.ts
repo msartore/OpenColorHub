@@ -50,7 +50,7 @@ export function presetsButton(ctx: ViewContext, options: PresetsButtonOptions): 
       title: options.kind === "fans" ? "Fan presets" : "Lighting presets",
       "aria-label": options.kind === "fans" ? "Fan presets" : "Lighting presets",
     },
-    icon("save", "icon-btn-glyph"),
+    icon("bookmark", "icon-btn-glyph"),
   ) as HTMLButtonElement;
 
   trigger.addEventListener("click", () => openDialog(ctx, options.kind));

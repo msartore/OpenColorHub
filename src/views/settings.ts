@@ -204,6 +204,14 @@ export function createSettings(ctx: ViewContext): View {
     onChange: (checked) => void persist({ reapply_led_on_launch: checked }),
   });
 
+  const gpuToggle = toggle({
+    label: "GPU LED control",
+    description:
+      "Also drive GPU RGB at I²C 0x36 through AMD ADL, NVIDIA NVAPI or Intel IGCL when a controller is present.",
+    checked: draft.gpu_led_enabled,
+    onChange: (checked) => void persist({ gpu_led_enabled: checked }),
+  });
+
   const restoreToggle = toggle({
     label: "Restore saved setup at startup",
     description: "Re-apply the last fan and lighting settings on every launch.",
@@ -271,6 +279,7 @@ export function createSettings(ctx: ViewContext): View {
         restore_setup_on_startup: true,
         release_fans_on_exit: false,
         reapply_led_on_launch: false,
+        gpu_led_enabled: true,
         accent: "#4ade80",
         low_duty_warning: 20,
         pump_header: "none",
@@ -439,6 +448,7 @@ export function createSettings(ctx: ViewContext): View {
         subtitle: "Guard rails for real hardware",
         body: [
           confirmToggle.el,
+          gpuToggle.el,
           reapplyToggle.el,
           restoreToggle.el,
           releaseToggle.el,
@@ -525,6 +535,7 @@ export function createSettings(ctx: ViewContext): View {
     smoothing.setChecked(settings.smoothing);
     confirmToggle.setChecked(settings.confirm_writes);
     reapplyToggle.setChecked(settings.reapply_led_on_launch);
+    gpuToggle.setChecked(settings.gpu_led_enabled);
     restoreToggle.setChecked(settings.restore_setup_on_startup);
     releaseToggle.setChecked(settings.release_fans_on_exit);
     lowDuty.setValue(settings.low_duty_warning);

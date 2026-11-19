@@ -84,6 +84,10 @@ pub const POLL_MIN_MS: u64 = 250;
 pub const POLL_MAX_MS: u64 = 10_000;
 pub const POLL_DEFAULT_MS: u64 = 1_000;
 
+fn default_gpu_led_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -100,6 +104,10 @@ pub struct Settings {
     #[serde(default)]
     pub release_fans_on_exit: bool,
     pub reapply_led_on_launch: bool,
+    /// Drive GPU RGB (AMD ADL / NVIDIA NVAPI / Intel IGCL) alongside the
+    /// onboard controller. Detected controllers are written at 0x36.
+    #[serde(default = "default_gpu_led_enabled")]
+    pub gpu_led_enabled: bool,
     pub confirm_writes: bool,
     /// UI accent colour (`#rrggbb`).
     pub accent: String,
@@ -124,6 +132,7 @@ impl Default for Settings {
             restore_setup_on_startup: true,
             release_fans_on_exit: false,
             reapply_led_on_launch: false,
+            gpu_led_enabled: true,
             confirm_writes: true,
             accent: "#4ade80".to_string(),
             state_file: None,
@@ -203,6 +212,9 @@ impl Settings {
         if let Some(v) = patch.reapply_led_on_launch {
             self.reapply_led_on_launch = v;
         }
+        if let Some(v) = patch.gpu_led_enabled {
+            self.gpu_led_enabled = v;
+        }
         if let Some(v) = patch.confirm_writes {
             self.confirm_writes = v;
         }
@@ -250,6 +262,7 @@ pub struct SettingsPatch {
     pub restore_setup_on_startup: Option<bool>,
     pub release_fans_on_exit: Option<bool>,
     pub reapply_led_on_launch: Option<bool>,
+    pub gpu_led_enabled: Option<bool>,
     pub confirm_writes: Option<bool>,
     pub accent: Option<String>,
     pub state_file: Option<Option<PathBuf>>,

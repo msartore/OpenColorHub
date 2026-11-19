@@ -21,7 +21,9 @@ export type IconName =
   | "plug-off"
   | "file-off"
   | "offline"
-  | "save";
+  | "save"
+  | "bookmark"
+  | "chevron-down";
 
 const PATHS: Record<IconName, string[]> = {
   // layout-dashboard
@@ -81,6 +83,10 @@ const PATHS: Record<IconName, string[]> = {
   ],
   // file-off
   "file-off": ["M3 3l18 18", "M7 3h7l5 5v7m0 4a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-14"],
+  // bookmark
+  bookmark: ["M9 4h6a2 2 0 0 1 2 2v14l-5 -3.5l-5 3.5v-14a2 2 0 0 1 2 -2"],
+  // chevron-down
+  "chevron-down": ["M6 9l6 6 6-6"],
   // device-floppy
   save: [
     "M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2",

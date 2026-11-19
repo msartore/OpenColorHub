@@ -20,6 +20,7 @@ import type {
   DownloadedFile,
   StoredFile,
   DriverProgress,
+  GpuZoneState,
   SetupList,
   SetupKind,
   PawnioStatus,
@@ -70,6 +71,15 @@ export const api = {
   setBrightness: (percent: number) => call<ActionResult>("set_brightness", { percent }),
   turnOffChannel: (channel: ChannelId) => call<ActionResult>("turn_off_channel", { channel }),
   applyLed: () => call<ActionResult>("apply_led"),
+
+  setGpuZone: (
+    device: string,
+    zone: string,
+    config: GpuZoneState,
+    apply: boolean,
+  ) => call<ActionResult>("set_gpu_zone", { device, zone, config, apply }),
+  applyGpu: () => call<ActionResult>("apply_gpu"),
+  syncGpuFromBoard: () => call<ActionResult>("sync_gpu_from_board"),
 
   openExternal: (url: string) => call<void>("open_external", { url }),
 

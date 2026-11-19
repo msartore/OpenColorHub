@@ -12,6 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { button } from "./components/ui";
 import { el, inTauri } from "./dom";
+import { renderMarkdown } from "./markdown";
 
 export interface UpdateStatus {
   current: string;
@@ -95,7 +96,7 @@ export function showUpdateDialog(status: UpdateStatus): Promise<void> {
     });
 
     const notes = status.notes
-      ? el("pre", { class: "update-notes" }, status.notes.slice(0, 900))
+      ? el("div", { class: "update-notes" }, renderMarkdown(status.notes.slice(0, 8000)))
       : null;
 
     const backdrop = el(

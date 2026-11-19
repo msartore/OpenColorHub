@@ -90,6 +90,45 @@ export interface Capabilities {
   notes: string[];
 }
 
+/** Persisted state for one GPU lighting zone. Mirrors `GpuZoneState` in gpu.rs. */
+export interface GpuZoneState {
+  color: [number, number, number];
+  mode: number;
+  speed: number;
+  brightness: number;
+  direction: number;
+  enabled: boolean;
+}
+
+export interface GpuZoneStatus extends GpuZoneState {
+  id: string;
+  label: string;
+  channel: number;
+  leds: number;
+  hex: string;
+  mode_label: string;
+}
+
+export interface GpuDeviceStatus {
+  id: string;
+  name: string;
+  vendor: "amd" | "nvidia" | "intel" | "simulated";
+  transport: string;
+  /** Model resolved from the PCI subsystem ID. */
+  model: string;
+  /** Capability note from the matched profile. */
+  note: string;
+  i2c_address: number;
+  max_mode: number;
+  zones: GpuZoneStatus[];
+}
+
+export interface GpuStatus {
+  enabled: boolean;
+  devices: GpuDeviceStatus[];
+  device: DeviceInfo;
+}
+
 export interface BoardIdentity {
   vendor: string;
   name: string;
@@ -123,6 +162,8 @@ export interface Snapshot {
   channels: ChannelStatus[];
   fan_device: DeviceInfo;
   led_device: DeviceInfo;
+  /** GPU LED section; null on builds that predate the feature. */
+  gpu_led: GpuStatus | null;
   capabilities: Capabilities;
   avg_percent: number;
   /** Why the last telemetry read failed, when it did. */
@@ -143,6 +184,7 @@ export interface Settings {
   restore_setup_on_startup: boolean;
   release_fans_on_exit: boolean;
   reapply_led_on_launch: boolean;
+  gpu_led_enabled: boolean;
   confirm_writes: boolean;
   accent: string;
   state_file: string | null;

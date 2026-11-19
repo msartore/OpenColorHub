@@ -147,6 +147,7 @@ const fallbackSettings: Settings = {
   restore_setup_on_startup: true,
   release_fans_on_exit: false,
   reapply_led_on_launch: false,
+  gpu_led_enabled: true,
   confirm_writes: true,
   accent: "#4ade80",
   state_file: null,

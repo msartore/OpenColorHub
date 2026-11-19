@@ -9,6 +9,7 @@ use std::process::Command;
 
 use colorctl_core::about::{AboutInfo, AboutParams};
 use colorctl_core::drivers::{self, DownloadedFile, DriverFile, DriverKind};
+use colorctl_core::gpu::GpuZoneState;
 use colorctl_core::model::{Channel, ChannelConfig, FanHeader, Snapshot};
 use colorctl_core::platform::{self, Elevation};
 use colorctl_core::service::{ActionResult, Activity};
@@ -243,6 +244,40 @@ pub fn turn_off_channel(
 pub fn apply_led(state: State<'_, AppState>) -> Result<ActionResult, String> {
     let mut inner = state.lock()?;
     inner.service_mut()?.apply_led().map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// GPU RGB (AMD ADL / NVIDIA NVAPI / Intel IGCL)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn set_gpu_zone(
+    state: State<'_, AppState>,
+    device: String,
+    zone: String,
+    config: GpuZoneState,
+    apply: bool,
+) -> Result<ActionResult, String> {
+    let mut inner = state.lock()?;
+    inner
+        .service_mut()?
+        .set_gpu_zone(device, zone, config, apply)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn apply_gpu(state: State<'_, AppState>) -> Result<ActionResult, String> {
+    let mut inner = state.lock()?;
+    inner.service_mut()?.apply_gpu().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn sync_gpu_from_board(state: State<'_, AppState>) -> Result<ActionResult, String> {
+    let mut inner = state.lock()?;
+    inner
+        .service_mut()?
+        .sync_gpu_from_board()
+        .map_err(|e| e.to_string())
 }
 
 /// Only `http(s)` and `mailto` are allowed, and the URL is passed as a single

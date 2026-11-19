@@ -15,6 +15,7 @@ use crate::backend::{self, FanBackend, LedBackend};
 use crate::board::{self, BoardInfo};
 use crate::curve::{self, FanCurve, FanProfile};
 use crate::error::{Error, Result};
+use crate::gpu::{GpuLedBackend, GpuLedState, GpuStatus, GpuZoneState};
 use crate::model::{
     Capabilities, Channel, ChannelConfig, DeviceInfo, FanHeader, FanMode, FanSample, FanStatus,
     Snapshot, Telemetry, now_ms,
@@ -70,6 +71,8 @@ fn should_recover(led_control: bool, lighting_in_use: bool, device_present: bool
 pub struct Service {
     fan: Box<dyn FanBackend>,
     led: Box<dyn LedBackend>,
+    /// Optional GPU RGB transport (AMD ADL / NVIDIA NVAPI / Intel IGCL).
+    gpu: GpuLedBackend,
     capabilities: Capabilities,
     /// SMBIOS identity of the host board, detected once at startup.
     board: BoardInfo,
@@ -134,9 +137,18 @@ impl Service {
             }
         }
 
+        let gpu_state_path = settings
+            .state_file
+            .as_deref()
+            .map(|path| path.with_file_name("gpu-led.state"))
+            .unwrap_or_else(|| data_dir.join("gpu-led.state"));
+        let mut gpu = GpuLedBackend::detect(gpu_state_path);
+        gpu.state_mut().enabled = settings.gpu_led_enabled;
+
         Self {
             fan: set.fan,
             led: set.led,
+            gpu,
             capabilities: set.capabilities,
             board,
             settings,
@@ -265,7 +277,13 @@ impl Service {
 
     pub fn update_settings(&mut self, settings: Settings) -> bool {
         let needs_rebuild = settings.backend != self.settings.backend
-            || settings.state_file != self.settings.state_file;
+            || settings.state_file != self.settings.state_file
+            || settings.gpu_led_enabled != self.settings.gpu_led_enabled;
+        // A GPU toggle does not need a fresh hardware probe: keep the detected
+        // transports and their state, only flip the master enable.
+        if settings.gpu_led_enabled != self.settings.gpu_led_enabled {
+            self.gpu.state_mut().enabled = settings.gpu_led_enabled;
+        }
         self.settings = settings;
         if needs_rebuild {
             let set = backend::build(
@@ -281,6 +299,14 @@ impl Service {
                 .unwrap_or_else(|| self.data_dir.join("active-setup.json"));
             self.fan = set.fan;
             self.led = set.led;
+            self.gpu = GpuLedBackend::detect(
+                self.settings
+                    .state_file
+                    .as_deref()
+                    .map(|path| path.with_file_name("gpu-led.state"))
+                    .unwrap_or_else(|| self.data_dir.join("gpu-led.state")),
+            );
+            self.gpu.state_mut().enabled = self.settings.gpu_led_enabled;
             self.capabilities = set.capabilities;
             self.smoothed = None;
             self.last_read_error = None;
@@ -305,6 +331,14 @@ impl Service {
             .unwrap_or_else(|| self.data_dir.join("active-setup.json"));
         self.fan = set.fan;
         self.led = set.led;
+        self.gpu = GpuLedBackend::detect(
+            self.settings
+                .state_file
+                .as_deref()
+                .map(|path| path.with_file_name("gpu-led.state"))
+                .unwrap_or_else(|| self.data_dir.join("gpu-led.state")),
+        );
+        self.gpu.state_mut().enabled = self.settings.gpu_led_enabled;
         self.capabilities = set.capabilities;
         self.smoothed = None;
         self.last_read_error = None;
@@ -506,6 +540,7 @@ impl Service {
             channels: self.led.state().statuses(),
             fan_device: self.fan_info(),
             led_device: self.led_info(),
+            gpu_led: Some(self.gpu.status()),
             capabilities: self.capabilities.clone(),
             avg_percent,
             read_error: self.last_read_error.clone(),
@@ -709,6 +744,111 @@ impl Service {
         })
     }
 
+    // -----------------------------------------------------------------------
+    // GPU RGB
+    // -----------------------------------------------------------------------
+
+    pub fn gpu_state(&self) -> &GpuLedState {
+        self.gpu.state()
+    }
+
+    pub fn gpu_status(&self) -> GpuStatus {
+        self.gpu.status()
+    }
+
+    /// Stages one GPU zone in memory. `apply` pushes it to the card at once.
+    pub fn set_gpu_zone(
+        &mut self,
+        device: String,
+        zone: String,
+        state: GpuZoneState,
+        apply: bool,
+    ) -> Result<ActionResult> {
+        if !self.settings.gpu_led_enabled {
+            return Err(Error::unavailable(
+                "GPU LED control is disabled in settings",
+            ));
+        }
+        if !self.gpu.status().devices.iter().any(|d| d.id == device) {
+            return Err(Error::unavailable(format!("Unknown GPU device '{device}'")));
+        }
+        self.gpu
+            .state_mut()
+            .zones
+            .insert(format!("{device}:{zone}"), state);
+        if !apply {
+            return Ok(ActionResult {
+                snapshot: self.snapshot(),
+                message: format!("GPU {zone} staged"),
+            });
+        }
+        let mut outcome = self.apply_gpu()?;
+        outcome.message = format!("GPU {zone} set to {}", state.hex());
+        Ok(outcome)
+    }
+
+    /// Mirrors a board channel's colour to every GPU zone. Used by the UI's
+    /// "sync with board" action.
+    pub fn sync_gpu_from_board(&mut self) -> Result<ActionResult> {
+        if !self.settings.gpu_led_enabled {
+            return Err(Error::unavailable(
+                "GPU LED control is disabled in settings",
+            ));
+        }
+        let source = self
+            .led
+            .state()
+            .statuses()
+            .into_iter()
+            .find(|c| c.enabled)
+            .map(|c| c.color)
+            .unwrap_or([255, 255, 255]);
+        let mut count = 0usize;
+        for device in self.gpu.status().devices {
+            for zone in device.zones {
+                let mut state = self
+                    .gpu
+                    .state()
+                    .zones
+                    .get(&format!("{}:{}", device.id, zone.id))
+                    .copied()
+                    .unwrap_or_default();
+                state.color = source;
+                state.enabled = true;
+                self.gpu
+                    .state_mut()
+                    .zones
+                    .insert(format!("{}:{}", device.id, zone.id), state);
+                count += 1;
+            }
+        }
+        if count == 0 {
+            return Err(Error::unavailable("No GPU RGB controller detected"));
+        }
+        let mut outcome = self.apply_gpu()?;
+        outcome.message = format!("Synced {count} GPU zone(s) with the board colour");
+        Ok(outcome)
+    }
+
+    /// Pushes every GPU zone to its controller and persists the state file.
+    pub fn apply_gpu(&mut self) -> Result<ActionResult> {
+        if !self.settings.gpu_led_enabled {
+            return Err(Error::unavailable(
+                "GPU LED control is disabled in settings",
+            ));
+        }
+        let written = self.gpu.apply()?;
+        if written > 0 {
+            self.persist_active();
+        }
+        let message = format!("GPU lighting applied to {written} zone(s)");
+        self.record("gpu", message.clone());
+        Ok(ActionResult {
+            snapshot: self.snapshot(),
+            message,
+        })
+    }
+
     /// A sleep power-cycles the USB bus and reloads the Super I/O's defaults, so
     /// the frame is gone and the fans are back under firmware control — while
     /// everything this process remembers still describes the state it left
@@ -726,6 +866,11 @@ impl Service {
         }
 
         self.reassert_lighting(&mut report);
+        if self.settings.gpu_led_enabled && self.gpu.state().enabled {
+            if let Err(error) = self.gpu.reassert() {
+                report.errors.push(format!("gpu: {error}"));
+            }
+        }
         report
     }
 

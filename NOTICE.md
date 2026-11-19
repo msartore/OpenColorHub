@@ -97,6 +97,20 @@ other material from that product is included in this repository — only
 independently written implementations of observable interfaces. No vendor
 licence is therefore implicated.
 
+The GPU model catalogue was derived from the public `VGA_Support` table inside
+PolychromeSYNC v1.0.50, which was examined statically on a binary the author
+owns. Only factual identifiers (PCI subsystem IDs and model names) appear in
+`crates/colorctl-core/src/gpu_catalogue.rs`; no vendor code or assets were
+copied.
+
+The GPU LED protocol (12-byte frame to I²C address `0x36`) and the choice of
+vendor transports were cross-checked against OpenRGB
+(<https://github.com/CalcProgrammer1/OpenRGB>) and the
+[ASRock RX 9070 XT Steel Legend controller](https://github.com/VirulentArc/openrgb-asrock-rx9070xt-steel-legend-controller),
+both GPL-2.0-or-later. `crates/colorctl-core/src/gpu.rs` is an independent Rust
+implementation of those observable interfaces, not copied source. GPL-2.0-or-later
+is compatible with this project's GPL-3.0-only licence.
+
 ---
 
 ## Distributing a build

@@ -91,6 +91,7 @@ sudo ./target/release/opencolorhub        # or set CAP_SYS_RAWIO on the binary
 | [Architecture](docs/ARCHITECTURE.md) | Crates, backend boundary, protocols, verification |
 | [Platform notes](docs/PLATFORM.md) | Driver rationale, fallbacks, elevation, startup, tray |
 | [RGB compatibility](docs/RGB-COMPATIBILITY.md) | ODM families, USB PIDs, the 200-LED frame, OpenRGB comparison |
+| [GPU LED](docs/GPU-LED.md) | Optional AMD/NVIDIA/Intel GPU RGB over ADL, NVAPI and IGCL at I²C 0x36 |
 | [Board detection](docs/BOARD-DETECTION.md) | Confidence levels, sources, the hardware guard |
 | [Updates](docs/UPDATES.md) | Self-updater, release process, integrity caveats |
 | [Drivers](docs/DRIVERS.md) | Board download catalogue, URL rules, why nothing is executed |
