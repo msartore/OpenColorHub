@@ -1036,7 +1036,7 @@ mod linux_i2c {
             }
             let n = unsafe { libc::write(self.fd, data.as_ptr() as *const _, data.len()) };
             if n != data.len() as isize {
-                Err(Error::backend("short I²C write".into()))
+                Err(Error::backend("short I²C write"))
             } else {
                 Ok(())
             }
