@@ -437,4 +437,44 @@ mod tests {
         assert_eq!(TempUnit::Fahrenheit.convert(0.0), 32.0);
         assert_eq!(TempUnit::Fahrenheit.convert(100.0), 212.0);
     }
+
+    #[test]
+    fn gpu_toggle_round_trips_through_a_patch() {
+        let mut s = Settings::default();
+        assert!(s.gpu_led_enabled);
+        s.apply_patch(SettingsPatch {
+            gpu_led_enabled: Some(false),
+            ..Default::default()
+        });
+        assert!(!s.gpu_led_enabled);
+        s.apply_patch(SettingsPatch {
+            gpu_led_enabled: Some(true),
+            ..Default::default()
+        });
+        assert!(s.gpu_led_enabled);
+    }
+
+    #[test]
+    fn gpu_toggle_survives_a_disk_round_trip() {
+        let dir = temp_dir("gpu-toggle");
+        let path = dir.join("settings.json");
+        let s = Settings {
+            gpu_led_enabled: false,
+            ..Settings::default()
+        };
+        s.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert!(!loaded.gpu_led_enabled);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_old_settings_file_defaults_gpu_on() {
+        let dir = temp_dir("gpu-legacy");
+        let path = dir.join("settings.json");
+        std::fs::write(&path, "{}").unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert!(loaded.gpu_led_enabled);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

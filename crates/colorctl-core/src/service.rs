@@ -20,7 +20,7 @@ use crate::model::{
     Capabilities, Channel, ChannelConfig, DeviceInfo, FanHeader, FanMode, FanSample, FanStatus,
     Snapshot, Telemetry, now_ms,
 };
-use crate::settings::Settings;
+use crate::settings::{BackendMode, Settings};
 use crate::state::RgbState;
 
 /// Smoothing factor for the EMA (0..1; higher = more responsive).
@@ -142,7 +142,8 @@ impl Service {
             .as_deref()
             .map(|path| path.with_file_name("gpu-led.state"))
             .unwrap_or_else(|| data_dir.join("gpu-led.state"));
-        let mut gpu = GpuLedBackend::detect(gpu_state_path);
+        let mut gpu =
+            GpuLedBackend::detect(gpu_state_path, settings.backend == BackendMode::Simulated);
         gpu.state_mut().enabled = settings.gpu_led_enabled;
 
         Self {
@@ -305,6 +306,7 @@ impl Service {
                     .as_deref()
                     .map(|path| path.with_file_name("gpu-led.state"))
                     .unwrap_or_else(|| self.data_dir.join("gpu-led.state")),
+                self.settings.backend == BackendMode::Simulated,
             );
             self.gpu.state_mut().enabled = self.settings.gpu_led_enabled;
             self.capabilities = set.capabilities;
@@ -337,6 +339,7 @@ impl Service {
                 .as_deref()
                 .map(|path| path.with_file_name("gpu-led.state"))
                 .unwrap_or_else(|| self.data_dir.join("gpu-led.state")),
+            self.settings.backend == BackendMode::Simulated,
         );
         self.gpu.state_mut().enabled = self.settings.gpu_led_enabled;
         self.capabilities = set.capabilities;
@@ -1417,6 +1420,89 @@ mod tests {
         let first = svc.snapshot().temperature_c.unwrap();
         let second = svc.snapshot().temperature_c.unwrap();
         assert!((first - second).abs() < 2.0, "EMA should not jump");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ---- GPU LED ----
+
+    #[test]
+    fn a_simulated_snapshot_exposes_the_gpu_section() {
+        let (mut svc, dir) = service("gpu-snapshot");
+        let snap = svc.snapshot();
+        let gpu = snap.gpu_led.expect("GPU section present");
+        assert!(gpu.enabled);
+        assert!(gpu.device.simulated);
+        assert_eq!(gpu.devices.len(), 1);
+        assert_eq!(gpu.devices[0].zones.len(), crate::gpu::GPU_ZONES.len());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_gpu_zone_write_is_reflected_and_persisted() {
+        let (mut svc, dir) = service("gpu-write");
+        let mut state = GpuZoneState {
+            color: [255, 0, 0],
+            ..Default::default()
+        };
+        state.mode = 0x02;
+        svc.set_gpu_zone("sim0".into(), "fan".into(), state, true)
+            .unwrap();
+
+        let zone = svc.snapshot().gpu_led.unwrap().devices[0]
+            .zones
+            .iter()
+            .find(|z| z.id == "fan")
+            .unwrap()
+            .clone();
+        assert_eq!(zone.color, [255, 0, 0]);
+        assert_eq!(zone.mode, 2);
+        assert!(dir.join("gpu-led.state").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn syncing_from_the_board_copies_a_lit_colour() {
+        let (mut svc, dir) = service("gpu-sync");
+        svc.set_channel(Channel::Led, ChannelConfig::rgb([12, 34, 56], 80), true)
+            .unwrap();
+        svc.sync_gpu_from_board().unwrap();
+        let gpu = svc.snapshot().gpu_led.unwrap();
+        for zone in gpu.devices[0].zones.iter() {
+            assert_eq!(zone.color, [12, 34, 56], "zone {}", zone.id);
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn disabling_gpu_led_refuses_writes_and_keeps_state() {
+        let (mut svc, dir) = service("gpu-toggle");
+        svc.set_gpu_zone("sim0".into(), "fan".into(), GpuZoneState::default(), true)
+            .unwrap();
+        let mut settings = svc.settings().clone();
+        settings.gpu_led_enabled = false;
+        svc.update_settings(settings);
+        assert!(!svc.snapshot().gpu_led.unwrap().enabled);
+        assert!(
+            svc.set_gpu_zone("sim0".into(), "fan".into(), GpuZoneState::default(), true)
+                .is_err()
+        );
+
+        let mut settings = svc.settings().clone();
+        settings.gpu_led_enabled = true;
+        svc.update_settings(settings);
+        let gpu = svc.snapshot().gpu_led.unwrap();
+        assert!(gpu.enabled);
+        assert!(gpu.devices[0].zones.iter().any(|z| z.id == "fan"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_unknown_gpu_device_is_rejected() {
+        let (mut svc, dir) = service("gpu-unknown");
+        assert!(
+            svc.set_gpu_zone("nope".into(), "fan".into(), GpuZoneState::default(), true)
+                .is_err()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

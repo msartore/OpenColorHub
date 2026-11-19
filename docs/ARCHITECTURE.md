@@ -300,9 +300,10 @@ rest follow whichever worked.
 
 ## Testing strategy
 
-* `cargo test` — 164 core tests plus 2 updater tests: state round-trip against a
-  byte-exact fixture, curve interpolation and validation, pump floors, LED range
-  coverage, settings clamping, sim persistence, GPU frame construction, PCI
+* `cargo test` — 185 core tests plus 2 updater tests (7 CLI, 3 desktop):
+  state round-trip against a byte-exact fixture, curve interpolation and
+  validation, pump floors, LED range coverage, settings clamping, sim
+  persistence, GPU frame construction, simulated GPU service mutations, PCI
   catalogue lookup and fallback, version comparison.
 * `npm run build` — `tsc --noEmit` then a Vite build; the type layer is the
   contract between Rust serde representations and the UI.

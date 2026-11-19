@@ -310,4 +310,78 @@ mod tests {
     fn catalogue_has_the_expected_size() {
         assert_eq!(CATALOGUE.len(), 49);
     }
+
+    #[test]
+    fn catalogue_keys_are_unique() {
+        let mut keys: Vec<u32> = CATALOGUE.iter().map(|(key, _)| *key).collect();
+        keys.sort_unstable();
+        let before = keys.len();
+        keys.dedup();
+        assert_eq!(keys.len(), before, "duplicate subsystem ID in catalogue");
+    }
+
+    #[test]
+    fn every_catalogue_entry_resolves_to_a_profile() {
+        for (key, expected) in CATALOGUE {
+            let id = PciId {
+                vendor: 0x1002,
+                device: 0,
+                sub_vendor: (*key & 0xFFFF) as u16,
+                sub_device: (*key >> 16) as u16,
+            };
+            let profile = profile_for(Some(id), GpuVendor::Amd);
+            assert_eq!(&profile.model, expected, "key {key:#010X}");
+            assert!(!profile.zones.is_empty());
+            assert_eq!(profile.i2c_address, 0x36);
+            assert!(profile.max_mode >= 0x0F);
+        }
+    }
+
+    #[test]
+    fn asrock_matches_get_a_verified_note() {
+        let id = PciId {
+            vendor: 0x1002,
+            device: 0x744C,
+            sub_vendor: 0x1849,
+            sub_device: 0x5403,
+        };
+        let profile = profile_for(Some(id), GpuVendor::Amd);
+        assert_eq!(profile.model, "RX 9070 XT SL");
+        assert!(profile.note.contains("verified"));
+    }
+
+    #[test]
+    fn arc_b580_uses_two_zones() {
+        let id = PciId {
+            vendor: 0x8086,
+            device: 0xE20B,
+            sub_vendor: 0x1849,
+            sub_device: 0x6020,
+        };
+        let profile = profile_for(Some(id), GpuVendor::Intel);
+        assert_eq!(profile.model, "Arc B580 Steel Legend");
+        assert_eq!(profile.zones.len(), 2);
+    }
+
+    #[test]
+    fn generic_profile_works_without_any_pci_id() {
+        let profile = profile_for(None, GpuVendor::Nvidia);
+        assert!(profile.model.contains("unidentified"));
+        assert_eq!(profile.zones.len(), crate::gpu::GPU_ZONES.len());
+        assert!(profile.note.contains("generic"));
+    }
+
+    #[test]
+    fn models_are_classified_by_vendor() {
+        let all = models();
+        assert_eq!(all.len(), CATALOGUE.len());
+        assert!(
+            all.iter()
+                .any(|(name, vendor)| name.contains("Arc") && *vendor == GpuVendor::Intel)
+        );
+        assert!(
+            all.iter()
+                .any(|(name, vendor)| name.starts_with("RX") && *vendor == GpuVendor::Amd)
+        );
+    }
 }

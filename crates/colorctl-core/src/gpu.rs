@@ -154,27 +154,31 @@ pub struct GpuLedState {
 }
 
 impl GpuLedState {
+    /// Feature is on unless the user explicitly turned it off. A missing or
+    /// broken file must not silently disable GPU lighting.
+    fn enabled_defaults() -> Self {
+        Self {
+            enabled: true,
+            ..Self::default()
+        }
+    }
+
     pub fn load(path: &Path) -> (Self, Option<String>) {
         match std::fs::read_to_string(path) {
             Ok(raw) => match serde_json::from_str::<Self>(&raw) {
                 Ok(mut s) => {
                     if s.zones.is_empty() && !s.enabled {
-                        // A fresh file should still start enabled; only an
-                        // explicit user choice turns the feature off.
                         s.enabled = true;
                     }
                     (s, None)
                 }
-                Err(e) => (Self::default(), Some(format!("malformed GPU state: {e}"))),
+                Err(e) => (
+                    Self::enabled_defaults(),
+                    Some(format!("malformed GPU state: {e}")),
+                ),
             },
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
-                Self {
-                    enabled: true,
-                    ..Self::default()
-                },
-                None,
-            ),
-            Err(e) => (Self::default(), Some(e.to_string())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Self::enabled_defaults(), None),
+            Err(e) => (Self::enabled_defaults(), Some(e.to_string())),
         }
     }
 
@@ -309,14 +313,16 @@ pub struct GpuLedBackend {
 }
 
 impl GpuLedBackend {
-    /// Probes every available vendor transport. An empty result is normal on
-    /// machines without an ASRock-style GPU controller.
-    pub fn detect(state_path: PathBuf) -> Self {
+    /// Probes every available vendor transport. `simulated` skips the probe
+    /// entirely and exposes one simulated card, so the demo and the test suite
+    /// never touch real GPU hardware.
+    pub fn detect(state_path: PathBuf, simulated: bool) -> Self {
         let (state, warning) = GpuLedState::load(&state_path);
-        let mut devices = detect_devices();
-        if devices.is_empty() && state_path.to_string_lossy().contains("sim") {
-            devices.push(simulated_device());
-        }
+        let devices = if simulated {
+            vec![simulated_device()]
+        } else {
+            detect_devices()
+        };
         let names: Vec<String> = devices.iter().map(|d| d.name.clone()).collect();
         let info = if devices.is_empty() {
             DeviceInfo::unavailable(
@@ -328,7 +334,11 @@ impl GpuLedBackend {
             )
         } else {
             let mut dev = DeviceInfo::hardware(
-                "GPU RGB controllers",
+                if simulated {
+                    "GPU RGB controllers (simulated)"
+                } else {
+                    "GPU RGB controllers"
+                },
                 format!(
                     "{} controller(s) at I²C 0x{:02X}",
                     devices.len(),
@@ -336,6 +346,7 @@ impl GpuLedBackend {
                 ),
             );
             dev.detail = names.join(", ");
+            dev.simulated = simulated;
             dev
         };
         Self {
@@ -1137,5 +1148,74 @@ mod tests {
         for (id, _) in GPU_MODES {
             assert_ne!(mode_label(id), "Unknown");
         }
+    }
+
+    #[test]
+    fn unknown_mode_has_a_label() {
+        assert_eq!(mode_label(0x7F), "Unknown");
+    }
+
+    #[test]
+    fn every_zone_uses_its_own_channel_in_the_frame() {
+        for zone in GPU_ZONES.iter() {
+            let frame = build_frame(zone, &GpuZoneState::default());
+            assert_eq!(frame[2], zone.channel, "zone {}", zone.id);
+        }
+    }
+
+    fn sim_backend(name: &str) -> (GpuLedBackend, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("och-gpu-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let backend = GpuLedBackend::detect(dir.join("gpu-led.state"), true);
+        (backend, dir)
+    }
+
+    #[test]
+    fn simulated_detection_is_hardware_free() {
+        let (backend, _dir) = sim_backend("detect");
+        let status = backend.status();
+        assert!(status.enabled);
+        assert!(status.device.simulated);
+        assert_eq!(status.devices.len(), 1);
+        assert_eq!(status.devices[0].vendor, GpuVendor::Simulated);
+        assert_eq!(status.devices[0].zones.len(), GPU_ZONES.len());
+    }
+
+    #[test]
+    fn applying_persists_every_enabled_zone() {
+        let (mut backend, dir) = sim_backend("apply");
+        let written = backend.apply().unwrap();
+        assert_eq!(written, GPU_ZONES.len());
+        assert!(dir.join("gpu-led.state").exists());
+    }
+
+    #[test]
+    fn disabled_state_skips_writes_and_save() {
+        let (mut backend, dir) = sim_backend("disabled");
+        backend.state_mut().enabled = false;
+        assert_eq!(backend.apply().unwrap(), 0);
+        assert!(!dir.join("gpu-led.state").exists());
+    }
+
+    #[test]
+    fn missing_state_file_starts_enabled() {
+        let (backend, _dir) = sim_backend("missing");
+        assert!(backend.state().enabled);
+        assert!(backend.state().zones.is_empty());
+    }
+
+    #[test]
+    fn corrupt_state_file_is_reported_with_defaults() {
+        let dir = std::env::temp_dir().join(format!("och-gpu-corrupt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("gpu-led.state");
+        std::fs::write(&path, "{ not json").unwrap();
+        let (state, warning) = GpuLedState::load(&path);
+        assert!(warning.is_some_and(|w| w.contains("malformed")));
+        assert!(state.enabled);
+        assert!(state.zones.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
