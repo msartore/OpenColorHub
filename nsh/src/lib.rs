@@ -14,12 +14,14 @@ use std::time::Duration;
 
 use colorctl_core::about::{AboutInfo, AboutParams};
 use colorctl_core::drivers::{self, CachedCatalogue, DriverFile};
+use colorctl_core::gpu::GpuZoneState;
 use colorctl_core::model::{Channel, ChannelConfig, FanHeader};
 use colorctl_core::service::ActionResult;
 use colorctl_core::settings::{BackendMode, Settings, SettingsPatch};
 use colorctl_core::setups::{Setup, SetupKind, SetupStore};
 use colorctl_core::{
-    CURVE_POINTS, CurvePoint, FanCurve, FanProfile, ResumeWatch, Service, WakeReport,
+    CURVE_POINTS, CurvePoint, FanCurve, FanProfile, PowerWatcher, RestoreReport, ResumeWatch,
+    Service, WakeReport,
 };
 use colorctl_core::{autostart, pawnio_install, platform};
 use nsh_core::prelude::*;
@@ -136,6 +138,27 @@ fn parse_setup_kind(id: &str) -> Result<SetupKind, String> {
     }
 }
 
+fn parse_gpu_zone(json: &str) -> Result<GpuZoneState, String> {
+    serde_json::from_str(json).map_err(|error| format!("invalid GPU zone state: {error}"))
+}
+
+/// Replays the persisted live setup in a fresh process. Retries while a
+/// re-enumerating controller settles, but a stored setup with no errors breaks
+/// on the first attempt so a normal launch is not delayed.
+fn restore_at_launch(service: &mut Service) -> RestoreReport {
+    let mut report = RestoreReport::default();
+    for attempt in 0..6 {
+        report = service.restore_active();
+        if report.errors.is_empty() {
+            break;
+        }
+        if attempt + 1 < 6 {
+            std::thread::sleep(Duration::from_millis(700));
+        }
+    }
+    report
+}
+
 /// Re-applies fans and lighting after a resume, retrying while the USB
 /// controller re-enumerates. Runs on a blocking thread; notes the outcome so
 /// the Dashboard's activity list explains the gap.
@@ -240,6 +263,9 @@ struct StoredDriverFile {
 #[class]
 pub struct Controller {
     inner: Arc<Mutex<Inner>>,
+    /// OS power notifications. The telemetry loop checks this on every tick so
+    /// a resume need not be inferred from a wall-clock gap alone.
+    power: PowerWatcher,
     minimized: bool,
     stopped: Arc<AtomicBool>,
 }
@@ -279,7 +305,28 @@ impl Controller {
 
         let (service, error) = match built {
             Ok(mut service) => {
-                if settings.reapply_led_on_launch
+                // The live setup is restored on every start, independently of
+                // the lighting toggle and autostart. The toggle stays as a
+                // fallback for installs that have no active-setup file yet.
+                let report = if settings.restore_setup_on_startup {
+                    restore_at_launch(&mut service)
+                } else {
+                    RestoreReport::default()
+                };
+                if report.found {
+                    eprintln!(
+                        "opencolorhub: restored saved setup — {} fans, lighting: {}",
+                        report.fans, report.lighting
+                    );
+                }
+                // Upgrades from the old shell have `rgb.state` but no active
+                // setup yet. Push that blob too so lighting comes back on the
+                // first launch after the update.
+                let has_saved_lighting = service
+                    .state_path()
+                    .is_some_and(|path| path.is_file());
+                if !report.lighting
+                    && (settings.reapply_led_on_launch || has_saved_lighting)
                     && let Err(error) = service.apply_led()
                 {
                     eprintln!("opencolorhub: could not re-apply lighting: {error}");
@@ -302,6 +349,7 @@ impl Controller {
                 data_dir,
                 watch: ResumeWatch::new(Duration::from_millis(1000)),
             })),
+            power: PowerWatcher::new(),
             minimized: std::env::args().any(|arg| arg == "--minimized"),
             stopped: Arc::new(AtomicBool::new(false)),
         }
@@ -541,6 +589,43 @@ impl Controller {
         let result = inner
             .service_mut()?
             .apply_led()
+            .map_err(|error| error.to_string())?;
+        to_json(&result)
+    }
+
+    /// Stages or writes one GPU zone. `state_json` is a serde `GpuZoneState`.
+    pub fn set_gpu_zone(
+        &self,
+        device: String,
+        zone: String,
+        state_json: String,
+        apply: bool,
+    ) -> Result<String, String> {
+        let state = parse_gpu_zone(&state_json)?;
+        let mut inner = self.lock()?;
+        let result = inner
+            .service_mut()?
+            .set_gpu_zone(device, zone, state, apply)
+            .map_err(|error| error.to_string())?;
+        to_json(&result)
+    }
+
+    /// Pushes every staged GPU zone to its controller.
+    pub fn apply_gpu(&self) -> Result<String, String> {
+        let mut inner = self.lock()?;
+        let result = inner
+            .service_mut()?
+            .apply_gpu()
+            .map_err(|error| error.to_string())?;
+        to_json(&result)
+    }
+
+    /// Mirrors the first lit motherboard channel to every GPU zone.
+    pub fn sync_gpu_from_board(&self) -> Result<String, String> {
+        let mut inner = self.lock()?;
+        let result = inner
+            .service_mut()?
+            .sync_gpu_from_board()
             .map_err(|error| error.to_string())?;
         to_json(&result)
     }
@@ -802,6 +887,7 @@ impl Controller {
     pub async fn start_telemetry(this: Instance<Self>, listener: Callback<String>) {
         let inner = this.with(|controller| controller.inner.clone());
         let stopped = this.with(|controller| controller.stopped.clone());
+        let power = this.with(|controller| controller.power.clone());
         stopped.store(false, Ordering::SeqCst);
         while !stopped.load(Ordering::SeqCst) {
             let interval = inner
@@ -827,11 +913,21 @@ impl Controller {
                 .lock()
                 .ok()
                 .and_then(|mut inner| inner.watch.observe_now());
-            if let Some(slept) = slept {
+            // An OS power notification is authoritative; the wall-clock gap is
+            // still there as a fallback if the notification was unavailable.
+            let notified = power.take_resume();
+            if notified && let Ok(mut inner) = inner.lock() {
+                // Re-sync after observing the gap so the next tick does not
+                // re-assert a second time for the same wake.
+                inner.watch.mark();
+            }
+            if slept.is_some() || notified {
                 let job = inner.clone();
                 let report = blocking(move || reassert_after_wake(&job)).await;
                 if let Ok(Some(message)) = report {
-                    eprintln!("opencolorhub: woke after {}s: {message}", slept.as_secs());
+                    let seconds = slept.map(|gap| gap.as_secs()).unwrap_or(0);
+                    let source = if notified { "OS resume" } else { "clock gap" };
+                    eprintln!("opencolorhub: woke ({source}, {seconds}s): {message}");
                 }
             }
 

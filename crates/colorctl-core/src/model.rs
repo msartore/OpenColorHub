@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::board::BoardInfo;
 use crate::curve::FanCurve;
+use crate::gpu::GpuStatus;
 use crate::units::pwm_to_pct;
 
 /// Number of PWM steps the Super I/O accepts.
@@ -530,6 +531,9 @@ pub struct Snapshot {
     pub channels: Vec<ChannelStatus>,
     pub fan_device: DeviceInfo,
     pub led_device: DeviceInfo,
+    /// Optional GPU LED section — `None` when the feature has no controller.
+    #[serde(default)]
+    pub gpu_led: Option<GpuStatus>,
     pub capabilities: Capabilities,
     pub avg_percent: u8,
     #[serde(default)]
@@ -548,6 +552,7 @@ impl Snapshot {
             channels: Vec::new(),
             fan_device: DeviceInfo::unavailable("No fan backend", "none", "not initialised"),
             led_device: DeviceInfo::unavailable("No LED backend", "none", "not initialised"),
+            gpu_led: None,
             read_error: None,
             capabilities: Capabilities {
                 fan_control: false,

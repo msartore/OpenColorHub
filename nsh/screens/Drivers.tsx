@@ -21,7 +21,7 @@ import {
   visibleRows,
 } from "../app/domain/drivers";
 import { backgroundRefresh } from "../app/application/usecases/drivers";
-import { Chip, Notice, Panel } from "../components/ui";
+import { Chip, Notice, PageHeader, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -227,14 +227,10 @@ export function Drivers(props: {
 
   return (
     <View class="gap-4">
-      <View class="flex-row items-center justify-between gap-3" style={{ flexWrap: "wrap" }}>
-        <View class="gap-1">
-          <Text class="text-2xl font-semibold text-foreground">Drivers</Text>
-          <Text class="text-xs text-muted-foreground">
-            Files Colorful publishes for this board. Downloads are saved to the app's
-            data folder — nothing is run for you.
-          </Text>
-        </View>
+      <PageHeader
+        title="Drivers"
+        subtitle="Files Colorful publishes for this board. Downloads are saved to the app's data folder — nothing is run for you."
+        actions={
         <Button
           testID="driver-refresh"
           class="rounded-[7px] border border-border px-3 py-1.5 disabled:opacity-40"
@@ -243,7 +239,8 @@ export function Drivers(props: {
         >
           <Text class="text-xs text-foreground">{refreshing() ? "Refreshing…" : "Refresh"}</Text>
         </Button>
-      </View>
+        }
+      />
 
       <If when={catalogue()}>
         {(list) => (

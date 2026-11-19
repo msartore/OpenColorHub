@@ -48,6 +48,45 @@ export interface ChannelStatus {
   enabled: boolean;
 }
 
+/** Persisted state for one GPU lighting zone. Mirrors `GpuZoneState` in gpu.rs. */
+export interface GpuZoneState {
+  color: [number, number, number];
+  mode: number;
+  speed: number;
+  brightness: number;
+  direction: number;
+  enabled: boolean;
+}
+
+export interface GpuZoneStatus extends GpuZoneState {
+  id: string;
+  label: string;
+  channel: number;
+  leds: number;
+  hex: string;
+  mode_label: string;
+}
+
+export type GpuVendor = "amd" | "nvidia" | "intel" | "simulated";
+
+export interface GpuDeviceStatus {
+  id: string;
+  name: string;
+  vendor: GpuVendor;
+  transport: string;
+  model: string;
+  note: string;
+  i2c_address: number;
+  max_mode: number;
+  zones: GpuZoneStatus[];
+}
+
+export interface GpuStatus {
+  enabled: boolean;
+  devices: GpuDeviceStatus[];
+  device: DeviceInfo;
+}
+
 export interface DeviceInfo {
   name: string;
   detail: string;
@@ -97,6 +136,7 @@ export interface Snapshot {
   avg_percent: number;
   read_error: string | null;
   board: BoardInfo;
+  gpu_led: GpuStatus | null;
 }
 
 export interface ActionResult {
@@ -109,6 +149,9 @@ export interface Settings {
   poll_interval_ms: number;
   temp_unit: TempUnit;
   smoothing: boolean;
+  restore_setup_on_startup: boolean;
+  release_fans_on_exit: boolean;
+  gpu_led_enabled: boolean;
   reapply_led_on_launch: boolean;
   confirm_writes: boolean;
   accent: string;

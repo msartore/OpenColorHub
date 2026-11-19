@@ -20,6 +20,7 @@ import type {
   ElevationState,
   FanHeaderId,
   FanProfileId,
+  GpuZoneState,
   PawnioProgress,
   PawnioStatus,
   Settings,
@@ -64,6 +65,17 @@ export interface LightingPort {
   applyLed(): Promise<ActionResult>;
 }
 
+export interface GpuPort {
+  setGpuZone(
+    device: string,
+    zone: string,
+    state: GpuZoneState,
+    apply: boolean,
+  ): Promise<ActionResult>;
+  applyGpu(): Promise<ActionResult>;
+  syncGpuFromBoard(): Promise<ActionResult>;
+}
+
 export interface SetupPort {
   listSetups(kind: SetupKind): Promise<SetupList>;
   saveSetup(kind: SetupKind, name: string, id?: string): Promise<SetupList>;
@@ -100,6 +112,7 @@ export interface ColorHubPort
     SettingsPort,
     FanPort,
     LightingPort,
+    GpuPort,
     SetupPort,
     DriverPort,
     PawnioPort,

@@ -35,6 +35,7 @@ import type {
   ElevationState,
   FanHeaderId,
   FanProfileId,
+  GpuZoneState,
   PawnioProgress,
   PawnioStatus,
   Settings,
@@ -66,6 +67,12 @@ export interface LightingCommands {
   dim(percent: number): Promise<string>;
   off(channel: ChannelId): Promise<string>;
   allOff(): Promise<string>;
+}
+
+export interface GpuCommands {
+  setZone(device: string, zone: string, state: GpuZoneState, apply: boolean): Promise<string>;
+  apply(): Promise<string>;
+  syncFromBoard(): Promise<string>;
 }
 
 export interface SystemCommands {
@@ -106,6 +113,7 @@ export interface AppStore {
   error: Accessor<string | null>;
   fans: FanCommands;
   lighting: LightingCommands;
+  gpu: GpuCommands;
   system: SystemCommands;
   setups: SetupCommands;
   drivers: DriverCommands;
@@ -185,6 +193,18 @@ export function createStore(port: ColorHubPort): AppStore {
     },
   };
 
+  const gpu: GpuCommands = {
+    async setZone(device, zone, state, apply) {
+      return applyResult(await port.setGpuZone(device, zone, state, apply));
+    },
+    async apply() {
+      return applyResult(await port.applyGpu());
+    },
+    async syncFromBoard() {
+      return applyResult(await port.syncGpuFromBoard());
+    },
+  };
+
   const system: SystemCommands = {
     about: () => port.about(),
     elevation: () => port.elevation(),
@@ -227,6 +247,7 @@ export function createStore(port: ColorHubPort): AppStore {
     error,
     fans,
     lighting,
+    gpu,
     system,
     setups,
     drivers,

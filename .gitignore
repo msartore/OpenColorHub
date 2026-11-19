@@ -6,6 +6,14 @@
 .nsh/
 nsh/target/
 
+# The Tauri frontend is gone: no npm build and no WebView2 runtime.
+# These names are ignored so files from an older branch cannot be added back
+# by accident (they are the only source of webview dependencies here).
+node_modules/
+dist/
+.vite/
+src-tauri/
+
 # Tooling / OS
 .DS_Store
 Thumbs.db

@@ -10,15 +10,17 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::active::{self, ActiveSetup, RestoreReport};
 use crate::backend::{self, FanBackend, LedBackend};
 use crate::board::{self, BoardInfo};
 use crate::curve::{self, FanCurve, FanProfile};
 use crate::error::{Error, Result};
+use crate::gpu::{GpuLedBackend, GpuLedState, GpuStatus, GpuZoneState};
 use crate::model::{
     Capabilities, Channel, ChannelConfig, DeviceInfo, FanHeader, FanMode, FanSample, FanStatus,
     Snapshot, Telemetry, now_ms,
 };
-use crate::settings::Settings;
+use crate::settings::{BackendMode, Settings};
 use crate::state::RgbState;
 
 /// Smoothing factor for the EMA (0..1; higher = more responsive).
@@ -69,11 +71,17 @@ fn should_recover(led_control: bool, lighting_in_use: bool, device_present: bool
 pub struct Service {
     fan: Box<dyn FanBackend>,
     led: Box<dyn LedBackend>,
+    /// Optional GPU RGB transport (AMD ADL / NVIDIA NVAPI / Intel IGCL).
+    gpu: GpuLedBackend,
     capabilities: Capabilities,
     /// SMBIOS identity of the host board, detected once at startup.
     board: BoardInfo,
     settings: Settings,
     data_dir: PathBuf,
+    /// The live setup is written here after every successful hardware write so
+    /// the next process — a restart, an update, an elevation relaunch — can put
+    /// the machine back the way the user left it.
+    active_path: PathBuf,
     smoothed: Option<Telemetry>,
     /// Bit per header index, set once that header reports a tach. Latched so a
     /// fan stopped by a 0% curve or a 0 rpm reading does not lose its card.
@@ -107,6 +115,13 @@ impl Service {
             &board,
         );
 
+        // Keep the live setup beside the CCTL state file, so a CLI write and a
+        // GUI launch that share `rgb.state` share this too.
+        let active_path = set
+            .led
+            .state_path()
+            .map(|path| path.with_file_name("active-setup.json"))
+            .unwrap_or_else(|| data_dir.join("active-setup.json"));
         set.capabilities.notes.insert(
             0,
             format!(
@@ -122,12 +137,23 @@ impl Service {
             }
         }
 
+        let gpu_state_path = settings
+            .state_file
+            .as_deref()
+            .map(|path| path.with_file_name("gpu-led.state"))
+            .unwrap_or_else(|| data_dir.join("gpu-led.state"));
+        let mut gpu =
+            GpuLedBackend::detect(gpu_state_path, settings.backend == BackendMode::Simulated);
+        gpu.state_mut().enabled = settings.gpu_led_enabled;
+
         Self {
             fan: set.fan,
             led: set.led,
+            gpu,
             capabilities: set.capabilities,
             board,
             settings,
+            active_path,
             data_dir,
             smoothed: None,
             seen_fans: 0,
@@ -156,7 +182,70 @@ impl Service {
             return;
         }
         self.released = true;
-        self.fan.release();
+        if self.settings.release_fans_on_exit {
+            self.fan.release();
+            self.record("fan", "Fans handed back to firmware on exit");
+        }
+    }
+
+    /// Duties and curves the fan backends are actually driving. The active
+    /// setup stores only these, never the zero-duty placeholder of an untouched
+    /// header.
+    pub fn programmed_fans(&self) -> Vec<crate::setups::FanSetting> {
+        self.fan.programmed()
+    }
+
+    /// Saves the live setup after a successful write. Best effort: a full disk
+    /// must never turn a hardware write that already succeeded into an error.
+    fn persist_active(&mut self) {
+        let setup = ActiveSetup::capture(self);
+        if let Err(error) = setup.persist(&self.active_path) {
+            let message = format!("Could not save the active setup: {error}");
+            // A failing disk must not turn a successful write into an error, and
+            // repeating the same line on every change would flood the log.
+            if self
+                .activity
+                .last()
+                .is_none_or(|entry| entry.message != message)
+            {
+                self.record("settings", message);
+            }
+        }
+    }
+
+    /// Path of the persisted live setup.
+    pub fn active_path(&self) -> &Path {
+        &self.active_path
+    }
+
+    /// Replays the stored setup in a fresh process. Fans and lighting are
+    /// independent: a failure in one half is reported but does not stop the
+    /// other, and every successful write re-persists the file.
+    pub fn restore_active(&mut self) -> RestoreReport {
+        let Some(setup) = ActiveSetup::load(&self.active_path) else {
+            return RestoreReport::default();
+        };
+        let report = active::restore(&setup, self);
+        if report.restored_something() {
+            let message = match (report.fans, report.lighting) {
+                (0, _) => "Restored saved lighting at launch".to_string(),
+                (fans, true) => {
+                    format!("Restored saved setup at launch — {fans} fans and lighting")
+                }
+                (fans, false) => format!("Restored saved setup at launch — {fans} fans"),
+            };
+            self.record("restore", message);
+        }
+        if !report.errors.is_empty() {
+            self.record(
+                "restore",
+                format!(
+                    "Could not fully restore the saved setup: {}",
+                    report.errors.join("; ")
+                ),
+            );
+        }
+        report
     }
 
     pub fn settings(&self) -> &Settings {
@@ -189,7 +278,13 @@ impl Service {
 
     pub fn update_settings(&mut self, settings: Settings) -> bool {
         let needs_rebuild = settings.backend != self.settings.backend
-            || settings.state_file != self.settings.state_file;
+            || settings.state_file != self.settings.state_file
+            || settings.gpu_led_enabled != self.settings.gpu_led_enabled;
+        // A GPU toggle does not need a fresh hardware probe: keep the detected
+        // transports and their state, only flip the master enable.
+        if settings.gpu_led_enabled != self.settings.gpu_led_enabled {
+            self.gpu.state_mut().enabled = settings.gpu_led_enabled;
+        }
         self.settings = settings;
         if needs_rebuild {
             let set = backend::build(
@@ -198,8 +293,22 @@ impl Service {
                 &self.data_dir,
                 &self.board,
             );
+            self.active_path = set
+                .led
+                .state_path()
+                .map(|path| path.with_file_name("active-setup.json"))
+                .unwrap_or_else(|| self.data_dir.join("active-setup.json"));
             self.fan = set.fan;
             self.led = set.led;
+            self.gpu = GpuLedBackend::detect(
+                self.settings
+                    .state_file
+                    .as_deref()
+                    .map(|path| path.with_file_name("gpu-led.state"))
+                    .unwrap_or_else(|| self.data_dir.join("gpu-led.state")),
+                self.settings.backend == BackendMode::Simulated,
+            );
+            self.gpu.state_mut().enabled = self.settings.gpu_led_enabled;
             self.capabilities = set.capabilities;
             self.smoothed = None;
             self.last_read_error = None;
@@ -217,8 +326,22 @@ impl Service {
             &self.data_dir,
             &self.board,
         );
+        self.active_path = set
+            .led
+            .state_path()
+            .map(|path| path.with_file_name("active-setup.json"))
+            .unwrap_or_else(|| self.data_dir.join("active-setup.json"));
         self.fan = set.fan;
         self.led = set.led;
+        self.gpu = GpuLedBackend::detect(
+            self.settings
+                .state_file
+                .as_deref()
+                .map(|path| path.with_file_name("gpu-led.state"))
+                .unwrap_or_else(|| self.data_dir.join("gpu-led.state")),
+            self.settings.backend == BackendMode::Simulated,
+        );
+        self.gpu.state_mut().enabled = self.settings.gpu_led_enabled;
         self.capabilities = set.capabilities;
         self.smoothed = None;
         self.last_read_error = None;
@@ -420,6 +543,7 @@ impl Service {
             channels: self.led.state().statuses(),
             fan_device: self.fan_info(),
             led_device: self.led_info(),
+            gpu_led: Some(self.gpu.status()),
             capabilities: self.capabilities.clone(),
             avg_percent,
             read_error: self.last_read_error.clone(),
@@ -451,6 +575,7 @@ impl Service {
         };
 
         self.fan.set_pwm(header, effective)?;
+        self.persist_active();
         let message = format!(
             "{} set to PWM {} (~{}%)",
             header.label(),
@@ -479,6 +604,7 @@ impl Service {
             ));
         }
         self.fan.set_curve(header, curve)?;
+        self.persist_active();
         let message = format!("{} curve set to {}", header.label(), curve::format(curve));
         self.record("fan", message.clone());
         Ok(ActionResult {
@@ -511,6 +637,7 @@ impl Service {
                 Error::backend("No headers were programmed (empty selection)")
             }));
         }
+        self.persist_active();
         let message = format!(
             "Applied '{}' profile to {} header{}",
             profile.label(),
@@ -613,9 +740,115 @@ impl Service {
         }
         self.led.apply()?;
         self.lighting_in_use = true;
+        self.persist_active();
         Ok(ActionResult {
             snapshot: self.snapshot(),
             message: "Lighting applied".to_string(),
+        })
+    }
+
+    // -----------------------------------------------------------------------
+    // GPU RGB
+    // -----------------------------------------------------------------------
+
+    pub fn gpu_state(&self) -> &GpuLedState {
+        self.gpu.state()
+    }
+
+    pub fn gpu_status(&self) -> GpuStatus {
+        self.gpu.status()
+    }
+
+    /// Stages one GPU zone in memory. `apply` pushes it to the card at once.
+    pub fn set_gpu_zone(
+        &mut self,
+        device: String,
+        zone: String,
+        state: GpuZoneState,
+        apply: bool,
+    ) -> Result<ActionResult> {
+        if !self.settings.gpu_led_enabled {
+            return Err(Error::unavailable(
+                "GPU LED control is disabled in settings",
+            ));
+        }
+        if !self.gpu.status().devices.iter().any(|d| d.id == device) {
+            return Err(Error::unavailable(format!("Unknown GPU device '{device}'")));
+        }
+        self.gpu
+            .state_mut()
+            .zones
+            .insert(format!("{device}:{zone}"), state);
+        if !apply {
+            return Ok(ActionResult {
+                snapshot: self.snapshot(),
+                message: format!("GPU {zone} staged"),
+            });
+        }
+        let mut outcome = self.apply_gpu()?;
+        outcome.message = format!("GPU {zone} set to {}", state.hex());
+        Ok(outcome)
+    }
+
+    /// Mirrors a board channel's colour to every GPU zone. Used by the UI's
+    /// "sync with board" action.
+    pub fn sync_gpu_from_board(&mut self) -> Result<ActionResult> {
+        if !self.settings.gpu_led_enabled {
+            return Err(Error::unavailable(
+                "GPU LED control is disabled in settings",
+            ));
+        }
+        let source = self
+            .led
+            .state()
+            .statuses()
+            .into_iter()
+            .find(|c| c.enabled)
+            .map(|c| c.color)
+            .unwrap_or([255, 255, 255]);
+        let mut count = 0usize;
+        for device in self.gpu.status().devices {
+            for zone in device.zones {
+                let mut state = self
+                    .gpu
+                    .state()
+                    .zones
+                    .get(&format!("{}:{}", device.id, zone.id))
+                    .copied()
+                    .unwrap_or_default();
+                state.color = source;
+                state.enabled = true;
+                self.gpu
+                    .state_mut()
+                    .zones
+                    .insert(format!("{}:{}", device.id, zone.id), state);
+                count += 1;
+            }
+        }
+        if count == 0 {
+            return Err(Error::unavailable("No GPU RGB controller detected"));
+        }
+        let mut outcome = self.apply_gpu()?;
+        outcome.message = format!("Synced {count} GPU zone(s) with the board colour");
+        Ok(outcome)
+    }
+
+    /// Pushes every GPU zone to its controller and persists the state file.
+    pub fn apply_gpu(&mut self) -> Result<ActionResult> {
+        if !self.settings.gpu_led_enabled {
+            return Err(Error::unavailable(
+                "GPU LED control is disabled in settings",
+            ));
+        }
+        let written = self.gpu.apply()?;
+        if written > 0 {
+            self.persist_active();
+        }
+        let message = format!("GPU lighting applied to {written} zone(s)");
+        self.record("gpu", message.clone());
+        Ok(ActionResult {
+            snapshot: self.snapshot(),
+            message,
         })
     }
 
@@ -636,6 +869,12 @@ impl Service {
         }
 
         self.reassert_lighting(&mut report);
+        if self.settings.gpu_led_enabled
+            && self.gpu.state().enabled
+            && let Err(error) = self.gpu.reassert()
+        {
+            report.errors.push(format!("gpu: {error}"));
+        }
         report
     }
 
@@ -670,6 +909,29 @@ impl Service {
     }
 
     pub fn tick(&mut self) -> Snapshot {
+        // A Super I/O reset need not move the wall clock. The backend's own
+        // health probe catches it on the next tick and replays the live setup.
+        if !self.fan.healthy() {
+            let report = self.reassert_after_wake();
+            let message = if report.errors.is_empty() {
+                format!(
+                    "Re-applied the saved setup after the fan controller returned — {} fans, lighting: {}",
+                    report.fans, report.lighting
+                )
+            } else {
+                format!(
+                    "Fan controller did not answer — {}",
+                    report.errors.join("; ")
+                )
+            };
+            if self
+                .activity
+                .last()
+                .is_none_or(|entry| entry.message != message)
+            {
+                self.record("wake", message);
+            }
+        }
         if let Some(report) = self.recover_if_needed()
             && report.lighting
         {
@@ -725,6 +987,85 @@ mod tests {
             ..Settings::default()
         };
         (Service::new(settings, dir.clone()), dir)
+    }
+
+    fn restart(dir: &std::path::Path) -> Service {
+        let settings = Settings {
+            backend: BackendMode::Simulated,
+            smoothing: false,
+            ..Settings::default()
+        };
+        Service::new(settings, dir)
+    }
+
+    #[test]
+    fn settings_default_to_restoring_and_keeping_the_setup() {
+        let defaults = Settings::default();
+        assert!(defaults.restore_setup_on_startup);
+        assert!(!defaults.release_fans_on_exit);
+    }
+
+    #[test]
+    fn the_live_setup_survives_a_restart() {
+        let (mut first, dir) = service("restart");
+        first.set_fan_percent(FanHeader::Cpu, 63).unwrap();
+        first
+            .set_channel(Channel::Led, ChannelConfig::rgb([9, 8, 7], 55), true)
+            .unwrap();
+        assert!(dir.join("active-setup.json").exists());
+
+        let mut second = restart(&dir);
+        let report = second.restore_active();
+        assert!(report.found);
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert_eq!(report.fans, 1);
+        assert!(report.lighting);
+
+        let snapshot = second.snapshot();
+        let cpu = snapshot
+            .fans
+            .iter()
+            .find(|fan| fan.header == FanHeader::Cpu)
+            .unwrap();
+        assert_eq!(cpu.percent, 63);
+        assert_eq!(snapshot.channels[0].color, [9, 8, 7]);
+        assert!(
+            second.activity().iter().any(|entry| entry.kind == "restore"
+                && entry.message.contains("Restored saved setup at launch")),
+            "the restore is visible in the activity feed"
+        );
+    }
+
+    #[test]
+    fn shutdown_hands_fans_back_only_when_asked() {
+        let (mut svc, _dir) = service("release");
+        svc.set_fan_percent(FanHeader::Cpu, 40).unwrap();
+        svc.shutdown();
+        assert!(
+            !svc.activity()
+                .iter()
+                .any(|entry| entry.message.contains("handed back")),
+            "the default keeps the user's setup in force"
+        );
+
+        let dir =
+            std::env::temp_dir().join(format!("opencolorhub-svc-release-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let settings = Settings {
+            backend: BackendMode::Simulated,
+            release_fans_on_exit: true,
+            ..Settings::default()
+        };
+        let mut explicit = Service::new(settings, dir);
+        explicit.set_fan_percent(FanHeader::Cpu, 40).unwrap();
+        explicit.shutdown();
+        assert!(
+            explicit
+                .activity()
+                .iter()
+                .any(|entry| entry.message.contains("handed back"))
+        );
     }
 
     fn fan_status(header: FanHeader, rpm: u16) -> FanStatus {
@@ -1080,6 +1421,89 @@ mod tests {
         let first = svc.snapshot().temperature_c.unwrap();
         let second = svc.snapshot().temperature_c.unwrap();
         assert!((first - second).abs() < 2.0, "EMA should not jump");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ---- GPU LED ----
+
+    #[test]
+    fn a_simulated_snapshot_exposes_the_gpu_section() {
+        let (mut svc, dir) = service("gpu-snapshot");
+        let snap = svc.snapshot();
+        let gpu = snap.gpu_led.expect("GPU section present");
+        assert!(gpu.enabled);
+        assert!(gpu.device.simulated);
+        assert_eq!(gpu.devices.len(), 1);
+        assert_eq!(gpu.devices[0].zones.len(), crate::gpu::GPU_ZONES.len());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_gpu_zone_write_is_reflected_and_persisted() {
+        let (mut svc, dir) = service("gpu-write");
+        let mut state = GpuZoneState {
+            color: [255, 0, 0],
+            ..Default::default()
+        };
+        state.mode = 0x02;
+        svc.set_gpu_zone("sim0".into(), "fan".into(), state, true)
+            .unwrap();
+
+        let zone = svc.snapshot().gpu_led.unwrap().devices[0]
+            .zones
+            .iter()
+            .find(|z| z.id == "fan")
+            .unwrap()
+            .clone();
+        assert_eq!(zone.color, [255, 0, 0]);
+        assert_eq!(zone.mode, 2);
+        assert!(dir.join("gpu-led.state").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn syncing_from_the_board_copies_a_lit_colour() {
+        let (mut svc, dir) = service("gpu-sync");
+        svc.set_channel(Channel::Led, ChannelConfig::rgb([12, 34, 56], 80), true)
+            .unwrap();
+        svc.sync_gpu_from_board().unwrap();
+        let gpu = svc.snapshot().gpu_led.unwrap();
+        for zone in gpu.devices[0].zones.iter() {
+            assert_eq!(zone.color, [12, 34, 56], "zone {}", zone.id);
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn disabling_gpu_led_refuses_writes_and_keeps_state() {
+        let (mut svc, dir) = service("gpu-toggle");
+        svc.set_gpu_zone("sim0".into(), "fan".into(), GpuZoneState::default(), true)
+            .unwrap();
+        let mut settings = svc.settings().clone();
+        settings.gpu_led_enabled = false;
+        svc.update_settings(settings);
+        assert!(!svc.snapshot().gpu_led.unwrap().enabled);
+        assert!(
+            svc.set_gpu_zone("sim0".into(), "fan".into(), GpuZoneState::default(), true)
+                .is_err()
+        );
+
+        let mut settings = svc.settings().clone();
+        settings.gpu_led_enabled = true;
+        svc.update_settings(settings);
+        let gpu = svc.snapshot().gpu_led.unwrap();
+        assert!(gpu.enabled);
+        assert!(gpu.devices[0].zones.iter().any(|z| z.id == "fan"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_unknown_gpu_device_is_rejected() {
+        let (mut svc, dir) = service("gpu-unknown");
+        assert!(
+            svc.set_gpu_zone("nope".into(), "fan".into(), GpuZoneState::default(), true)
+                .is_err()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

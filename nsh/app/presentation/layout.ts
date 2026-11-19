@@ -19,7 +19,7 @@ export function layoutSize(): LayoutSize {
 
 export function sidebarWidth(): number {
   const size = layoutSize();
-  return size === "wide" ? 224 : size === "medium" ? 200 : 72;
+  return size === "wide" ? 228 : size === "medium" ? 200 : 66;
 }
 
 /** 4, 2 or 1 per row, leaving room for the gap. */

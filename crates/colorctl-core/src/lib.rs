@@ -16,6 +16,7 @@
 //! `cargo test -p colorctl-core` passes on Windows and Linux.
 
 pub mod about;
+pub mod active;
 pub mod autostart;
 pub mod backend;
 pub mod board;
@@ -23,10 +24,13 @@ pub mod chipmap;
 pub mod curve;
 pub mod drivers;
 pub mod error;
+pub mod gpu;
+pub mod gpu_catalogue;
 pub mod model;
 pub mod pawnio_install;
 pub mod platform;
 pub mod power;
+pub mod power_notify;
 pub mod service;
 pub mod settings;
 pub mod setups;
@@ -34,16 +38,23 @@ pub mod state;
 pub mod units;
 
 pub use about::AboutInfo;
+pub use active::{ActiveSetup, RestoreReport};
 pub use board::{BOARDS, BoardConfidence, BoardFamily, BoardIdentity, BoardInfo};
 pub use curve::{CURVE_POINTS, CurvePoint, FanCurve, FanProfile};
 pub use drivers::{DownloadedFile, DriverCatalogue, DriverFile, DriverKind};
 pub use error::{CurveError, Error, Result};
+pub use gpu::{
+    GPU_MODES, GPU_ZONES, GpuDeviceStatus, GpuLedBackend, GpuLedState, GpuStatus, GpuVendor,
+    GpuZoneState, GpuZoneStatus,
+};
+pub use gpu_catalogue::{GpuProfile, PciId};
 pub use model::{
     Capabilities, Channel, ChannelConfig, ChannelStatus, DeviceInfo, FAN_HEADERS, FanHeader,
     FanMode, FanSample, FanStatus, Snapshot, Telemetry,
 };
 pub use platform::{Elevation, PawnioStatus};
 pub use power::ResumeWatch;
+pub use power_notify::PowerWatcher;
 pub use service::{Service, WakeReport};
 pub use settings::{BackendMode, Settings, SettingsPatch, TempUnit};
 pub use setups::{ChannelSetting, FanSetting, Setup, SetupStore};

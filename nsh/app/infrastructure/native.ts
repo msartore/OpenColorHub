@@ -23,6 +23,7 @@ import type {
   ElevationState,
   FanHeaderId,
   FanProfileId,
+  GpuZoneState,
   PawnioProgress,
   PawnioStatus,
   Settings,
@@ -153,6 +154,12 @@ export function createNativePort(controller: Controller): ColorHubPort {
     turnOffChannel: (channel: ChannelId) =>
       call<ActionResult>(() => controller.turnOffChannel(channel)),
     applyLed: () => call<ActionResult>(() => controller.applyLed()),
+    setGpuZone: (device, zone, state, apply) =>
+      call<ActionResult>(() =>
+        controller.setGpuZone(device, zone, JSON.stringify(state), apply),
+      ),
+    applyGpu: () => call<ActionResult>(() => controller.applyGpu()),
+    syncGpuFromBoard: () => call<ActionResult>(() => controller.syncGpuFromBoard()),
 
     onTelemetry: (listener) => {
       void controller.startTelemetry((json) => {

@@ -7,7 +7,7 @@ import type { AppStore } from "../app/composition/store";
 import type { AboutInfo } from "../app/domain/model";
 import { boardDisplayName } from "../app/domain/telemetry";
 import logo from "../assets/icon.png";
-import { Chip, KeyValue, Panel } from "../components/ui";
+import { Chip, KeyValue, PageHeader, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -45,9 +45,14 @@ export function About(props: {
     void openUrl(url).catch((cause) => props.toast(String(cause), "danger"));
   };
 
+  const snap = props.store.snapshot();
+  const subtitle = snap
+    ? `${snap.fan_device.name} · ${snap.led_device.name}${snap.fan_device.simulated ? " · simulated readings" : " · hardware attached"}`
+    : "Reading controller identity…";
+
   return (
     <View class="gap-4">
-      <Text class="text-2xl font-semibold text-foreground">About</Text>
+      <PageHeader title="About" subtitle={subtitle} />
 
       <Panel>
         <View class="flex-row items-center gap-4">

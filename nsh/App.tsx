@@ -144,12 +144,19 @@ function App() {
   });
   Application.on("quit", () => deps.store.dispose());
 
+  const snapshot = () => deps.store.snapshot();
+  const status = () => ({
+    fans: snapshot()?.fan_device.simulated ? "simulated fan" : (snapshot()?.fan_device.name ?? "probing"),
+    lighting: snapshot()?.led_device.available ? "led · ok" : (snapshot()?.led_device.error ?? "probing"),
+  });
+
   return (
     <Shell
       screen={screen()}
       version={deps.store.version()}
       demo={false}
       toasts={toasts()}
+      status={status()}
       onNavigate={navigate}
     >
       <If when={deps.store.error()}>

@@ -1,7 +1,10 @@
 /** Small, unstyled-by-default primitives shared by the ported screens. */
 
-import { Text, View } from "nsh";
+import { Canvas, Text, View } from "nsh";
 import type { JSX } from "nsh";
+
+import { boardDisplayName } from "../app/domain/telemetry";
+import type { BoardInfo } from "../app/domain/model";
 
 export type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -129,5 +132,74 @@ export function KeyValue(props: { label: string; value: string; tone?: Tone }) {
         {props.value}
       </Text>
     </View>
+  );
+}
+
+/** The title row every screen shares, with an optional right-hand action. */
+export function PageHeader(props: {
+  title: string;
+  subtitle?: string;
+  actions?: JSX.Element;
+}) {
+  return (
+    <View
+      class="flex-row items-start justify-between gap-4"
+      style={{ paddingTop: 2, paddingBottom: 2 }}
+    >
+      <View class="gap-1" style={{ flexShrink: 1 }}>
+        <Text class="text-[25px] font-semibold text-foreground" style={{ letterSpacing: -0.5 }}>
+          {props.title}
+        </Text>
+        <If when={props.subtitle}>
+          <Text class="text-xs text-muted-foreground">{props.subtitle}</Text>
+        </If>
+      </View>
+      <If when={props.actions}>{props.actions}</If>
+    </View>
+  );
+}
+
+const CONFIDENCE_DOT: Record<string, string> = {
+  verified: "#4ade80",
+  compatible: "#7dd3fc",
+  unknown: "#fbbf24",
+  unsupported: "#f87171",
+};
+
+/** Board + detection confidence badge shown on the Dashboard header. */
+export function BoardBadge(props: { board: BoardInfo }) {
+  const confidence = props.board.confidence;
+  return (
+    <View
+      class="flex-row items-center gap-2 rounded-full border border-[#fbbf24]/40 bg-card px-3 py-1"
+      style={{ alignSelf: "flex-start" }}
+    >
+      <View
+        class="rounded-full"
+        style={{ width: 6, height: 6, backgroundColor: CONFIDENCE_DOT[confidence] ?? "#fbbf24" }}
+      />
+      <Text class="text-[11px] font-mono uppercase text-foreground">
+        {`CVN ${boardDisplayName(props.board)}`}
+      </Text>
+      <Text class="text-[10px] uppercase text-muted-foreground">{confidence}</Text>
+    </View>
+  );
+}
+
+/** The 200-LED strip the old Dashboard and Lighting cards used. */
+export function LedStrip(props: { cells: readonly string[]; height?: number }) {
+  return (
+    <Canvas
+      style={{ height: props.height ?? 26, width: "100%" }}
+      draw={(cx, size) => {
+        const cells = props.cells;
+        const count = Math.max(1, cells.length);
+        const cellWidth = size.width / count;
+        for (let index = 0; index < count; index += 1) {
+          cx.fillStyle = cells[index] ?? "#000000";
+          cx.fillRect(index * cellWidth, 0, Math.max(1, cellWidth - 1), size.height);
+        }
+      }}
+    />
   );
 }

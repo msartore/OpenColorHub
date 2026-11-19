@@ -1,23 +1,24 @@
 /** Dashboard: the read-only view of the machine, ported from the DOM screen. */
 
 import { Text, View, cleanup, computed, effect, signal } from "nsh";
+import type { JSX } from "nsh";
 
 import type { AppStore } from "../app/composition/store";
 import type { ActivityEntry, Snapshot } from "../app/domain/model";
 import {
   activityWindow,
-  boardDisplayName,
   deviceLabel,
   summarizeTelemetry,
   temperatureStats,
   appendSample,
 } from "../app/domain/telemetry";
 import type { TemperatureStats } from "../app/domain/telemetry";
-import { dutyColor, fanModeLabel, formatClock, formatRpm, formatTemp } from "../app/presentation/format";
-import { layoutSize, statWidth } from "../app/presentation/layout";
+import { expandFrame } from "../app/domain/lighting";
+import { fanModeLabel, formatClock, formatRpm, formatTemp } from "../app/presentation/format";
+import { layoutSize } from "../app/presentation/layout";
 import { Sparkline } from "../components/Sparkline";
 import { TemperatureGauge } from "../components/TemperatureGauge";
-import { Bar, Chip, KeyValue, Panel, Stat } from "../components/ui";
+import { Bar, BoardBadge, Chip, LedStrip, PageHeader, Panel, Stat } from "../components/ui";
 
 const HISTORY = 120;
 
@@ -25,6 +26,12 @@ function supportTone(confidence: string): "ok" | "warn" | "danger" {
   if (confidence === "verified") return "ok";
   if (confidence === "unsupported") return "danger";
   return "warn";
+}
+
+/** Three columns on a desktop, two on a medium window, one on a phone. */
+function tileWidth(): `${number}%` {
+  const size = layoutSize();
+  return size === "wide" ? "32%" : size === "medium" ? "49%" : "100%";
 }
 
 export function Dashboard(props: { store: AppStore }) {
@@ -62,37 +69,113 @@ export function Dashboard(props: { store: AppStore }) {
   const tempText = (celsius: number): string =>
     formatTemp(celsius, props.store.settings().temp_unit, 0);
 
+  const tiles = (): JSX.Element => {
+    const snap = props.store.snapshot();
+    const report = summary();
+    return (
+      <View
+        class="gap-3"
+        style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "stretch" }}
+      >
+        <View style={{ width: tileWidth() }}>
+          <Stat
+            label="Average duty"
+            value={String(snap?.avg_percent ?? 0)}
+            unit="%"
+            hint={`across ${report?.present.length ?? 0} headers`}
+            tone={(snap?.avg_percent ?? 0) > 85 ? "warn" : "ok"}
+          />
+        </View>
+        <View style={{ width: tileWidth() }}>
+          <Stat
+            label="Total rpm"
+            value={formatRpm(report?.totalRpm ?? 0)}
+            unit="rpm"
+            hint={`${report?.idle ?? 0} idle`}
+          />
+        </View>
+        <View style={{ width: tileWidth() }}>
+          <Stat
+            label="Idle headers"
+            value={String(report?.idle ?? 0)}
+            hint={`${report?.spinning.length ?? 0} spinning`}
+          />
+        </View>
+        <View style={{ width: tileWidth() }}>
+          <Stat
+            label="Channels lit"
+            value={String(report?.lit.length ?? 0)}
+            hint={`${report?.litLeds ?? 0} of ${report?.totalLeds ?? 0} LEDs`}
+            tone={report?.lit.length ? "ok" : "muted"}
+          />
+        </View>
+        <View style={{ width: tileWidth() }}>
+          <Stat
+            label="Curve driven"
+            value={String(report?.curved ?? 0)}
+            hint="headers on SmartFan"
+          />
+        </View>
+        <View style={{ width: tileWidth() }}>
+          <Stat
+            label="LEDs lit"
+            value={String(report?.litLeds ?? 0)}
+            hint={`of ${report?.totalLeds ?? 0}`}
+            tone={report?.litLeds ? "ok" : "muted"}
+          />
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View class="gap-4">
-      <View class="flex-row items-center justify-between gap-3">
-        <Text class="text-2xl font-semibold text-foreground">Dashboard</Text>
-        <If when={props.store.snapshot()}>
-          {(snapshot) => (
-            <Chip
-              label={`${boardDisplayName(snapshot().board)} · ${snapshot().board.confidence}`}
-              tone={supportTone(snapshot().board.confidence)}
-            />
-          )}
-        </If>
-      </View>
+      <PageHeader
+        title="Dashboard"
+        actions={
+          <If when={props.store.snapshot()}>
+            {(snapshot) => <BoardBadge board={snapshot().board} />}
+          </If>
+        }
+      />
 
       <If when={props.store.snapshot()} else={<Panel title="Waiting for the first reading" />}>
         {(snapshot) => (
           <View class="gap-4">
-            <View class="flex-row gap-3" style={{ alignItems: "stretch" }}>
-              <View style={{ flex: 1 }}>
+            <If when={snapshot().capabilities.notes.length > 0}>
+              <View
+                class="flex-row items-center gap-3 rounded-[10px] border border-border bg-card px-4 py-3"
+                style={{ borderLeftWidth: 2, borderLeftColor: "#7dd3fc" }}
+              >
+                <Text class="text-base text-[#7dd3fc]">ⓘ</Text>
+                <Text class="text-sm font-semibold text-foreground">Hardware notes</Text>
+                <Text class="text-xs text-muted-foreground" style={{ flex: 1 }}>
+                  {snapshot().capabilities.notes.join(" · ")}
+                </Text>
+                <Text class="text-[11px] text-muted-foreground">details</Text>
+              </View>
+            </If>
+
+            <View
+              class="gap-4"
+              style={{
+                flexDirection: layoutSize() === "narrow" ? "column" : "row",
+                alignItems: "stretch",
+              }}
+            >
+              <View style={{ flex: 1.35 }}>
                 <Panel title="Motherboard temperature">
+                  <If when={snapshot().fan_device.simulated}>
+                    <View style={{ alignSelf: "flex-start" }}>
+                      <Chip label="simulated" tone="warn" />
+                    </View>
+                  </If>
                   <View class="flex-row items-center gap-4" style={{ flexWrap: "wrap" }}>
                     <TemperatureGauge
                       temperature={() => snapshot().temperature_c}
                       unit={() => props.store.settings().temp_unit}
                     />
-                    <View class="gap-1" style={{ flex: 1, minWidth: 200 }}>
-                      <View class="flex-row items-center gap-2">
-                        <If when={snapshot().fan_device.simulated}>
-                          <Chip label="simulated" tone="warn" />
-                        </If>
-                      </View>
+                    <View class="gap-1" style={{ flex: 1, minWidth: 180 }}>
                       <Text class="text-xs text-muted-foreground">
                         {snapshot().temperature_source ?? "unknown sensor"}
                         {snapshot().temperature_register
@@ -102,50 +185,26 @@ export function Dashboard(props: { store: AppStore }) {
                       <If when={stats()}>
                         {(current) => (
                           <Text class="text-[11px] font-mono text-muted-foreground">
-                            {`session min ${tempText(current().min)} · mean ${tempText(current().mean)} · max ${tempText(current().max)} · ${current().count} samples`}
+                            {`session min ${tempText(current().min)} · mean ${tempText(current().mean)} · max ${tempText(current().max)}`}
                           </Text>
                         )}
                       </If>
-                      <Sparkline samples={history} />
                     </View>
+                  </View>
+                  <Sparkline samples={history} />
+                  <View class="flex-row items-baseline justify-between">
+                    <Text class="text-xs text-primary">{`now ${tempText(snapshot().temperature_c ?? 0)}`}</Text>
+                    <Text class="text-[11px] text-muted-foreground">
+                      {`${stats()?.count ?? 0} samples`}
+                    </Text>
+                    <Text class="text-[11px] text-muted-foreground">
+                      {`range ${tempText(stats()?.min ?? 0)} – ${tempText(stats()?.max ?? 0)}`}
+                    </Text>
                   </View>
                 </Panel>
               </View>
-            </View>
 
-            <View class="flex-row gap-3" style={{ flexWrap: "wrap" }}>
-              <View style={{ width: statWidth() }}>
-                <Stat
-                  label="Average duty"
-                  value={String(snapshot().avg_percent)}
-                  unit="%"
-                  hint={`across ${summary()?.present.length ?? 0} headers`}
-                  tone={snapshot().avg_percent > 85 ? "warn" : "ok"}
-                />
-              </View>
-              <View style={{ width: statWidth() }}>
-                <Stat
-                  label="Total rpm"
-                  value={formatRpm(summary()?.totalRpm ?? 0)}
-                  unit="rpm"
-                  hint={`${summary()?.idle ?? 0} idle`}
-                />
-              </View>
-              <View style={{ width: statWidth() }}>
-                <Stat
-                  label="Channels lit"
-                  value={String(summary()?.lit.length ?? 0)}
-                  hint={`${summary()?.litLeds ?? 0} of ${summary()?.totalLeds ?? 0} LEDs`}
-                  tone={summary()?.lit.length ? "ok" : "muted"}
-                />
-              </View>
-              <View style={{ width: statWidth() }}>
-                <Stat
-                  label="Curve driven"
-                  value={String(summary()?.curved ?? 0)}
-                  hint="headers on SmartFan"
-                />
-              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>{tiles()}</View>
             </View>
 
             <View
@@ -155,14 +214,24 @@ export function Dashboard(props: { store: AppStore }) {
                 alignItems: "flex-start",
               }}
             >
-              <View style={{ flex: 1 }}>
-                <Panel title="Fan headers" subtitle="Live tachometer and duty">
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Panel
+                  title="Fan headers"
+                  actions={
+                    <Text class="text-xs text-muted-foreground">Open fan control</Text>
+                  }
+                >
                   <View class="gap-2">
                     <Each of={summary()?.present ?? []} key={(fan) => fan.header}>
                       {(fan) => (
                         <View class="gap-1">
                           <View class="flex-row items-baseline justify-between gap-3">
-                            <Text class="text-xs text-foreground">{fan().label}</Text>
+                            <View class="flex-row items-baseline gap-1.5" style={{ flexShrink: 1 }}>
+                              <Text class="text-xs text-foreground">{fan().label}</Text>
+                              <Text class="text-[11px] text-muted-foreground">
+                                {fanModeLabel(fan().mode, fan().curve_percent)}
+                              </Text>
+                            </View>
                             <View class="flex-row items-baseline gap-2">
                               <Text class="text-xs font-mono text-muted-foreground">
                                 {`${formatRpm(fan().rpm)} rpm`}
@@ -170,10 +239,7 @@ export function Dashboard(props: { store: AppStore }) {
                               <Text class="text-xs font-mono text-foreground">{`${fan().percent}%`}</Text>
                             </View>
                           </View>
-                          <Bar percent={fan().percent} color={dutyColor(fan().percent)} thin />
-                          <Text class="text-[11px] text-muted-foreground">
-                            {fanModeLabel(fan().mode, fan().curve_percent)}
-                          </Text>
+                          <Bar percent={fan().percent} color="#4ade80" thin />
                         </View>
                       )}
                     </Each>
@@ -195,30 +261,47 @@ export function Dashboard(props: { store: AppStore }) {
                 </Panel>
               </View>
 
-              <View style={{ flex: 1 }}>
-                <Panel title="System" subtitle="What this build is talking to">
-                  <View class="gap-1.5">
-                    <KeyValue label="board" value={boardDisplayName(snapshot().board)} />
-                    <KeyValue
-                      label="support"
-                      value={snapshot().board.confidence}
-                      tone={supportTone(snapshot().board.confidence)}
-                    />
-                    <KeyValue label="fan backend" value={deviceLabel(snapshot().fan_device)} />
-                    <KeyValue label="lighting backend" value={deviceLabel(snapshot().led_device)} />
-                    <KeyValue
-                      label="bios"
-                      value={snapshot().board.identity?.bios_version?.trim() || "—"}
-                    />
-                    <KeyValue
-                      label="temp sensor"
-                      value={snapshot().temperature_source ?? "—"}
-                    />
-                    <KeyValue
-                      label="polling"
-                      value={`${props.store.settings().poll_interval_ms} ms`}
-                    />
-                    <KeyValue label="last sample" value={formatClock(snapshot().timestamp_ms)} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Panel title="Lighting" actions={<Text class="text-xs text-muted-foreground">Edit lighting</Text>}>
+                  <View
+                    style={{
+                      padding: 4,
+                      borderRadius: 4,
+                      backgroundColor: "#0a0e11",
+                      borderWidth: 1,
+                      borderColor: "#1a2128",
+                    }}
+                  >
+                    <LedStrip cells={expandFrame(snapshot().channels)} height={22} />
+                  </View>
+                  <Text class="text-xs text-muted-foreground">
+                    {`${summary()?.lit.length ?? 0} of ${snapshot().channels.length} channels lit · ${summary()?.litLeds ?? 0} LEDs`}
+                  </Text>
+                  <View class="gap-0">
+                    <Each of={snapshot().channels} key={(channel) => channel.id}>
+                      {(channel) => (
+                        <View
+                          class="flex-row items-center gap-3 border-b border-border py-1"
+                        >
+                          <Text class="text-xs text-foreground" style={{ width: 70 }}>
+                            {channel().label}
+                          </Text>
+                          <Text class="text-[11px] font-mono text-muted-foreground" style={{ width: 34 }}>
+                            {String(channel().leds)}
+                          </Text>
+                          <View
+                            class="h-2.5 w-2.5 rounded-[2px]"
+                            style={{ backgroundColor: channel().render_hex }}
+                          />
+                          <Text class="text-[11px] font-mono text-muted-foreground" style={{ flex: 1 }}>
+                            {channel().hex.toUpperCase()}
+                          </Text>
+                          <Text class="text-[11px] font-mono text-foreground">
+                            {`${channel().brightness}%`}
+                          </Text>
+                        </View>
+                      )}
+                    </Each>
                   </View>
                 </Panel>
               </View>
@@ -247,13 +330,10 @@ export function Dashboard(props: { store: AppStore }) {
               </View>
             </Panel>
 
-            <If when={snapshot().capabilities.notes.length > 0}>
-              <Panel title="Hardware notes" subtitle="Why a backend degraded">
-                <Each of={snapshot().capabilities.notes} key="index">
-                  {(note) => <Text class="text-xs text-muted-foreground">{note()}</Text>}
-                </Each>
-              </Panel>
-            </If>
+            <View class="flex-row gap-4" style={{ flexWrap: "wrap" }}>
+              <KeyValueLine label="fan backend" value={deviceLabel(snapshot().fan_device)} />
+              <KeyValueLine label="lighting backend" value={deviceLabel(snapshot().led_device)} />
+            </View>
           </View>
         )}
       </If>
@@ -261,4 +341,11 @@ export function Dashboard(props: { store: AppStore }) {
   );
 }
 
-
+function KeyValueLine(props: { label: string; value: string }) {
+  return (
+    <View class="flex-row items-baseline gap-2">
+      <Text class="text-[11px] text-muted-foreground">{`${props.label}:`}</Text>
+      <Text class="text-[11px] font-mono text-foreground">{props.value}</Text>
+    </View>
+  );
+}

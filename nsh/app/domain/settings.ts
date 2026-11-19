@@ -16,6 +16,9 @@ export const DEFAULT_SETTINGS: Settings = {
   poll_interval_ms: 1000,
   temp_unit: "celsius",
   smoothing: true,
+  restore_setup_on_startup: true,
+  release_fans_on_exit: false,
+  gpu_led_enabled: true,
   reapply_led_on_launch: false,
   confirm_writes: true,
   accent: DEFAULT_ACCENT,
@@ -40,6 +43,9 @@ export const SETTINGS_RESET_PATCH: SettingsPatch = {
   poll_interval_ms: DEFAULT_SETTINGS.poll_interval_ms,
   temp_unit: DEFAULT_SETTINGS.temp_unit,
   smoothing: DEFAULT_SETTINGS.smoothing,
+  restore_setup_on_startup: DEFAULT_SETTINGS.restore_setup_on_startup,
+  release_fans_on_exit: DEFAULT_SETTINGS.release_fans_on_exit,
+  gpu_led_enabled: DEFAULT_SETTINGS.gpu_led_enabled,
   reapply_led_on_launch: DEFAULT_SETTINGS.reapply_led_on_launch,
   confirm_writes: DEFAULT_SETTINGS.confirm_writes,
   accent: DEFAULT_SETTINGS.accent,
@@ -67,6 +73,18 @@ export function normalizeSettings(settings: Settings): Settings {
     backend: BACKEND_MODES.includes(settings.backend) ? settings.backend : "auto",
     poll_interval_ms: Math.min(POLL_MAX_MS, Math.max(POLL_MIN_MS, Math.round(poll))),
     temp_unit: TEMP_UNITS.includes(settings.temp_unit) ? settings.temp_unit : "celsius",
+    restore_setup_on_startup:
+      typeof settings.restore_setup_on_startup === "boolean"
+        ? settings.restore_setup_on_startup
+        : DEFAULT_SETTINGS.restore_setup_on_startup,
+    release_fans_on_exit:
+      typeof settings.release_fans_on_exit === "boolean"
+        ? settings.release_fans_on_exit
+        : DEFAULT_SETTINGS.release_fans_on_exit,
+    gpu_led_enabled:
+      typeof settings.gpu_led_enabled === "boolean"
+        ? settings.gpu_led_enabled
+        : DEFAULT_SETTINGS.gpu_led_enabled,
     accent: isAccent(settings.accent) ? settings.accent : DEFAULT_ACCENT,
     low_duty_warning: Math.min(100, Math.max(0, Math.round(lowDuty))),
     last_screen: settings.last_screen.trim() || DEFAULT_SETTINGS.last_screen,
@@ -81,6 +99,13 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   if (patch.poll_interval_ms !== undefined) next.poll_interval_ms = patch.poll_interval_ms;
   if (patch.temp_unit !== undefined) next.temp_unit = patch.temp_unit;
   if (patch.smoothing !== undefined) next.smoothing = patch.smoothing;
+  if (patch.restore_setup_on_startup !== undefined) {
+    next.restore_setup_on_startup = patch.restore_setup_on_startup;
+  }
+  if (patch.release_fans_on_exit !== undefined) {
+    next.release_fans_on_exit = patch.release_fans_on_exit;
+  }
+  if (patch.gpu_led_enabled !== undefined) next.gpu_led_enabled = patch.gpu_led_enabled;
   if (patch.reapply_led_on_launch !== undefined) {
     next.reapply_led_on_launch = patch.reapply_led_on_launch;
   }

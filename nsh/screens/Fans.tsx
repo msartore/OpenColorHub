@@ -27,7 +27,7 @@ import { confirmWrite } from "../components/confirm";
 import { CurveChart } from "../components/CurveChart";
 import { PawnioDialog } from "../components/PawnioDialog";
 import { SetupsDialog } from "../components/SetupsDialog";
-import { Bar, Chip, Notice, Panel } from "../components/ui";
+import { Bar, Chip, Notice, PageHeader, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -324,15 +324,14 @@ export function Fans(props: {
 
   return (
     <View class="gap-4">
-      <View class="flex-row items-center justify-between gap-3" style={{ flexWrap: "wrap" }}>
-        <View class="gap-1">
-          <Text class="text-2xl font-semibold text-foreground">Fan control</Text>
-          <Text class="text-xs text-muted-foreground">
-            {summary().length === 0
-              ? "No header is reporting a speed."
-              : `${summary().length} of ${props.store.snapshot()?.fans.length ?? 0} headers in use`}
-          </Text>
-        </View>
+      <PageHeader
+        title="Fan control"
+        subtitle={
+          summary().length === 0
+            ? "No header is reporting a speed."
+            : `${summary().length} of ${props.store.snapshot()?.fans.length ?? 0} headers in use`
+        }
+        actions={
         <Button
           testID="fan-presets"
           class="rounded-[7px] border border-border px-3 py-1.5"
@@ -340,7 +339,8 @@ export function Fans(props: {
         >
           <Text class="text-xs text-foreground">Presets</Text>
         </Button>
-      </View>
+        }
+      />
 
       <If when={warnings().stalled.length > 0}>
         <Notice tone="danger" title="A fan is driven but not rotating">

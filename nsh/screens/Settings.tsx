@@ -1,8 +1,8 @@
 /** Settings: backend, polling, display, safety, startup, privileges and paths. */
 
 import { Application } from "nsh/desktop";
-import { Clipboard, Text, View, effect, signal } from "nsh";
-import { AlertDialog, Button, Progress, Slider, Switch } from "nsh/base";
+import { Clipboard, Scroll, Text, View, effect, signal } from "nsh";
+import { AlertDialog, Button, Progress, Slider, Switch, TextView } from "nsh/base";
 import {
   checkForUpdate,
   downloadUpdate,
@@ -25,7 +25,7 @@ import { FAN_HEADERS } from "../app/domain/fan";
 import { boardDisplayName, deviceLabel } from "../app/domain/telemetry";
 import { SETTINGS_RESET_PATCH } from "../app/domain/settings";
 import { isNarrow } from "../app/presentation/layout";
-import { KeyValue, Panel } from "../components/ui";
+import { KeyValue, PageHeader, Panel } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -264,7 +264,7 @@ export function SettingsScreen(props: {
 
   return (
     <View class="gap-4">
-      <Text class="text-2xl font-semibold text-foreground">Settings</Text>
+      <PageHeader title="Settings" />
 
       <View
         class="gap-4"
@@ -310,9 +310,11 @@ export function SettingsScreen(props: {
             <View class="gap-2">
               <Text class="text-xs text-foreground">{`OpenColorHub ${found().version} is available.`}</Text>
               <If when={found().notes}>
-                <Text class="text-[11px] text-muted-foreground">
-                  {found().notes?.slice(0, 900)}
-                </Text>
+                <Scroll style={{ maxHeight: 190 }}>
+                  <View class="rounded-[7px] border border-border bg-muted/30 p-3">
+                    <TextView markdown={found().notes?.slice(0, 8000) ?? ""} />
+                  </View>
+                </Scroll>
               </If>
               <Button
                 testID="updates-install"
@@ -474,6 +476,45 @@ export function SettingsScreen(props: {
         </Switch>
 
         <Switch
+          checked={draft().gpu_led_enabled}
+          testID="settings-gpu-led"
+          accessibilityLabel="GPU LED control"
+          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
+          thumbClass="w-3 h-3 rounded-full bg-foreground"
+          onChange={({ checked }) => void save({ gpu_led_enabled: checked })}
+        >
+          <Text class="text-xs text-muted-foreground">
+            GPU LED control — drive GPU RGB at I²C 0x36 through AMD ADL, NVIDIA NVAPI or Intel IGCL when a controller is present
+          </Text>
+        </Switch>
+
+        <Switch
+          checked={draft().restore_setup_on_startup}
+          testID="settings-restore-setup"
+          accessibilityLabel="Restore saved setup at startup"
+          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
+          thumbClass="w-3 h-3 rounded-full bg-foreground"
+          onChange={({ checked }) => void save({ restore_setup_on_startup: checked })}
+        >
+          <Text class="text-xs text-muted-foreground">
+            Restore saved setup at startup — re-apply the last fan and lighting settings
+          </Text>
+        </Switch>
+
+        <Switch
+          checked={draft().release_fans_on_exit}
+          testID="settings-release-fans"
+          accessibilityLabel="Release fans on exit"
+          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
+          thumbClass="w-3 h-3 rounded-full bg-foreground"
+          onChange={({ checked }) => void save({ release_fans_on_exit: checked })}
+        >
+          <Text class="text-xs text-muted-foreground">
+            Release fans on exit — hand control back to the BIOS instead of keeping your setup
+          </Text>
+        </Switch>
+
+        <Switch
           checked={draft().reapply_led_on_launch}
           accessibilityLabel="Re-apply lighting at launch"
           trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
@@ -481,7 +522,7 @@ export function SettingsScreen(props: {
           onChange={({ checked }) => void save({ reapply_led_on_launch: checked })}
         >
           <Text class="text-xs text-muted-foreground">
-            Re-apply lighting at launch — push the stored CCTL state at startup
+            Re-apply lighting at launch — fallback for installs with no saved setup yet
           </Text>
         </Switch>
 

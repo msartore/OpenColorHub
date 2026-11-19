@@ -12,16 +12,17 @@ export type ScreenId = "dashboard" | "fans" | "leds" | "drivers" | "settings" | 
 export interface ScreenMeta {
   id: ScreenId;
   label: string;
+  hint: string;
   glyph: string;
 }
 
 export const SCREENS: readonly ScreenMeta[] = [
-  { id: "dashboard", label: "Dashboard", glyph: "▦" },
-  { id: "fans", label: "Fan control", glyph: "◉" },
-  { id: "leds", label: "Lighting", glyph: "✦" },
-  { id: "drivers", label: "Drivers", glyph: "⇩" },
-  { id: "settings", label: "Settings", glyph: "⚙" },
-  { id: "about", label: "About", glyph: "ⓘ" },
+  { id: "dashboard", label: "Dashboard", hint: "Overview", glyph: "▦" },
+  { id: "fans", label: "Fan control", hint: "Headers & curves", glyph: "◉" },
+  { id: "leds", label: "Lighting", hint: "Channels & colour", glyph: "✦" },
+  { id: "drivers", label: "Drivers", hint: "Board downloads", glyph: "⇩" },
+  { id: "settings", label: "Settings", hint: "Backend & display", glyph: "⚙" },
+  { id: "about", label: "About", hint: "Board detection", glyph: "ⓘ" },
 ];
 
 export interface Toast {
@@ -42,6 +43,7 @@ export function Shell(props: {
   version: string;
   demo: boolean;
   toasts: readonly Toast[];
+  status?: { fans: string; lighting: string };
   onNavigate: (screen: ScreenId) => void;
   children?: JSX.Element;
 }) {
@@ -70,11 +72,16 @@ export function Shell(props: {
           class="flex-row items-center gap-2"
           style={{ justifyContent: wide() ? "flex-start" : "center", paddingLeft: wide() ? 4 : 0 }}
         >
-          <Image src={logo} style={{ width: 28, height: 28, borderRadius: 7 }} />
+          <Image src={logo} style={{ width: 30, height: 30, borderRadius: 8 }} />
           <If when={wide()}>
             <View class="gap-0">
-              <Text class="text-sm font-semibold text-foreground">OpenColorHub</Text>
-              <Text class="text-[11px] text-muted-foreground">fan + ARGB control</Text>
+              <Text class="text-[15px] font-semibold text-foreground">OpenColorHub</Text>
+              <Text
+                class="text-[10px] uppercase text-muted-foreground"
+                style={{ letterSpacing: 1.6 }}
+              >
+                fan &amp; lighting
+              </Text>
             </View>
           </If>
         </View>
@@ -110,7 +117,10 @@ export function Shell(props: {
                   {item().glyph}
                 </Text>
                 <If when={wide()}>
-                  <Text class="text-sm">{item().label}</Text>
+                  <View class="gap-0">
+                    <Text class="text-[13px] text-foreground">{item().label}</Text>
+                    <Text class="text-[10.5px] text-muted-foreground">{item().hint}</Text>
+                  </View>
                 </If>
               </Button>
             )}
@@ -120,14 +130,33 @@ export function Shell(props: {
         <View style={{ flex: 1 }} />
 
         <If when={wide()}>
-          <View class="gap-1 px-1">
-            <If when={props.demo}>
-              <Text class="text-[11px] text-[#fbbf24]">browser demo</Text>
+          <View class="gap-2 px-1">
+            <If when={props.status}>
+              {(status) => (
+                <View class="gap-1.5">
+                  <View class="flex-row items-center gap-2">
+                    <Text class="text-[10px] uppercase tracking-wide text-muted-foreground">fans</Text>
+                    <View class="rounded-full border border-[#fbbf24]/40 bg-card px-2 py-0.5">
+                      <Text class="text-[10px] text-[#fbbf24]">{status().fans}</Text>
+                    </View>
+                  </View>
+                  <View class="flex-row items-center gap-2">
+                    <Text class="text-[10px] uppercase tracking-wide text-muted-foreground">lighting</Text>
+                    <View class="rounded-full border border-primary/40 bg-card px-2 py-0.5">
+                      <Text class="text-[10px] text-primary">{status().lighting}</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
             </If>
-            <Text class="text-[11px] font-mono text-muted-foreground">
-              {props.version ? `v${props.version}` : "—"}
-            </Text>
-            <Text class="text-[11px] text-muted-foreground">GPL-3.0</Text>
+            <View class="gap-0 border-t border-border pt-1.5">
+              <If when={props.demo}>
+                <Text class="text-[11px] text-[#fbbf24]">browser demo</Text>
+              </If>
+              <Text class="text-[11px] font-mono text-muted-foreground">
+                {props.version ? `v${props.version}` : "—"} / GPL-3.0
+              </Text>
+            </View>
           </View>
         </If>
       </View>

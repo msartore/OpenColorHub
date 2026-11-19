@@ -84,6 +84,10 @@ pub const POLL_MIN_MS: u64 = 250;
 pub const POLL_MAX_MS: u64 = 10_000;
 pub const POLL_DEFAULT_MS: u64 = 1_000;
 
+fn default_gpu_led_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -92,7 +96,18 @@ pub struct Settings {
     pub temp_unit: TempUnit,
     /// Exponential smoothing of RPM/temperature readings.
     pub smoothing: bool,
+    /// Replay the persisted live setup — fan duties/curves and lighting — at
+    /// every launch, regardless of `reapply_led_on_launch` or autostart.
+    pub restore_setup_on_startup: bool,
+    /// Hand fans back to the chip's SmartFan when the app exits cleanly.
+    /// Off by default: the stored setup is meant to stay in force.
+    #[serde(default)]
+    pub release_fans_on_exit: bool,
     pub reapply_led_on_launch: bool,
+    /// Drive GPU RGB (AMD ADL / NVIDIA NVAPI / Intel IGCL) alongside the
+    /// onboard controller. Detected controllers are written at 0x36.
+    #[serde(default = "default_gpu_led_enabled")]
+    pub gpu_led_enabled: bool,
     pub confirm_writes: bool,
     /// UI accent colour (`#rrggbb`).
     pub accent: String,
@@ -114,7 +129,10 @@ impl Default for Settings {
             poll_interval_ms: POLL_DEFAULT_MS,
             temp_unit: TempUnit::default(),
             smoothing: true,
+            restore_setup_on_startup: true,
+            release_fans_on_exit: false,
             reapply_led_on_launch: false,
+            gpu_led_enabled: true,
             confirm_writes: true,
             accent: "#4ade80".to_string(),
             state_file: None,
@@ -185,8 +203,17 @@ impl Settings {
         if let Some(v) = patch.smoothing {
             self.smoothing = v;
         }
+        if let Some(v) = patch.restore_setup_on_startup {
+            self.restore_setup_on_startup = v;
+        }
+        if let Some(v) = patch.release_fans_on_exit {
+            self.release_fans_on_exit = v;
+        }
         if let Some(v) = patch.reapply_led_on_launch {
             self.reapply_led_on_launch = v;
+        }
+        if let Some(v) = patch.gpu_led_enabled {
+            self.gpu_led_enabled = v;
         }
         if let Some(v) = patch.confirm_writes {
             self.confirm_writes = v;
@@ -232,7 +259,10 @@ pub struct SettingsPatch {
     pub poll_interval_ms: Option<u64>,
     pub temp_unit: Option<TempUnit>,
     pub smoothing: Option<bool>,
+    pub restore_setup_on_startup: Option<bool>,
+    pub release_fans_on_exit: Option<bool>,
     pub reapply_led_on_launch: Option<bool>,
+    pub gpu_led_enabled: Option<bool>,
     pub confirm_writes: Option<bool>,
     pub accent: Option<String>,
     pub state_file: Option<Option<PathBuf>>,
@@ -406,5 +436,45 @@ mod tests {
         assert_eq!(TempUnit::Celsius.convert(50.0), 50.0);
         assert_eq!(TempUnit::Fahrenheit.convert(0.0), 32.0);
         assert_eq!(TempUnit::Fahrenheit.convert(100.0), 212.0);
+    }
+
+    #[test]
+    fn gpu_toggle_round_trips_through_a_patch() {
+        let mut s = Settings::default();
+        assert!(s.gpu_led_enabled);
+        s.apply_patch(SettingsPatch {
+            gpu_led_enabled: Some(false),
+            ..Default::default()
+        });
+        assert!(!s.gpu_led_enabled);
+        s.apply_patch(SettingsPatch {
+            gpu_led_enabled: Some(true),
+            ..Default::default()
+        });
+        assert!(s.gpu_led_enabled);
+    }
+
+    #[test]
+    fn gpu_toggle_survives_a_disk_round_trip() {
+        let dir = temp_dir("gpu-toggle");
+        let path = dir.join("settings.json");
+        let s = Settings {
+            gpu_led_enabled: false,
+            ..Settings::default()
+        };
+        s.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert!(!loaded.gpu_led_enabled);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_old_settings_file_defaults_gpu_on() {
+        let dir = temp_dir("gpu-legacy");
+        let path = dir.join("settings.json");
+        std::fs::write(&path, "{}").unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert!(loaded.gpu_led_enabled);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

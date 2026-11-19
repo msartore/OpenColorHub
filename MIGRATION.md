@@ -6,6 +6,26 @@ project in [`nsh/`](nsh/README.md), sharing `crates/colorctl-core` with the
 `colorctl` CLI. Hardware verification on a Colorful board is the only remaining
 external check.
 
+## Parity with `main` (v0.5.1)
+
+The port now carries the features that landed on `main` after the fork:
+
+- **GPU LED control** — `crates/colorctl-core/src/gpu.rs` and `gpu_catalogue.rs`,
+  exposed through three `Controller` methods (`setGpuZone`, `applyGpu`,
+  `syncGpuFromBoard`). The Lighting screen has collapsible Motherboard and GPU
+  device groups; each GPU zone has a colour swatch, hardware-effect picker,
+  brightness and Apply/Off. See [`docs/GPU-LED.md`](docs/GPU-LED.md).
+- **Restore saved setup at launch / on resume** — the live setup is persisted
+  after every successful write and replayed at startup (six retries while a
+  controller settles). OS power notifications and the clock-gap fallback
+  re-assert fans, lighting and GPU zones after a wake. Settings exposes
+  *Restore saved setup at startup* and *Release fans on exit*.
+- **Markdown release notes** — the update card renders the release body with
+  the native `TextView`, capped at 8000 characters.
+
+[`nsh/UI-MATCH.md`](nsh/UI-MATCH.md) records the UI fidelity contract, the
+token map and the remaining deviations against the v0.5.1 screenshots.
+
 ## What changed
 
 | Before | After |

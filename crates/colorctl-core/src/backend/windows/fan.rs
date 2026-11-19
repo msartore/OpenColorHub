@@ -468,6 +468,34 @@ impl FanBackend for PawnIoFan {
         Ok(written)
     }
 
+    fn programmed(&self) -> Vec<crate::setups::FanSetting> {
+        let mut out = Vec::new();
+        for slot in 0..TACH_SLOTS {
+            let header = FanHeader::all()[slot];
+            if let Some(duty) = self.manual[slot] {
+                out.push(crate::setups::FanSetting {
+                    header,
+                    percent: crate::units::pwm_to_pct(duty),
+                    curve: None,
+                });
+            } else if let Some(curve) = self.curves[slot] {
+                out.push(crate::setups::FanSetting {
+                    header,
+                    percent: 0,
+                    curve: Some(curve),
+                });
+            }
+        }
+        out
+    }
+
+    /// One duty read-back is enough to know the Super I/O still answers. The
+    /// poll already reads far more; this only catches a device that vanished
+    /// between ticks (a driver reset, for instance).
+    fn healthy(&mut self) -> bool {
+        self.read_byte(PWM_BANK, PWM_OUT_REGISTERS[0]).is_ok()
+    }
+
     /// Hands every channel this session put in manual mode back to the chip's
     /// own SmartFan control, so quitting does not leave a fan pinned at the
     /// last duty the app happened to write.

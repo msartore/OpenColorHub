@@ -204,6 +204,24 @@ impl FanBackend for SimFan {
     fn reassert(&mut self) -> Result<usize> {
         Ok(self.touched.iter().filter(|t| **t).count())
     }
+
+    fn programmed(&self) -> Vec<crate::setups::FanSetting> {
+        FAN_HEADERS
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| self.touched[*index])
+            .map(|(_, header)| {
+                let config = &self.file.fans[header.index()];
+                crate::setups::FanSetting {
+                    header: *header,
+                    percent: crate::units::pwm_to_pct(config.pwm),
+                    curve: (config.mode == FanMode::SmartFan)
+                        .then_some(config.curve)
+                        .flatten(),
+                }
+            })
+            .collect()
+    }
 }
 
 /// Simulated lighting backend. Writes a *real* `CCTL` state file, so the state

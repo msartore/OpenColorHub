@@ -59,11 +59,16 @@ test("a channel applies its colour and brightness", async () => {
   app.onDialog(() => "Write");
   await app.press("Lighting");
   await app.waitFor("Frame preview");
+  // The saved setup may be restored at launch, so the switch starts in either
+  // state. Applying a channel must write either way — on means a new colour,
+  // off means the channel is handed back.
   await app.press("id:channel-enabled-argb1");
   await app.press("id:channel-apply-argb1");
   await app.wait(300);
   expect(app.dialogs().length).toBeGreaterThan(0);
-  expect(app.texts().some((text) => text.includes("set to"))).toBe(true);
+  expect(
+    app.texts().some((text) => text.includes("set to") || text.includes("turned off")),
+  ).toBe(true);
 });
 
 test("settings shows the backend, safety and paths", async () => {
@@ -74,6 +79,30 @@ test("settings shows the backend, safety and paths", async () => {
   expect(app.texts()).toContain("Safety");
   expect(app.texts()).toContain("Files & paths");
   expect(app.texts().some((text) => text.includes("Pump channel"))).toBe(true);
+});
+
+test("lighting groups the motherboard and GPU controllers", async () => {
+  const app = await open("./App.tsx");
+  await app.press("Lighting");
+  await app.waitFor("GPU LED");
+  const texts = app.texts();
+  expect(texts).toContain("Motherboard");
+  expect(texts).toContain("GPU");
+  expect(texts.some((text) => text.includes("Nuvoton RGB at I²C 0x36"))).toBe(true);
+  expect(texts.some((text) => text.includes("ARGB header"))).toBe(true);
+  expect(texts.some((text) => text.includes("Top / side"))).toBe(true);
+});
+
+test("settings offers the restore, release and GPU switches", async () => {
+  const app = await open("./App.tsx");
+  await app.press("Settings");
+  await app.waitFor("Safety");
+  const texts = app.texts();
+  expect(
+    texts.some((text) => text.includes("Restore saved setup at startup")),
+  ).toBe(true);
+  expect(texts.some((text) => text.includes("Release fans on exit"))).toBe(true);
+  expect(texts.some((text) => text.includes("GPU LED control"))).toBe(true);
 });
 
 test("about reports the detected board and build", async () => {
