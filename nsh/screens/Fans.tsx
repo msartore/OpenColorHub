@@ -28,6 +28,7 @@ import { CurveChart } from "../components/CurveChart";
 import { PawnioDialog } from "../components/PawnioDialog";
 import { SetupsDialog } from "../components/SetupsDialog";
 import { Bar, Chip, Notice, PageHeader, Panel } from "../components/ui";
+import { TablerIcon } from "../components/icons";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -337,7 +338,10 @@ export function Fans(props: {
           class="rounded-[7px] border border-border px-3 py-1.5"
           onPress={() => presetsOpen.set(true)}
         >
-          <Text class="text-xs text-foreground">Presets</Text>
+          <View class="flex-row items-center gap-1.5">
+            <TablerIcon name="bookmark" size={16} color="#9fb0bd" />
+            <Text class="text-xs text-foreground">Presets</Text>
+          </View>
         </Button>
         }
       />

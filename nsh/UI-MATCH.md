@@ -48,8 +48,10 @@ old 9.5 px uppercase labels → `text-[11px] uppercase` (NSH has no 9.5 px step)
   baseline element.
 - **Global colour picker** is a click-to-open swatch (`ColorPicker`) rather than
   the old always-compact `<input type="color">`; the effect is identical.
-- **Icon set**: Unicode glyphs stand in for the old Tabler SVG paths; the
-  bookmark, chevron and nav icons are not pixel-identical.
+- **Icon rendering**: the Tabler outline paths from `src/components/icons.ts`
+  are inlined in `components/icons.tsx` and drawn natively with `Canvas` and
+  `Path2D`. The six nav glyphs, bookmark and chevron are the same paths as the
+  old app; only the renderer differs (native canvas rather than DOM SVG).
 - **Appearance**: `theme.json` declares the same colours for light and dark —
   the app forces the dark appearance in `nsh.json`, matching the old app's
   `color-scheme: dark`.

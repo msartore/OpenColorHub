@@ -33,6 +33,7 @@ import {
   gpuPercentToBrightness,
 } from "../app/domain/gpu";
 import { confirmWrite } from "../components/confirm";
+import { TablerIcon } from "../components/icons";
 import { SetupsDialog } from "../components/SetupsDialog";
 import { Chip, LedStrip, PageHeader, Panel } from "../components/ui";
 import { channelWidth, dialogWidth } from "../app/presentation/layout";
@@ -148,7 +149,7 @@ function DeviceGroup(props: {
             boxShadow: `0 0 18px ${props.dot}`,
           }}
         />
-        <View class="gap-0.5" style={{ flex: 1, flexShrink: 1 }}>
+        <View class="gap-0.5" style={{ flex: 1, flexShrink: 1, minWidth: 120 }}>
           <Text class="text-base font-semibold text-foreground">{props.title}</Text>
           <Text class="text-xs text-muted-foreground">{props.subtitle}</Text>
         </View>
@@ -172,7 +173,12 @@ function DeviceGroup(props: {
           class="rounded-[6px] border border-border px-2 py-1"
           onPress={() => open.set(!open())}
         >
-          <Text class="text-xs text-muted-foreground">{open() ? "⌃" : "⌄"}</Text>
+          <TablerIcon
+            name="chevron-down"
+            size={16}
+            color="#9fb0bd"
+            rotate={open() ? Math.PI : 0}
+          />
         </View>
       </View>
     </Collapsible>
@@ -819,7 +825,10 @@ export function Lighting(props: {
             class="rounded-[7px] border border-border px-3 py-1.5"
             onPress={() => presetsOpen.set(true)}
           >
-            <Text class="text-xs text-foreground">Presets</Text>
+            <View class="flex-row items-center gap-1.5">
+              <TablerIcon name="bookmark" size={16} color="#9fb0bd" />
+              <Text class="text-xs text-foreground">Presets</Text>
+            </View>
           </Button>
         }
       />

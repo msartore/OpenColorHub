@@ -6,6 +6,7 @@ import { Button } from "nsh/base";
 
 import logo from "../assets/icon.png";
 import { layoutSize, sidebarWidth } from "../app/presentation/layout";
+import { TablerIcon, type TablerIconName } from "./icons";
 
 export type ScreenId = "dashboard" | "fans" | "leds" | "drivers" | "settings" | "about";
 
@@ -13,16 +14,16 @@ export interface ScreenMeta {
   id: ScreenId;
   label: string;
   hint: string;
-  glyph: string;
+  icon: TablerIconName;
 }
 
 export const SCREENS: readonly ScreenMeta[] = [
-  { id: "dashboard", label: "Dashboard", hint: "Overview", glyph: "▦" },
-  { id: "fans", label: "Fan control", hint: "Headers & curves", glyph: "◉" },
-  { id: "leds", label: "Lighting", hint: "Channels & colour", glyph: "✦" },
-  { id: "drivers", label: "Drivers", hint: "Board downloads", glyph: "⇩" },
-  { id: "settings", label: "Settings", hint: "Backend & display", glyph: "⚙" },
-  { id: "about", label: "About", hint: "Board detection", glyph: "ⓘ" },
+  { id: "dashboard", label: "Dashboard", hint: "Overview", icon: "dashboard" },
+  { id: "fans", label: "Fan control", hint: "Headers & curves", icon: "fans" },
+  { id: "leds", label: "Lighting", hint: "Channels & colour", icon: "leds" },
+  { id: "drivers", label: "Drivers", hint: "Board downloads", icon: "drivers" },
+  { id: "settings", label: "Settings", hint: "Backend & display", icon: "settings" },
+  { id: "about", label: "About", hint: "Board detection", icon: "about" },
 ];
 
 export interface Toast {
@@ -104,18 +105,15 @@ export function Shell(props: {
                   paddingRight: wide() ? 10 : 0,
                   paddingTop: 8,
                   paddingBottom: 8,
-                  borderLeftWidth: 2,
-                  borderLeftColor: props.screen === item().id ? "#4ade80" : "transparent",
                 }}
                 onPress={() => props.onNavigate(item().id)}
                 accessibilityLabel={item().label}
               >
-                <Text
-                  class="text-base"
-                  style={{ color: props.screen === item().id ? "#4ade80" : "#6f8090" }}
-                >
-                  {item().glyph}
-                </Text>
+                <TablerIcon
+                  name={item().icon}
+                  size={18}
+                  color={props.screen === item().id ? "#4ade80" : "#6f8090"}
+                />
                 <If when={wide()}>
                   <View class="gap-0">
                     <Text class="text-[13px] text-foreground">{item().label}</Text>
