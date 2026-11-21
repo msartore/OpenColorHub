@@ -54,6 +54,11 @@ old 9.5 px uppercase labels → `text-[11px] uppercase` (NSH has no 9.5 px step)
   old app; only the renderer differs (native canvas rather than DOM SVG).
 - **Appearance**: `theme.json` declares the same colours for light and dark —
   the app forces the dark appearance in `nsh.json`, matching the old app's
-  `color-scheme: dark`.
+  `color-scheme: dark`. The Settings accent is applied at runtime with
+  `setTheme`, repainting every accent token (primary, ring, chart-1 and
+  sidebar-primary); the built theme is the default green.
+- **Dialogs and switches**: all four custom dialogs are centred in the window
+  with absolute positioning. Settings and channel toggles share one switch
+  look (visible track, translated thumb) so the off state is not a bare dot.
 - **Targets verified**: Windows development host (`nsh test --target windows`)
   and headless (`nsh test`). macOS, Linux, iOS and Android were not run.

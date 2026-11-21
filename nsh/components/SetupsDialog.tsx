@@ -11,6 +11,7 @@ import type { AppStore } from "../app/composition/store";
 import type { Setup, SetupKind } from "../app/domain/model";
 import { summarizeSetup } from "../app/domain/setup";
 import { dialogWidth } from "../app/presentation/layout";
+import { centeredDialog } from "./ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -175,7 +176,7 @@ export function SetupsDialog(props: {
       onOpenChange={({ open }) => props.onOpenChange(open)}
       accessibilityLabel={noun()}
       class="rounded-[12px] border border-border bg-popover p-4 gap-3"
-      style={{ width: dialogWidth(560) }}
+      style={centeredDialog(dialogWidth(560))}
       backdropClass="bg-black/40"
     >
       <Text class="text-base font-semibold text-foreground">{noun()}</Text>

@@ -1,7 +1,8 @@
 /** Small, unstyled-by-default primitives shared by the ported screens. */
 
 import { Canvas, Text, View } from "nsh";
-import type { JSX } from "nsh";
+import type { JSX, ViewStyle } from "nsh";
+import { Switch } from "nsh/base";
 
 import { boardDisplayName } from "../app/domain/telemetry";
 import type { BoardInfo } from "../app/domain/model";
@@ -121,6 +122,53 @@ export function Notice(props: {
       </Text>
       {props.children}
     </View>
+  );
+}
+
+/** Centers a Dialog popup in the window, whatever its content height. */
+export function centeredDialog(width: number): ViewStyle {
+  return {
+    position: "absolute" as const,
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    width,
+  };
+}
+
+/** One switch look for every setting and channel toggle. */
+export const SWITCH_TRACK =
+  "h-5 w-9 shrink-0 rounded-full border border-border bg-input checked:border-primary checked:bg-primary";
+export const SWITCH_THUMB =
+  "h-4 w-4 rounded-full bg-[#e7eef4] checked:translate-x-4 checked:bg-[#07090b]";
+
+/** A labelled setting row: switch on the left, title and hint on the right. */
+export function Toggle(props: {
+  checked: boolean;
+  label: string;
+  hint?: string;
+  onChange: (checked: boolean) => void;
+  testID?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <Switch
+      checked={props.checked}
+      testID={props.testID}
+      disabled={props.disabled}
+      accessibilityLabel={props.label}
+      class="flex-row items-start gap-3 py-1"
+      trackClass={SWITCH_TRACK}
+      thumbClass={SWITCH_THUMB}
+      onChange={({ checked }) => props.onChange(checked)}
+    >
+      <View class="gap-0.5" style={{ flex: 1 }}>
+        <Text class="text-xs text-foreground">{props.label}</Text>
+        <If when={props.hint}>
+          <Text class="text-[11px] text-muted-foreground">{props.hint}</Text>
+        </If>
+      </View>
+    </Switch>
   );
 }
 

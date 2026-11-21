@@ -35,7 +35,15 @@ import {
 import { confirmWrite } from "../components/confirm";
 import { TablerIcon } from "../components/icons";
 import { SetupsDialog } from "../components/SetupsDialog";
-import { Chip, LedStrip, PageHeader, Panel } from "../components/ui";
+import {
+  centeredDialog,
+  Chip,
+  LedStrip,
+  PageHeader,
+  Panel,
+  SWITCH_THUMB,
+  SWITCH_TRACK,
+} from "../components/ui";
 import { channelWidth, dialogWidth } from "../app/presentation/layout";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
@@ -271,8 +279,8 @@ function ChannelCard(props: {
           testID={`channel-enabled-${props.channel().id}`}
           checked={enabled()}
           accessibilityLabel={`${props.channel().label} enabled`}
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
+          trackClass={SWITCH_TRACK}
+          thumbClass={SWITCH_THUMB}
           onChange={({ checked }) => {
             dirty.set(true);
             enabled.set(checked);
@@ -350,7 +358,7 @@ function ChannelCard(props: {
         onOpenChange={({ open }) => pickerOpen.set(open)}
         accessibilityLabel={`${props.channel().name} colour`}
         class="rounded-[12px] border border-border bg-popover p-4 gap-3"
-        style={{ width: dialogWidth(280) }}
+        style={centeredDialog(dialogWidth(280))}
         backdropClass="bg-black/40"
       >
         <Text class="text-sm font-semibold text-foreground">
@@ -458,8 +466,8 @@ function GpuZoneCard(props: {
         <Switch
           checked={enabled()}
           accessibilityLabel={`${props.zone().label} enabled`}
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
+          trackClass={SWITCH_TRACK}
+          thumbClass={SWITCH_THUMB}
           onChange={({ checked }) => {
             dirty.set(true);
             enabled.set(checked);
@@ -550,7 +558,7 @@ function SyncDialog(props: {
       onOpenChange={({ open }) => props.onOpenChange(open)}
       accessibilityLabel="Sync colour"
       class="rounded-[12px] border border-border bg-popover p-4 gap-3"
-      style={{ width: dialogWidth(420) }}
+      style={centeredDialog(dialogWidth(420))}
       backdropClass="bg-black/50"
     >
       <View class="gap-1">

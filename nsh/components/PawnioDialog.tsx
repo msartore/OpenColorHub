@@ -13,6 +13,7 @@ import type { Accessor } from "nsh";
 import type { AppStore } from "../app/composition/store";
 import type { PawnioProgress, PawnioStatus } from "../app/domain/model";
 import { dialogWidth } from "../app/presentation/layout";
+import { centeredDialog } from "./ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -125,7 +126,7 @@ export function PawnioDialog(props: {
       onOpenChange={({ open }) => props.onOpenChange(open)}
       accessibilityLabel="Fan control needs PawnIO"
       class="rounded-[12px] border border-border bg-popover p-4 gap-3"
-      style={{ width: dialogWidth(520) }}
+      style={centeredDialog(dialogWidth(520))}
       backdropClass="bg-black/40"
     >
       <Text class="text-base font-semibold text-foreground">Fan control needs PawnIO</Text>

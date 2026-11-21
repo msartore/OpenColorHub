@@ -2,7 +2,7 @@
 
 import { Application } from "nsh/desktop";
 import { Clipboard, Scroll, Text, View, effect, signal } from "nsh";
-import { AlertDialog, Button, Progress, Slider, Switch, TextView } from "nsh/base";
+import { AlertDialog, Button, Progress, Slider, TextView } from "nsh/base";
 import {
   checkForUpdate,
   downloadUpdate,
@@ -25,7 +25,7 @@ import { FAN_HEADERS } from "../app/domain/fan";
 import { boardDisplayName, deviceLabel } from "../app/domain/telemetry";
 import { SETTINGS_RESET_PATCH } from "../app/domain/settings";
 import { isNarrow } from "../app/presentation/layout";
-import { KeyValue, PageHeader, Panel } from "../components/ui";
+import { KeyValue, PageHeader, Panel, Toggle } from "../components/ui";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
@@ -399,18 +399,13 @@ export function SettingsScreen(props: {
         >
           <Text class="text-[11px] text-muted-foreground">{`Every ${poll()} ms`}</Text>
         </Slider>
-        <Switch
+        <Toggle
           checked={draft().smoothing}
           testID="settings-smoothing"
-          accessibilityLabel="Smooth readings"
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
-          onChange={({ checked }) => void save({ smoothing: checked })}
-        >
-          <Text class="text-xs text-muted-foreground">
-            Smooth readings — an exponential moving average on temperature and RPM
-          </Text>
-        </Switch>
+          label="Smooth readings"
+          hint="Exponential moving average on temperature and RPM"
+          onChange={(checked) => void save({ smoothing: checked })}
+        />
       </Panel>
 
       <Panel title="Display" subtitle="Units and accent colour">
@@ -431,8 +426,8 @@ export function SettingsScreen(props: {
 
         <View class="gap-2">
           <Text class="text-xs text-muted-foreground">
-            Accent colour — stored for the themed build; NSH's tokens are fixed at
-            compile time, so the current window keeps the default green.
+            Accent colour — applied to buttons, selection, the gauge and the chart
+            as soon as you pick it.
           </Text>
           <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
             <Each of={ACCENTS} key="index">
@@ -445,6 +440,7 @@ export function SettingsScreen(props: {
                   }
                   style={{ backgroundColor: hex() }}
                   accessibilityLabel={hex()}
+                  testID={`accent-${hex()}`}
                   onPress={() => void save({ accent: hex() })}
                 />
               )}
@@ -462,69 +458,44 @@ export function SettingsScreen(props: {
           }}
         >
       <Panel title="Safety" subtitle="Guard rails for real hardware">
-        <Switch
+        <Toggle
           checked={draft().confirm_writes}
           testID="settings-confirm"
-          accessibilityLabel="Confirm hardware writes"
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
-          onChange={({ checked }) => void save({ confirm_writes: checked })}
-        >
-          <Text class="text-xs text-muted-foreground">
-            Confirm hardware writes — ask before every fan or lighting change
-          </Text>
-        </Switch>
+          label="Confirm hardware writes"
+          hint="Ask before every fan or lighting change"
+          onChange={(checked) => void save({ confirm_writes: checked })}
+        />
 
-        <Switch
+        <Toggle
           checked={draft().gpu_led_enabled}
           testID="settings-gpu-led"
-          accessibilityLabel="GPU LED control"
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
-          onChange={({ checked }) => void save({ gpu_led_enabled: checked })}
-        >
-          <Text class="text-xs text-muted-foreground">
-            GPU LED control — drive GPU RGB at I²C 0x36 through AMD ADL, NVIDIA NVAPI or Intel IGCL when a controller is present
-          </Text>
-        </Switch>
+          label="GPU LED control"
+          hint="Drive GPU RGB at I²C 0x36 through AMD ADL, NVIDIA NVAPI or Intel IGCL"
+          onChange={(checked) => void save({ gpu_led_enabled: checked })}
+        />
 
-        <Switch
+        <Toggle
           checked={draft().restore_setup_on_startup}
           testID="settings-restore-setup"
-          accessibilityLabel="Restore saved setup at startup"
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
-          onChange={({ checked }) => void save({ restore_setup_on_startup: checked })}
-        >
-          <Text class="text-xs text-muted-foreground">
-            Restore saved setup at startup — re-apply the last fan and lighting settings
-          </Text>
-        </Switch>
+          label="Restore saved setup at startup"
+          hint="Re-apply the last fan and lighting settings on every launch"
+          onChange={(checked) => void save({ restore_setup_on_startup: checked })}
+        />
 
-        <Switch
+        <Toggle
           checked={draft().release_fans_on_exit}
           testID="settings-release-fans"
-          accessibilityLabel="Release fans on exit"
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
-          onChange={({ checked }) => void save({ release_fans_on_exit: checked })}
-        >
-          <Text class="text-xs text-muted-foreground">
-            Release fans on exit — hand control back to the BIOS instead of keeping your setup
-          </Text>
-        </Switch>
+          label="Release fans on exit"
+          hint="Hand control back to the BIOS instead of keeping your setup"
+          onChange={(checked) => void save({ release_fans_on_exit: checked })}
+        />
 
-        <Switch
+        <Toggle
           checked={draft().reapply_led_on_launch}
-          accessibilityLabel="Re-apply lighting at launch"
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
-          onChange={({ checked }) => void save({ reapply_led_on_launch: checked })}
-        >
-          <Text class="text-xs text-muted-foreground">
-            Re-apply lighting at launch — fallback for installs with no saved setup yet
-          </Text>
-        </Switch>
+          label="Re-apply lighting at launch"
+          hint="Fallback for installs with no saved setup yet"
+          onChange={(checked) => void save({ reapply_led_on_launch: checked })}
+        />
 
         <Slider
           value={lowDuty()}
@@ -575,21 +546,18 @@ export function SettingsScreen(props: {
       </Panel>
 
       <Panel title="Startup" subtitle="Start with the OS and apply the saved light">
-        <Switch
+        <Toggle
           checked={autostart()?.enabled ?? false}
           disabled={autostart()?.supported === false}
           testID="settings-autostart"
-          accessibilityLabel="Start with the operating system"
-          trackClass="h-4 w-7 rounded-full bg-muted checked:bg-primary"
-          thumbClass="w-3 h-3 rounded-full bg-foreground"
-          onChange={({ checked }) => void toggleAutostart(checked)}
-        >
-          <Text class="text-xs text-muted-foreground">
-            {autostart()?.supported === false
+          label={
+            autostart()?.supported === false
               ? "Start with the OS — not supported on this platform"
-              : "Start with the OS at sign-in, then apply the saved lighting"}
-          </Text>
-        </Switch>
+              : "Start with the OS at sign-in"
+          }
+          hint="Launch when you sign in, then apply the saved lighting"
+          onChange={(checked) => void toggleAutostart(checked)}
+        />
         <Text class="text-[11px] text-muted-foreground">
           {autostart()?.detail ?? "Reading the logon entry…"}
         </Text>

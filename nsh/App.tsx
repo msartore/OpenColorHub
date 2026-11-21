@@ -8,6 +8,7 @@ import { Application, Tray, Window, currentWindow } from "nsh/desktop";
 import { AlertDialog } from "nsh/base";
 
 import { createDeps } from "./app/composition/deps";
+import { applyAccent } from "./app/presentation/theme";
 import { shouldOfferElevation } from "./app/application/usecases/system";
 import { SCREENS, Shell, type ScreenId, type Toast } from "./components/Shell";
 import { About } from "./screens/About";
@@ -42,6 +43,12 @@ function App() {
       });
     }
   };
+
+  // The accent is a runtime theme: follow the setting wherever it changes,
+  // including the first snapshot from the settings file.
+  effect(() => {
+    applyAccent(deps.store.settings().accent);
+  });
 
   // Restore the last screen once settings have loaded.
   let restored = false;
