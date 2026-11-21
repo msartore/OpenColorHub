@@ -51,13 +51,7 @@ export function Shell(props: {
   const wide = () => layoutSize() !== "narrow";
 
   return (
-    <View
-      class="flex-1 flex-row bg-background"
-      style={{
-        backgroundImage:
-          "radial-gradient(70% 45% at 8% -10%, rgba(74,222,128,0.07), transparent 70%), repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 44px), repeating-linear-gradient(90deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 44px)",
-      }}
-    >
+    <View class="flex-1 flex-row bg-background">
       <View
         class="border-r border-border bg-sidebar py-4 gap-4"
         style={{

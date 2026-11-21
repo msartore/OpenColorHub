@@ -24,7 +24,8 @@ The port now carries the features that landed on `main` after the fork:
   the native `TextView`, capped at 8000 characters.
 
 [`nsh/UI-MATCH.md`](nsh/UI-MATCH.md) records the UI fidelity contract, the
-token map and the remaining deviations against the v0.5.1 screenshots.
+token map and the remaining deviations against the v0.5.1 UI. Current Native
+Shell screenshots live in [`docs/screenshots/`](docs/screenshots/).
 
 ## What changed
 

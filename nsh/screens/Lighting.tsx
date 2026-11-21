@@ -8,7 +8,6 @@ import {
   ColorField,
   ColorPicker,
   ColorSlider,
-  ColorSwatch,
   Collapsible,
   Dialog,
   Select,
@@ -48,17 +47,6 @@ import { channelWidth, dialogWidth } from "../app/presentation/layout";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
-const PRESETS: readonly string[] = [
-  "#22d3ee",
-  "#e879f9",
-  "#fbbf24",
-  "#a3e635",
-  "#dbeafe",
-  "#f87171",
-  "#4ade80",
-  "#000000",
-];
-
 const EFFECT_ITEMS = GPU_MODES.map(([value, title]) => ({ value: String(value), title }));
 
 function ColorEditor(props: {
@@ -81,38 +69,24 @@ function ColorEditor(props: {
           thumbClass="w-4 h-4 rounded-full border-2 border-white"
         />
         <ColorField class="h-8 rounded-[6px] border border-border bg-muted px-2 text-xs text-foreground" />
-        <View class="flex-row gap-1.5" style={{ flexWrap: "wrap" }}>
-          <Each of={PRESETS} key="index">
-            {(preset) => (
-              <ColorSwatch
-                color={preset()}
-                accessibilityLabel={preset()}
-                class="h-5 w-5 rounded-[4px] border border-border"
-              />
-            )}
-          </Each>
-        </View>
       </View>
     </ColorPicker>
   );
 }
 
-/** A small clickable colour chip that opens the picker in place. */
+/** The only colour control: the swatch you press to open the picker dialog. */
 function SwatchButton(props: {
   value: Accessor<string>;
   onChange: (hex: string) => void;
+  label?: string;
   width?: number;
   height?: number;
   testID?: string;
 }) {
+  const open = signal(false);
   return (
-    <ColorPicker
-      value={props.value()}
-      format="hex"
-      onChange={({ value, formatted }) => props.onChange(formatted || value)}
-      onChangeEnd={({ value, formatted }) => props.onChange(formatted || value)}
-    >
-      <View
+    <>
+      <Button
         testID={props.testID}
         class="rounded-[5px] border border-border"
         style={{
@@ -120,8 +94,30 @@ function SwatchButton(props: {
           height: props.height ?? 30,
           backgroundColor: props.value(),
         }}
+        accessibilityLabel={props.label ?? "Change colour"}
+        onPress={() => open.set(true)}
       />
-    </ColorPicker>
+      <Dialog
+        open={open()}
+        onOpenChange={({ open: next }) => open.set(next)}
+        accessibilityLabel="Choose a colour"
+        class="rounded-[12px] border border-border bg-popover p-4 gap-3"
+        style={centeredDialog(dialogWidth(280))}
+        backdropClass="bg-black/40"
+      >
+        <Text class="text-sm font-semibold text-foreground">Choose a colour</Text>
+        <ColorEditor value={props.value} onChange={props.onChange} />
+        <View class="flex-row justify-end">
+          <Button
+            testID="colour-done"
+            class="rounded-[6px] border border-border px-3 py-1.5"
+            onPress={() => open.set(false)}
+          >
+            <Text class="text-xs text-foreground">Done</Text>
+          </Button>
+        </View>
+      </Dialog>
+    </>
   );
 }
 
@@ -203,7 +199,6 @@ function ChannelCard(props: {
   ) => Promise<boolean>;
   onOff: (channel: ChannelId) => Promise<void>;
 }) {
-  const pickerOpen = signal(false);
   const hex = signal(props.channel().hex);
   const brightness = signal(props.channel().brightness);
   const enabled = signal(props.channel().enabled);
@@ -262,18 +257,19 @@ function ChannelCard(props: {
 
       <View class="flex-row items-center justify-between gap-2">
         <View class="flex-row items-center gap-2">
-          <View
+          <SwatchButton
             testID={`channel-colour-${props.channel().id}`}
-            class="h-7 w-10 rounded-[5px] border border-border"
-            style={{ backgroundColor: hex() }}
+            value={hex}
+            label={`${props.channel().name} colour`}
+            width={40}
+            height={28}
+            onChange={(value) => {
+              dirty.set(true);
+              enabled.set(true);
+              hex.set(value);
+            }}
           />
           <Text class="text-xs font-mono text-muted-foreground">{hex().toUpperCase()}</Text>
-          <Button
-            class="rounded-[5px] border border-border px-2 py-0.5"
-            onPress={() => pickerOpen.set(true)}
-          >
-            <Text class="text-[10px] text-foreground">Colour</Text>
-          </Button>
         </View>
         <Switch
           testID={`channel-enabled-${props.channel().id}`}
@@ -286,23 +282,6 @@ function ChannelCard(props: {
             enabled.set(checked);
           }}
         />
-      </View>
-
-      <View class="flex-row items-center gap-1.5" style={{ flexWrap: "wrap" }}>
-        <Each of={PRESETS} key="index">
-          {(preset) => (
-            <ColorSwatch
-              color={preset()}
-              accessibilityLabel={preset()}
-              class="h-5 w-5 rounded-[4px] border border-border"
-              onPress={({ color }) => {
-                dirty.set(true);
-                enabled.set(true);
-                hex.set(color);
-              }}
-            />
-          )}
-        </Each>
       </View>
 
       <View class="gap-0.5">
@@ -352,36 +331,6 @@ function ChannelCard(props: {
           <Chip label="unsaved" tone="warn" />
         </If>
       </View>
-
-      <Dialog
-        open={pickerOpen()}
-        onOpenChange={({ open }) => pickerOpen.set(open)}
-        accessibilityLabel={`${props.channel().name} colour`}
-        class="rounded-[12px] border border-border bg-popover p-4 gap-3"
-        style={centeredDialog(dialogWidth(280))}
-        backdropClass="bg-black/40"
-      >
-        <Text class="text-sm font-semibold text-foreground">
-          {`${props.channel().name} colour`}
-        </Text>
-        <ColorEditor
-          value={hex}
-          onChange={(value) => {
-            dirty.set(true);
-            enabled.set(true);
-            hex.set(value);
-          }}
-        />
-        <View class="flex-row justify-end">
-          <View
-            role="button"
-            class="rounded-[6px] border border-border px-3 py-1.5"
-            onPress={() => pickerOpen.set(false)}
-          >
-            <Text class="text-[11px] text-foreground">Done</Text>
-          </View>
-        </View>
-      </Dialog>
     </View>
   );
 }
@@ -917,24 +866,8 @@ export function Lighting(props: {
             </View>
 
             <View class="flex-row items-start gap-4" style={{ flexWrap: "wrap" }}>
-              <View class="flex-row items-center gap-1.5" style={{ flexWrap: "wrap" }}>
-                <Each of={PRESETS} key="index">
-                  {(preset, index) => (
-                    <ColorSwatch
-                      testID={`color-preset-${index()}`}
-                      color={preset()}
-                      accessibilityLabel={preset()}
-                      class="h-6 w-6 rounded-[4px] border border-border"
-                      onPress={({ color }) => {
-                        touched.set(true);
-                        globalHex.set(color);
-                        boardHex.set(color);
-                      }}
-                    />
-                  )}
-                </Each>
-              </View>
               <SwatchButton
+                testID="color-preset-1"
                 value={globalHex}
                 width={48}
                 height={30}

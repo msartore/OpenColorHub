@@ -1,11 +1,11 @@
 /**
- * The four-point curve, drawn natively and edited by pressing or dragging.
+ * The four-point fan curve, drawn natively and edited by dragging a handle.
  *
- * The chart is a Canvas with pointer events off; a View around it owns the
- * pointer, so mouse and touch drags reach the same handler. The geometry mirrors
- * the old SVG editor: 0–110 °C across, 0–100 % up. Clamping a moved point belongs
- * to domain (`setCurvePoint`); this component only turns a position into an
- * index and raw values.
+ * Dragging follows the usual chart guidance: a 44 pt hit target around each
+ * point, the grab offset is kept so the point never jumps to the finger, the
+ * view claims the responder so the surrounding Scroll cannot steal the drag,
+ * and every move is clamped by the domain (`setCurvePoint` in `fan.ts`). A
+ * release outside the view ends the drag cleanly.
  */
 
 import { Canvas, Text, View, signal } from "nsh";
@@ -14,7 +14,16 @@ import type { Accessor } from "nsh";
 import type { CurvePoint } from "../app/domain/model";
 
 const PAD = { left: 26, right: 10, top: 10, bottom: 18 };
-const MAX_TEMP = 110;
+const MAX_TEMP = 120;
+const HIT_RADIUS = 22; // 44 pt target
+
+/** One finger's drag, captured on press so the target never changes mid-drag. */
+interface Grab {
+  index: number;
+  offsetX: number;
+  offsetY: number;
+  pointer: number | null;
+}
 
 export function CurveChart(props: {
   testID: string;
@@ -24,6 +33,7 @@ export function CurveChart(props: {
 }) {
   const box = signal({ width: 0, height: 0 });
   const active = signal<number | null>(null);
+  let grab: Grab | null = null;
 
   const inner = () => {
     const { width, height } = box();
@@ -41,27 +51,58 @@ export function CurveChart(props: {
   const percentFor = (y: number): number =>
     Math.min(100, Math.max(0, ((PAD.top + inner().height - y) / inner().height) * 100));
 
-  const nearest = (x: number): number => {
-    let best = 0;
-    let distance = Number.POSITIVE_INFINITY;
+  /** The point under a position, but only within a comfortable hit radius. */
+  const hit = (x: number, y: number): number | null => {
+    let best: number | null = null;
+    let distance = HIT_RADIUS * HIT_RADIUS;
     props.curve().forEach((point, index) => {
-      const next = Math.abs(xFor(point.temp_c) - x);
-      if (next < distance) {
-        distance = next;
+      const dx = xFor(point.temp_c) - x;
+      const dy = yFor(point.percent) - y;
+      const squared = dx * dx + dy * dy;
+      if (squared <= distance) {
+        distance = squared;
         best = index;
       }
     });
     return best;
   };
 
-  const edit = (x: number, y: number): void => {
-    if (box().width <= 0) return;
-    const index = active() ?? nearest(x);
+  /** Start a drag on a point, remembering where inside it the finger landed. */
+  const begin = (x: number, y: number, pointer: number | null): boolean => {
+    if (box().width <= 0) return false;
+    const index = hit(x, y);
+    if (index === null) return false;
+    const point = props.curve()[index];
+    grab = {
+      index,
+      offsetX: xFor(point.temp_c) - x,
+      offsetY: yFor(point.percent) - y,
+      pointer,
+    };
     active.set(index);
-    props.onMove(index, {
-      temp_c: Math.round(tempFor(x)),
-      percent: Math.round(percentFor(y)),
+    return true;
+  };
+
+  /** Move the grabbed point, keeping its offset and clamping in the domain. */
+  const move = (x: number, y: number, pointer: number | null): void => {
+    if (!grab) return;
+    if (pointer !== null && grab.pointer !== null && pointer !== grab.pointer) return;
+    const point = props.curve()[grab.index];
+    if (!point) return;
+    const movedX = x + grab.offsetX;
+    const movedY = y + grab.offsetY;
+    if (Math.abs(movedX - xFor(point.temp_c)) < 0.5 && Math.abs(movedY - yFor(point.percent)) < 0.5) {
+      return;
+    }
+    props.onMove(grab.index, {
+      temp_c: Math.round(tempFor(movedX)),
+      percent: Math.round(percentFor(movedY)),
     });
+  };
+
+  const end = (): void => {
+    grab = null;
+    active.set(null);
   };
 
   return (
@@ -71,23 +112,28 @@ export function CurveChart(props: {
         onLayout={(event) =>
           box.set({ width: event.bounds.size.width, height: event.bounds.size.height })
         }
+        // Touch: claim the responder only when a point was grabbed, so empty
+        // grid space and vertical scrolls still work as before.
+        onStartShouldSetResponder={(event) =>
+          begin(event.locationX, event.locationY, event.identifier)
+        }
+        onResponderGrant={() => true}
+        onResponderMove={(event) => move(event.locationX, event.locationY, event.identifier)}
+        onResponderRelease={end}
+        onResponderTerminate={end}
+        onTouchCancel={end}
+        // Mouse: same controller, with page coordinates converted to local.
+        onPressDown={(event) => begin(event.position.x, event.position.y, null)}
+        onMouseMove={(event) => {
+          if (event.pressedButton === "left") move(event.position.x, event.position.y, null);
+        }}
+        onMouseUp={end}
+        onPressUp={end}
+        onMouseLeave={end}
       >
         <Canvas
           testID={props.testID}
           style={{ width: "100%", height: "100%" }}
-          onPress={(event) => edit(event.position.x, event.position.y)}
-          onPressDown={(event) => edit(event.position.x, event.position.y)}
-          onMouseMove={(event) => {
-            if (event.pressedButton === "left" && active() !== null) {
-              edit(event.position.x, event.position.y);
-            }
-          }}
-          onPressUp={() => active.set(null)}
-          onTouchStart={(event) => edit(event.locationX, event.locationY)}
-          onTouchMove={(event) => {
-            if (active() !== null) edit(event.locationX, event.locationY);
-          }}
-          onTouchEnd={() => active.set(null)}
           draw={(cx, size) => {
             const width = size.width;
             const height = size.height;
@@ -139,15 +185,27 @@ export function CurveChart(props: {
             cx.lineJoin = "round";
             cx.stroke();
 
-            // The points.
-            for (const point of curve) {
+            // The points; the grabbed one gets a larger, brighter ring.
+            const current = active();
+            curve.forEach((point, index) => {
+              const selected = index === current;
               cx.beginPath();
-              cx.arc(x(point.temp_c), y(point.percent), 4, 0, Math.PI * 2);
+              cx.arc(x(point.temp_c), y(point.percent), selected ? 6 : 4, 0, Math.PI * 2);
               cx.fillStyle = "#4ade80";
               cx.fill();
-              cx.strokeStyle = "#07090b";
-              cx.lineWidth = 2;
+              cx.strokeStyle = selected ? "#e7eef4" : "#07090b";
+              cx.lineWidth = selected ? 2.5 : 2;
               cx.stroke();
+            });
+
+            // A small readout while dragging.
+            if (current !== null && curve[current]) {
+              const point = curve[current];
+              const label = `${point.temp_c} °C · ${point.percent}%`;
+              cx.fillStyle = "#e7eef4";
+              cx.font = "10px system-ui";
+              cx.textBaseline = "bottom";
+              cx.fillText(label, Math.min(width - 78, x(point.temp_c) + 10), y(point.percent) - 8);
             }
 
             // Where the board is now.
@@ -168,7 +226,7 @@ export function CurveChart(props: {
             cx.fillText("0%", 2, PAD.top + plotHeight - 10);
             cx.textBaseline = "bottom";
             cx.fillText("0 °C", PAD.left, height);
-            cx.fillText(`${MAX_TEMP} °C`, PAD.left + plotWidth - 24, height);
+            cx.fillText(`${MAX_TEMP} °C`, PAD.left + plotWidth - 26, height);
           }}
         />
       </View>
@@ -178,4 +236,3 @@ export function CurveChart(props: {
     </View>
   );
 }
-

@@ -91,8 +91,8 @@ export function createNativePort(controller: Controller): ColorHubPort {
         const json = await controller.downloadDriver(JSON.stringify(file), (progress) => {
           try {
             onProgress(parse<DriverProgress>(progress));
-          } catch (error) {
-            console.error("driver progress could not be read", error);
+          } catch {
+            // A malformed progress tick is skipped; the next one replaces it.
           }
         });
         return parse<DownloadedFile>(json);
@@ -115,8 +115,8 @@ export function createNativePort(controller: Controller): ColorHubPort {
         const json = await controller.installPawnioJson((progress) => {
           try {
             onProgress(parse<PawnioProgress>(progress));
-          } catch (error) {
-            console.error("PawnIO progress could not be read", error);
+          } catch {
+            // A malformed progress tick is skipped; the next one replaces it.
           }
         });
         return parse<PawnioStatus>(json);
@@ -165,8 +165,8 @@ export function createNativePort(controller: Controller): ColorHubPort {
       void controller.startTelemetry((json) => {
         try {
           listener(parse<Snapshot>(json));
-        } catch (error) {
-          console.error("telemetry frame could not be read", error);
+        } catch {
+          // Skip one bad frame; the next telemetry tick replaces it.
         }
       });
       return () => controller.stopTelemetry();

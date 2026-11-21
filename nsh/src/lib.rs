@@ -101,6 +101,15 @@ fn to_json<T: serde::Serialize + ?Sized>(value: &T) -> Result<String, String> {
     serde_json::to_string(value).map_err(|error| format!("could not encode the result: {error}"))
 }
 
+/// Diagnostics are silent unless `OPENCOLORHUB_DEBUG` is set. The packaged
+/// app is a GUI binary with no console, so these were only ever noise in a
+/// development host or a log file.
+fn debug_log(message: impl std::fmt::Display) {
+    if std::env::var_os("OPENCOLORHUB_DEBUG").is_some() {
+        eprintln!("opencolorhub: {message}");
+    }
+}
+
 fn parse_header(id: &str) -> Result<FanHeader, String> {
     FanHeader::from_id(id).ok_or_else(|| format!("unknown fan header: {id}"))
 }
@@ -291,7 +300,7 @@ impl Controller {
         let settings_path = config_dir.join("settings.json");
         let (mut settings, warning) = Settings::load_or_default(&settings_path);
         if let Some(warning) = &warning {
-            eprintln!("opencolorhub: settings file problem: {warning} (using defaults)");
+            debug_log(format!("settings file problem: {warning} (using defaults)"));
         }
         if std::env::var_os("OPENCOLORHUB_SIM").is_some() {
             settings.backend = BackendMode::Simulated;
@@ -314,10 +323,10 @@ impl Controller {
                     RestoreReport::default()
                 };
                 if report.found {
-                    eprintln!(
-                        "opencolorhub: restored saved setup — {} fans, lighting: {}",
+                    debug_log(format!(
+                        "restored saved setup — {} fans, lighting: {}",
                         report.fans, report.lighting
-                    );
+                    ));
                 }
                 // Upgrades from the old shell have `rgb.state` but no active
                 // setup yet. Push that blob too so lighting comes back on the
@@ -329,7 +338,7 @@ impl Controller {
                     && (settings.reapply_led_on_launch || has_saved_lighting)
                     && let Err(error) = service.apply_led()
                 {
-                    eprintln!("opencolorhub: could not re-apply lighting: {error}");
+                    debug_log(format!("could not re-apply lighting: {error}"));
                 }
                 (Some(service), None)
             }
@@ -927,7 +936,7 @@ impl Controller {
                 if let Ok(Some(message)) = report {
                     let seconds = slept.map(|gap| gap.as_secs()).unwrap_or(0);
                     let source = if notified { "OS resume" } else { "clock gap" };
-                    eprintln!("opencolorhub: woke ({source}, {seconds}s): {message}");
+                    debug_log(format!("woke ({source}, {seconds}s): {message}"));
                 }
             }
 

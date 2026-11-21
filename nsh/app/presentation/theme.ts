@@ -90,7 +90,16 @@ function withAccent(accent: string): Record<string, string> {
     "primary-foreground": "#07090b",
     ring: accent,
     "chart-1": accent,
+    "chart-2": accent,
+    "chart-3": accent,
+    "chart-4": accent,
+    "chart-5": accent,
     "sidebar-primary": accent,
+    // Status colours follow the accent too: the app uses one colour for
+    // everything except the colour picker and the LED colour it renders.
+    warn: accent,
+    info: accent,
+    destructive: accent,
   };
 }
 

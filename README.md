@@ -18,6 +18,19 @@ and app can alternate without losing lighting state.
 The desktop app is built with [Native Shell](https://nsh.dev): native windows on
 Windows and Linux, no WebView and no Tauri.
 
+## Screenshots
+
+Captured from the Native Shell app in simulated mode (no hardware is touched),
+so the board data shown is synthetic.
+
+| Dashboard | Fan control | Lighting |
+| --- | --- | --- |
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Fan control](docs/screenshots/fans.png) | ![Lighting](docs/screenshots/leds.png) |
+
+| Drivers | About |
+| --- | --- |
+| ![Drivers](docs/screenshots/drivers.png) | ![About](docs/screenshots/about.png) |
+
 ## Platforms
 
 | Platform | Fans | Lighting |

@@ -1,8 +1,14 @@
 # NSH UI → Tauri UI match record
 
-Baseline: the Tauri app on `main` at v0.5.1, captured from `docs/screenshots/*.png`
-(dashboard, fans, leds, gpu-leds, drivers, about) and `src/styles/app.css`.
-Target: the Native Shell port in this directory.
+Baseline for the port: the Tauri app on `main` at v0.5.1 and its
+`src/styles/app.css`. Target: the Native Shell port in this directory.
+
+The current screenshots in `docs/screenshots/*.png` are captured from the
+**Native Shell app itself** (simulated mode, synthetic board data) — they show
+the result of this port, not the old baseline. The files that described the old
+UI (`src/styles/app.css`, `src/views/settings.ts`, `src/components/icons.ts`)
+live on `main` and are not present on this branch; the Tabler paths were carried
+over into `components/icons.tsx`.
 
 ## Fidelity contract
 
@@ -46,18 +52,20 @@ old 9.5 px uppercase labels → `text-[11px] uppercase` (NSH has no 9.5 px step)
 - **Activity and backend key/value rows** remain on the Dashboard below the
   baseline content. They are additive diagnostics, not a replacement for any
   baseline element.
-- **Global colour picker** is a click-to-open swatch (`ColorPicker`) rather than
-  the old always-compact `<input type="color">`; the effect is identical.
-- **Icon rendering**: the Tabler outline paths from `src/components/icons.ts`
+- **Colour control**: the Lighting screen has a single colour swatch per group
+  and channel that opens a centred picker dialog. The old quick-pick preset
+  swatch rows were removed — colours now come only from the picker.
+- **Icon rendering**: the Tabler outline paths from `main`'s `src/components/icons.ts`
   are inlined in `components/icons.tsx` and drawn natively with `Canvas` and
   `Path2D`. The six nav glyphs, bookmark and chevron are the same paths as the
   old app; only the renderer differs (native canvas rather than DOM SVG).
 - **Appearance**: `theme.json` declares the same colours for light and dark —
   the app forces the dark appearance in `nsh.json`, matching the old app's
   `color-scheme: dark`. The Settings accent is applied at runtime with
-  `setTheme`, repainting every accent token (primary, ring, chart-1 and
-  sidebar-primary); the built theme is the default green.
-- **Dialogs and switches**: all four custom dialogs are centred in the window
+  `setTheme`, repainting every accent token (primary, ring, chart tokens, the
+  status colours and sidebar-primary); the built theme is the default green.
+  The only other colours on screen are in the LED preview and the picker dialog.
+- **Dialogs and switches**: all custom dialogs are centred in the window
   with absolute positioning. Settings and channel toggles share one switch
   look (visible track, translated thumb) so the off state is not a bare dot.
 - **Targets verified**: Windows development host (`nsh test --target windows`)

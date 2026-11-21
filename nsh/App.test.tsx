@@ -19,15 +19,14 @@ test("fan control writes through the controller", async () => {
   expect(app.texts().some((text) => text.includes("Applied"))).toBe(true);
 });
 
-test("the colour dialog writes the selected colour", async () => {
+test("the single colour swatch opens the picker", async () => {
   const app = await open("./App.tsx");
-  app.onDialog(() => "Write");
   await app.press("Lighting");
   await app.waitFor("Frame preview");
+  expect(app.count("id:color-preset-1")).toBe(1);
   await app.press("id:color-preset-1");
-  await app.press("id:lighting-apply-all");
-  await app.wait(350);
-  expect(app.texts().some((text) => text.includes("#e879f9"))).toBe(true);
+  await app.waitFor("Choose a colour");
+  expect(app.texts().some((text) => text.includes("Choose a colour"))).toBe(true);
 });
 
 test("the curve editor drags a point and writes the curve", async () => {

@@ -152,9 +152,16 @@ function App() {
   Application.on("quit", () => deps.store.dispose());
 
   const snapshot = () => deps.store.snapshot();
+  // The raw device name (e.g. "Nuvoton 0xD121 (PawnIO)") is the detected
+  // Super I/O chip read through PawnIO. Keep that detail in About/Settings;
+  // the sidebar only needs a short state.
   const status = () => ({
-    fans: snapshot()?.fan_device.simulated ? "simulated fan" : (snapshot()?.fan_device.name ?? "probing"),
-    lighting: snapshot()?.led_device.available ? "led · ok" : (snapshot()?.led_device.error ?? "probing"),
+    fans: snapshot()?.fan_device.simulated
+      ? "simulated fan"
+      : snapshot()?.fan_device.available
+        ? "fan · ok"
+        : "fan · unavailable",
+    lighting: snapshot()?.led_device.available ? "led · ok" : "led · probing",
   });
 
   return (
