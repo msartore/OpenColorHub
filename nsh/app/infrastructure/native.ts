@@ -48,6 +48,15 @@ function call<T>(run: () => string): Promise<T> {
   }
 }
 
+/** A native member that already returns a plain string, not JSON. */
+function callText(run: () => string): Promise<string> {
+  try {
+    return Promise.resolve(run());
+  } catch (error) {
+    return Promise.reject(toAppError(error));
+  }
+}
+
 /** For async members: the native call returns a Promise of the JSON. */
 async function callAsync<T>(run: () => Promise<string>): Promise<T> {
   try {
@@ -67,7 +76,7 @@ export function createNativePort(controller: Controller): ColorHubPort {
     activity: () => call<ActivityEntry[]>(() => controller.activityJson()),
     reloadState: () => call<Snapshot>(() => controller.reloadStateJson()),
     elevation: () => call<ElevationState>(() => controller.elevationJson()),
-    requestElevation: () => call<string>(() => controller.requestElevation()),
+    requestElevation: () => callText(() => controller.requestElevation()),
     autostart: () => call<AutostartState>(() => controller.autostartJson()),
     setAutostart: (enabled: boolean) =>
       call<AutostartState>(() => controller.setAutostart(enabled)),
