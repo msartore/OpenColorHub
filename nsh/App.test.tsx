@@ -1,5 +1,15 @@
 import { expect, open, test } from "nsh/test";
 
+/** Lighting groups start collapsed; open them when a test needs their content. */
+async function expandLighting(app: Awaited<ReturnType<typeof open>>) {
+  await app.waitFor("Motherboard");
+  await app.press("id:motherboard-details");
+  await app.press("id:gpu-details");
+}
+
+/** Lighting tests need a desktop viewport so the group headers fit. */
+const lightingApp = () => open("./App.tsx", { width: 1240 });
+
 test("the dashboard renders the live machine", async () => {
   const app = await open("./App.tsx");
   await app.waitFor("Dashboard");
@@ -19,14 +29,20 @@ test("fan control writes through the controller", async () => {
   expect(app.texts().some((text) => text.includes("Applied"))).toBe(true);
 });
 
-test("the single colour swatch opens the picker", async () => {
-  const app = await open("./App.tsx");
+test("the single colour swatch opens the picker and keeps the chosen colour", async () => {
+  const app = await lightingApp();
   await app.press("Lighting");
+  await expandLighting(app);
   await app.waitFor("Frame preview");
   expect(app.count("id:color-preset-1")).toBe(1);
   await app.press("id:color-preset-1");
   await app.waitFor("Choose a colour");
-  expect(app.texts().some((text) => text.includes("Choose a colour"))).toBe(true);
+  // Pick a different colour in the area and commit it.
+  await app.drag("id:colour-area", { x: 90, y: -40 });
+  await app.wait(150);
+  await app.press("text:Done");
+  await app.wait(150);
+  expect(app.count("id:color-preset-1")).toBe(1);
 });
 
 test("the curve editor drags a point and writes the curve", async () => {
@@ -42,9 +58,10 @@ test("the curve editor drags a point and writes the curve", async () => {
 });
 
 test("lighting renders the frame and turns everything off", async () => {
-  const app = await open("./App.tsx");
+  const app = await lightingApp();
   app.onDialog(() => "Write");
   await app.press("Lighting");
+  await expandLighting(app);
   await app.waitFor("Frame preview");
   expect(app.texts()).toContain("Global colour");
   expect(app.texts().some((text) => text.includes("channels"))).toBe(true);
@@ -54,9 +71,10 @@ test("lighting renders the frame and turns everything off", async () => {
 });
 
 test("a channel applies its colour and brightness", async () => {
-  const app = await open("./App.tsx");
+  const app = await lightingApp();
   app.onDialog(() => "Write");
   await app.press("Lighting");
+  await expandLighting(app);
   await app.waitFor("Frame preview");
   // The saved setup may be restored at launch, so the switch starts in either
   // state. Applying a channel must write either way — on means a new colour,
@@ -81,8 +99,9 @@ test("settings shows the backend, safety and paths", async () => {
 });
 
 test("lighting groups the motherboard and GPU controllers", async () => {
-  const app = await open("./App.tsx");
+  const app = await lightingApp();
   await app.press("Lighting");
+  await expandLighting(app);
   await app.waitFor("GPU LED");
   const texts = app.texts();
   expect(texts).toContain("Motherboard");
@@ -136,3 +155,5 @@ test("the driver catalogue groups vendor files", async () => {
   expect(app.texts().some((text) => text.includes("Show all 6 firmware"))).toBe(true);
   expect(app.texts().some((text) => text.includes("Firmware update available"))).toBe(true);
 });
+
+

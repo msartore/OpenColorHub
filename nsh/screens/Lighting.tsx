@@ -53,22 +53,28 @@ function ColorEditor(props: {
   value: Accessor<string>;
   onChange: (hex: string) => void;
 }) {
+  // Let the picker own its color while it is open (starting from the current
+  // value) and commit only when the gesture ends. Feeding every intermediate
+  // `onChange` back into a controlled value fights its internal colour-space
+  // state and snaps the selection back to the previous colour.
   return (
     <ColorPicker
-      value={props.value()}
+      defaultValue={props.value()}
       format="hex"
-      onChange={({ value, formatted }) => props.onChange(formatted || value)}
       onChangeEnd={({ value, formatted }) => props.onChange(formatted || value)}
     >
       <View class="gap-2" style={{ width: 220 }}>
-        <ColorArea class="h-24 w-full rounded-[8px]" />
+        <ColorArea testID="colour-area" class="h-24 w-full rounded-[8px]" />
         <ColorSlider
           channel="hue"
           class="h-5"
           trackClass="h-3 rounded-full"
           thumbClass="w-4 h-4 rounded-full border-2 border-white"
         />
-        <ColorField class="h-8 rounded-[6px] border border-border bg-muted px-2 text-xs text-foreground" />
+        <ColorField
+          testID="colour-field"
+          class="h-8 rounded-[6px] border border-border bg-muted px-2 text-xs text-foreground"
+        />
       </View>
     </ColorPicker>
   );
@@ -132,7 +138,7 @@ function DeviceGroup(props: {
   onApply: () => void;
   children?: JSX.Element;
 }) {
-  const open = signal(true);
+  const open = signal(false);
   return (
     <Collapsible
       open={open()}
@@ -170,20 +176,13 @@ function DeviceGroup(props: {
         >
           <Text class="text-xs text-primary-foreground">Apply</Text>
         </Button>
-        <View
-          role="button"
-          accessibilityState={{ expanded: open() }}
-          accessibilityLabel={`${props.title} details`}
+        <Button
+          testID={`${props.title.toLowerCase()}-details`}
           class="rounded-[6px] border border-border px-2 py-1"
           onPress={() => open.set(!open())}
         >
-          <TablerIcon
-            name="chevron-down"
-            size={16}
-            color="#9fb0bd"
-            rotate={open() ? Math.PI : 0}
-          />
-        </View>
+          <Text class="text-[11px] text-muted-foreground">{open() ? "Hide" : "Details"}</Text>
+        </Button>
       </View>
     </Collapsible>
   );
@@ -577,9 +576,10 @@ export function Lighting(props: {
     globalBright.set(source.brightness);
     boardHex.set(source.hex);
   });
+  const gpuTouched = signal(false);
   effect(() => {
     const status = gpu();
-    if (!status || status.devices.length === 0) return;
+    if (gpuTouched() || !status || status.devices.length === 0) return;
     for (const dev of status.devices) {
       const zone = dev.zones.find((candidate) => candidate.enabled) ?? dev.zones[0];
       if (zone) gpuHex.set(zone.hex);
@@ -934,7 +934,10 @@ export function Lighting(props: {
         subtitle={gpuSubtitle}
         dot={gpuHex()}
         color={gpuHex}
-        onColor={(hex) => gpuHex.set(hex)}
+        onColor={(hex) => {
+          gpuTouched.set(true);
+          gpuHex.set(hex);
+        }}
         onSync={() => syncOpen.set(true)}
         onApply={() => void applyGpuGroup()}
       >
