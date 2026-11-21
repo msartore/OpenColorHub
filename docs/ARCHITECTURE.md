@@ -152,12 +152,15 @@ The app therefore asks at startup, after the telemetry probe:
 1. `platform::state()` reports `{ elevated, can_request, detail }`.
 2. If PawnIO is `denied` and the app can ask, a native alert says fan control
    needs administrator rights.
-3. On consent, `platform::request()` relaunches the executable with
-   `ShellExecuteExW` + `lpVerb = "runas"`. Windows shows its own UAC prompt; a
-   declined UAC is a decision, not an error.
-4. The process quits so the elevated copy takes over; the elevated copy probes
-   PawnIO again and reads real fans. Lighting, settings and telemetry work
-   without elevation.
+3. On consent, `platform::request()` hands the relaunch to a hidden helper that
+   waits for the current PID to exit, then raises the UAC prompt with
+   `Start-Process -Verb RunAs`. The wait is needed because the app is
+   single-instance: a copy that starts while this one holds the mutex is
+   forwarded to it and exits, and Windows blocks that cross-integrity
+   `WM_COPYDATA` handoff. A declined UAC relaunches the standard app.
+4. The process quits, releasing the mutex; the elevated copy then starts as the
+   only instance and probes PawnIO again and reads real fans. Lighting,
+   settings and telemetry work without elevation.
 
 The autostart entry is created with `schtasks /RL HIGHEST` (Windows) or an XDG
 `.desktop` entry with `--minimized` (Linux), so a sign-in launch already has the

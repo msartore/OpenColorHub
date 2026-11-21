@@ -123,10 +123,13 @@ once at startup:
 
 * **Continue without fan control** leaves lighting, settings and telemetry
   working.
-* **Restart as administrator** calls `platform::request()` (`ShellExecuteExW`,
-  `lpVerb = "runas"`). Windows shows its own UAC prompt; declining is a decision,
-  not an error. On success the old process quits and the elevated copy probes
-  PawnIO again.
+* **Restart as administrator** calls `platform::request()`. Because the app is
+  single-instance, a `runas` copy launched while this one still holds the mutex
+  would be forwarded to it and exit — Windows blocks that `WM_COPYDATA` handoff
+  across the medium→high integrity boundary. `request()` therefore hands the
+  launch to a hidden helper that waits for the current PID to exit, then raises
+  the UAC prompt (`Start-Process -Verb RunAs`) so the elevated copy starts as the
+  only instance and probes PawnIO again. Declining relaunches the standard app.
 
 Settings → Privileges shows the current state and offers the same restart. The
 autostart task runs at `RunLevel Highest`, so a sign-in launch already has the

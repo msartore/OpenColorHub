@@ -65,7 +65,7 @@ mod imp {
     use windows_sys::Win32::UI::Shell::{
         SEE_MASK_FLAG_NO_UI, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
     };
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
     use super::Outcome;
     use crate::error::{Error, Result};
@@ -117,9 +117,31 @@ mod imp {
             .collect::<Vec<_>>()
             .join(" ");
 
-        let verb = wide("runas");
-        let file = wide(&exe);
-        let params = wide(&parameters);
+        // The app is single-instance: a copy launched while this one still
+        // holds the mutex only forwards its arguments and exits, which Windows
+        // blocks across the integrity boundary (medium → high). Quitting this
+        // process is asynchronous, so a direct `runas` now would race the
+        // mutex and leave no elevated instance running. Hand the launch to a
+        // hidden helper that waits for this PID to disappear, then raises the
+        // consent prompt and starts the elevated copy as the only instance.
+        let waiting = format!(
+            "$p = {pid}; $deadline = (Get-Date).AddSeconds(20); while ((Get-Process -Id $p -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {{ Start-Sleep -Milliseconds 200 }}; try {{ Start-Process -FilePath '{exe}' -ArgumentList {args} -Verb RunAs -ErrorAction Stop }} catch {{ Start-Process -FilePath '{exe}' -ArgumentList {args} }}",
+            pid = std::process::id(),
+            exe = exe.display().to_string().replace('\'', "''"),
+            args = if parameters.is_empty() {
+                "@()".to_string()
+            } else {
+                format!("@('{}')", parameters.replace('\'', "''"))
+            },
+        );
+        let helper = format!(
+            "-NoProfile -NonInteractive -WindowStyle Hidden -Command \"{}\"",
+            waiting.replace('"', "`\"")
+        );
+
+        let verb = wide("open");
+        let file = wide("powershell.exe");
+        let params = wide(&helper);
         let dir = cwd.as_ref().map(wide);
 
         // SAFETY: all wide buffers outlive the call; the struct is fully
@@ -132,7 +154,7 @@ mod imp {
             info.lpFile = file.as_ptr();
             info.lpParameters = params.as_ptr();
             info.lpDirectory = dir.as_ref().map_or(std::ptr::null(), |d| d.as_ptr());
-            info.nShow = SW_SHOWNORMAL;
+            info.nShow = SW_HIDE;
 
             if ShellExecuteExW(&mut info) == 0 {
                 let err = GetLastError();
