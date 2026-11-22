@@ -143,24 +143,20 @@ The NSH `Controller` reads the same identifier directories as the previous shell
 
 ## Elevation and PawnIO
 
-The installer is per-user and deliberately does **not** request administrator;
-`nsh package` has no `requireAdministrator` manifest. Fan control on Windows needs
-PawnIO's driver, which a standard process may not open.
+The installer is per-user, but the packaged app requests administrator at
+launch: the release job embeds `packaging/app.manifest`
+(`requireAdministrator`) into the runner and rebuilds the archives and installer
+from it. Fan control needs PawnIO's driver, which a standard process cannot open,
+so starting elevated means the fan half works on the first launch.
 
-The app therefore asks at startup, after the telemetry probe:
-
-1. `platform::state()` reports `{ elevated, can_request, detail }`.
-2. If PawnIO is `denied` and the app can ask, a native alert says fan control
-   needs administrator rights.
-3. On consent, `platform::request()` hands the relaunch to a hidden helper that
-   waits for the current PID to exit, then raises the UAC prompt with
-   `Start-Process -Verb RunAs`. The wait is needed because the app is
-   single-instance: a copy that starts while this one holds the mutex is
-   forwarded to it and exits, and Windows blocks that cross-integrity
-   `WM_COPYDATA` handoff. A declined UAC relaunches the standard app.
-4. The process quits, releasing the mutex; the elevated copy then starts as the
-   only instance and probes PawnIO again and reads real fans. Lighting,
-   settings and telemetry work without elevation.
+The in-app fallback remains for builds without the manifest (a development run):
+`platform::state()` reports `{ elevated, can_request, detail }`; when PawnIO is
+`denied` the app offers to restart elevated, and `platform::request()` hands the
+relaunch to a hidden helper that waits for the current PID to exit before raising
+the UAC prompt with `Start-Process -Verb RunAs`. The wait is needed because the
+app is single-instance: a copy that starts while this one holds the mutex is
+forwarded to it and exits, and Windows blocks that cross-integrity `WM_COPYDATA`
+handoff.
 
 The autostart entry is created with `schtasks /RL HIGHEST` (Windows) or an XDG
 `.desktop` entry with `--minimized` (Linux), so a sign-in launch already has the

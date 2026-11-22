@@ -294,13 +294,18 @@ pub fn build(
                 };
 
                 if led.is_some() || fan.is_some() {
+                    // A missing half is a simulator: report it as such, never
+                    // as real control (a simulated fan write must not look
+                    // like it reached a pump).
+                    let led_real = led.is_some();
+                    let fan_real = fan.is_some();
                     let led = led.unwrap_or_else(|| {
                         Box::new(sim::SimLed::new(state_path(state_file, data_dir)))
                     });
                     let fan = fan.unwrap_or_else(|| Box::new(sim::SimFan::new(data_dir)));
                     let mut caps = Capabilities {
-                        fan_control: true,
-                        led_control: true,
+                        fan_control: fan_real,
+                        led_control: led_real,
                         notes,
                     };
                     caps.notes.push(
@@ -358,7 +363,7 @@ pub fn build(
                                     "No fan telemetry: PawnIO ({pawn_error}); HWiNFO \
                                      ({hwinfo_error})"
                                 ));
-                                (Box::new(sim::SimFan::new(data_dir)), true)
+                                (Box::new(sim::SimFan::new(data_dir)), false)
                             }
                         },
                     };
@@ -394,7 +399,7 @@ pub fn build(
                             led: Box::new(sim::SimLed::new(state_path(state_file, data_dir))),
                             capabilities: Capabilities {
                                 fan_control: fan_writable,
-                                led_control: true,
+                                led_control: false,
                                 notes,
                             },
                         }
@@ -478,12 +483,27 @@ fn hardware_only(state_file: Option<&Path>, data_dir: &Path) -> BackendSet {
     #[cfg(target_os = "windows")]
     {
         let mut notes = Vec::new();
-        let fan: Box<dyn FanBackend> = match windows::hwinfo::HwinfoFan::open() {
-            Ok(f) => Box::new(f),
-            Err(e) => {
-                notes.push(format!("HWiNFO telemetry unavailable: {e}"));
-                Box::new(UnsupportedFan::new(NO_WINDOWS_FAN))
-            }
+        // "Hardware only" must try the same real fan source as Auto; skipping
+        // PawnIO here silently disabled fan control on working machines.
+        let (fan, fan_control): (Box<dyn FanBackend>, bool) = match windows::fan::PawnIoFan::open()
+        {
+            Ok(f) => (Box::new(f), true),
+            Err(pawn_error) => match windows::hwinfo::HwinfoFan::open() {
+                Ok(f) => {
+                    notes.push(format!(
+                        "PawnIO unavailable ({pawn_error}); using HWiNFO shared memory \
+                         (read-only)."
+                    ));
+                    (Box::new(f), false)
+                }
+                Err(hwinfo_error) => {
+                    notes.push(format!(
+                        "Fan hardware unavailable: PawnIO ({pawn_error}); HWiNFO \
+                         ({hwinfo_error})"
+                    ));
+                    (Box::new(UnsupportedFan::new(NO_WINDOWS_FAN)), false)
+                }
+            },
         };
         let led: Box<dyn LedBackend> = match open_hardware_led(state_file, data_dir) {
             Ok(l) => l,
@@ -499,7 +519,7 @@ fn hardware_only(state_file: Option<&Path>, data_dir: &Path) -> BackendSet {
             fan,
             led,
             capabilities: Capabilities {
-                fan_control: false,
+                fan_control,
                 led_control: notes.iter().all(|n| !n.starts_with("LED hardware")),
                 notes,
             },

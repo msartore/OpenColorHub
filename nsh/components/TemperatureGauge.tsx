@@ -7,9 +7,10 @@ import { Canvas, Text, View } from "nsh";
 import type { Accessor } from "nsh";
 
 import type { TempUnit } from "../app/domain/model";
+import { MAX_TEMP_C } from "../app/domain/fan";
 import { formatTemp, tempColor } from "../app/presentation/format";
 
-const MAX_C = 100;
+const MAX_C = MAX_TEMP_C;
 
 export function TemperatureGauge(props: {
   temperature: Accessor<number | null>;
@@ -84,9 +85,9 @@ export function TemperatureGauge(props: {
           cx.font = "10px system-ui";
           cx.textBaseline = "bottom";
           cx.textAlign = "left";
-          cx.fillText("0 °C", centerX - radius - 4, centerY + 12);
+          cx.fillText(formatTemp(0, props.unit(), 0), centerX - radius - 4, centerY + 12);
           cx.textAlign = "right";
-          cx.fillText(`${MAX_C} °C`, centerX + radius + 4, centerY + 12);
+          cx.fillText(formatTemp(MAX_C, props.unit(), 0), centerX + radius + 4, centerY + 12);
         }}
       />
       <View

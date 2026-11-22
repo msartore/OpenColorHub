@@ -102,6 +102,18 @@ jobs:
         shell: pwsh
         run: ./packaging/embed-manifest.ps1 -OutDir ".nsh/out" -Version ($env:GITHUB_REF_NAME -replace '^v','')
 
+      - name: Add licences and udev rule (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          app=.nsh/out/OpenColorHub
+          cp LICENSE.md NOTICE.md crates/colorctl-core/resources/COPYING.LGPL-2.1 "$app/"
+          cp packaging/colorctl.rules "$app/"
+          version="${GITHUB_REF_NAME#v}"
+          cd .nsh/out
+          tar -czf "OpenColorHub-${version}-linux-x86_64.tar.gz" OpenColorHub
+          cp "OpenColorHub-${version}-linux-x86_64.tar.gz" OpenColorHub.tar.gz
+          test -f "OpenColorHub-${version}-linux-x86_64.tar.gz"
+
       - name: Stage artifacts (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -109,12 +121,15 @@ jobs:
           New-Item -ItemType Directory -Force pkg | Out-Null
           Copy-Item .nsh/out/*.zip pkg/
           Copy-Item .nsh/out/*-setup.exe pkg/
+          if (-not (Get-ChildItem pkg -Filter "*-windows-x86_64.zip")) { throw "the Windows update archive is missing" }
+          if (-not (Get-ChildItem pkg -Filter "*-setup.exe")) { throw "the Windows installer is missing" }
 
       - name: Stage artifacts (Linux)
         if: runner.os == 'Linux'
         run: |
           mkdir -p pkg
           cp .nsh/out/*.tar.gz pkg/
+          ls pkg/*-linux-x86_64.tar.gz >/dev/null || { echo "::error::the Linux update archive is missing"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -283,7 +298,8 @@ jobs:
             pkg/*.deb
             pkg/latest.json
             pkg/SHA256SUMS.txt
-          draft: false
+          # Published only after the asset check below passes.
+          draft: true
           prerelease: false
           fail_on_unmatched_files: true
           body: |
@@ -299,9 +315,9 @@ jobs:
             | `latest.json` | update manifest for the app's built-in updater |
 
             This release is built with **Native Shell**: native windows, no WebView
-            runtime, no Tauri. The installer is deliberately per-user; when PawnIO
-            is present the app asks before restarting elevated, so fan control can
-            open the driver. Lighting and telemetry work without elevation.
+            runtime, no Tauri. The installer is per-user, and the app requests
+            administrator at launch so fan control can open PawnIO's driver.
+            Lighting and telemetry work either way.
 
             **Existing Tauri installs do not update into this app.** Install this
             release by hand once; the old updater only replaces its own shell.
@@ -329,3 +345,16 @@ jobs:
             GPL-3.0-only. Corresponding source for this build is the
             [`${{ github.ref_name }}` tag](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }})
             of this repository, which is the written offer required by GPLv3 §6.
+
+      # The draft becomes public only once every required asset is present.
+      - name: Verify assets and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          names=$(gh release view "${GITHUB_REF_NAME}" --json assets -q '.assets[].name')
+          for required in OpenColorHub-setup.exe latest.json SHA256SUMS.txt; do
+            echo "$names" | grep -qxF "$required" || { echo "::error::missing asset $required"; exit 1; }
+          done
+          echo "$names" | grep -q -- '-windows-x86_64.zip' || { echo "::error::missing Windows archive"; exit 1; }
+          echo "$names" | grep -q -- '-linux-x86_64.tar.gz' || { echo "::error::missing Linux archive"; exit 1; }
+          gh release edit "${GITHUB_REF_NAME}" --draft=false

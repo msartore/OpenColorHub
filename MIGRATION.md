@@ -35,7 +35,7 @@ Shell screenshots live in [`docs/screenshots/`](docs/screenshots/).
 | `src/` — Vite + DOM screens with a browser demo backend | `nsh/screens/*.tsx` — native views, `nsh test` for headless screens |
 | WebView2 runtime | no webview; native windows on Windows and Linux |
 | npm, Vite, TypeScript build | `nsh check`, `nsh build`, `nsh package` |
-| manifest `requireAdministrator` | in-app permission prompt, then `ShellExecuteExW runas` |
+| manifest `requireAdministrator` | same manifest, embedded by the release job (`packaging/app.manifest`); an in-app `runas` prompt remains as the development fallback |
 | custom updater: bare `.exe` + rename/swap | `nsh/updater` with `latest.json` |
 | NSIS/MSI/deb/AppImage | Inno per-user installer + zip, Linux tarball, CLI `.deb` |
 

@@ -12,9 +12,17 @@ $mt = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\mt.exe" 
 if (-not $mt) { throw "mt.exe not found in the Windows SDK" }
 
 $OutDir = (Resolve-Path $OutDir).Path
+$repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $manifest = Join-Path $PSScriptRoot "app.manifest"
 $appDir = Join-Path $OutDir "OpenColorHub"
 $exe = Join-Path $appDir "OpenColorHub.exe"
+
+# Ship the licence and attribution texts beside the executable. The archives
+# and installer below are rebuilt after this copy, so they carry them too.
+foreach ($file in @("LICENSE.md", "NOTICE.md", "crates/colorctl-core/resources/COPYING.LGPL-2.1")) {
+  $source = Join-Path $repo $file
+  if (Test-Path $source) { Copy-Item $source (Join-Path $appDir (Split-Path $file -Leaf)) -Force }
+}
 
 & $mt -manifest $manifest -outputresource:"$exe;#1"
 if ($LASTEXITCODE -ne 0) { throw "mt.exe failed with exit code $LASTEXITCODE" }

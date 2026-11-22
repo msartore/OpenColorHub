@@ -119,12 +119,15 @@ the output-report write fails.
 
 ## Elevation
 
-The installer is per-user and does not request administrator, so the app starts
-standard and can be installed without a UAC prompt. PawnIO's driver still needs
-elevation for fan control; RGB and HWiNFO work without it.
+The installer stays per-user, but the packaged app requests administrator at
+launch: the release job embeds `packaging/app.manifest`
+(`requireAdministrator`) into the runner and rebuilds the archives and installer
+from it. Starting elevated is what lets fan control open PawnIO's driver on the
+first launch; RGB and HWiNFO work either way.
 
-When PawnIO is installed but `pawnio_status()` reports `denied`, the app asks
-once at startup:
+Builds without that manifest (a development run) start standard, and when
+PawnIO is installed but `pawnio_status()` reports `denied` the app asks once at
+startup:
 
 * **Continue without fan control** leaves lighting, settings and telemetry
   working.
@@ -145,8 +148,8 @@ must use the same elevation for the single-instance hand-over to work. A normal
 double launch is unaffected; the elevated relaunch quits before the new copy
 takes over.
 
-There is no manifest and no persisted "always elevated" choice: the app asks,
-UAC answers, and nothing is written.
+The packaged build is elevated by its manifest, so it does not ask in-app; a
+development build asks, UAC answers, and nothing is persisted.
 
 ## Start with the OS
 

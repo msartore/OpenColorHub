@@ -58,8 +58,11 @@ pub fn commit() -> [u8; PACKET_LEN] {
 
 /// Expands a flat LED array into the ten data packets followed by the commit.
 pub fn frame(leds: &[[u8; 3]]) -> Vec<[u8; PACKET_LEN]> {
+    // A frame longer than the controller's ten packets would produce an index
+    // that collides with the commit marker (0xFF). Cap it at the fixed layout.
     let mut out: Vec<[u8; PACKET_LEN]> = leds
         .chunks(LEDS_PER_PACKET)
+        .take(PACKET_COUNT)
         .enumerate()
         .map(|(i, chunk)| packet(i as u8, chunk))
         .collect();
@@ -94,6 +97,15 @@ mod tests {
         assert_eq!(&pkt[0..5], &[0x00, 0x01, 0x00, 0x88, 0x03]);
         assert_eq!(&pkt[5..8], &[0xAA, 0xBB, 0xCC]);
         assert!(pkt[8..].iter().all(|b| *b == 0));
+    }
+
+    #[test]
+    fn an_oversized_frame_is_capped_before_the_commit_index() {
+        let leds = vec![[1u8, 2, 3]; TOTAL_LEDS + LEDS_PER_PACKET * 2];
+        let packets = frame(&leds);
+        assert_eq!(packets.len(), PACKET_COUNT + 1);
+        // No data packet may use the commit sentinel as its index.
+        assert!(packets[..PACKET_COUNT].iter().all(|p| p[4] != COMMIT_INDEX));
     }
 
     #[test]

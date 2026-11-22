@@ -277,7 +277,9 @@ pub fn file_name(url: &str) -> Option<String> {
     let cleaned: String = decoded
         .chars()
         .map(|c| {
-            if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '\\' | '|' | '?' | '*') {
+            // `/` can arrive through `%2F`; replacing it (rather than only `\`)
+            // keeps a decoded name from becoming a path.
+            if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '\\' | '/' | '|' | '?' | '*') {
                 '_'
             } else {
                 c
@@ -285,6 +287,8 @@ pub fn file_name(url: &str) -> Option<String> {
         })
         .collect();
     let cleaned = cleaned.trim_matches([' ', '.']).to_string();
+    // With every separator replaced, a name cannot traverse; only the bare
+    // dot components are still refused.
     if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
         return None;
     }
@@ -298,6 +302,12 @@ pub fn file_name(url: &str) -> Option<String> {
 /// an entry pointing at an arbitrary server would otherwise turn this module
 /// into a downloader for whatever the API returned.
 pub fn is_allowed_url(url: &str) -> bool {
+    // WHATWG URL parsing treats `\` as `/` in special schemes, so a host such
+    // as `evil.example\.colorful.cn` would pass a naive suffix check while the
+    // request actually goes to `evil.example`. Refuse it outright.
+    if url.contains('\\') {
+        return false;
+    }
     let Some(rest) = url.strip_prefix("https://") else {
         return false;
     };
@@ -308,6 +318,14 @@ pub fn is_allowed_url(url: &str) -> bool {
         .to_ascii_lowercase();
     if host.is_empty() || host.contains('@') || host.contains(':') {
         return false; // credentials or a non-default port
+    }
+    // The authority must be hostname characters only: no percent escapes,
+    // whitespace or other tricks that different URL parsers resolve differently.
+    if !host
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return false;
     }
     ALLOWED_DOMAINS
         .iter()
@@ -421,6 +439,10 @@ fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
+        // The allow-list vets the URL; a redirect could leave it, so do not
+        // follow one silently.
+        .redirects(0)
+        .https_only(true)
         .user_agent(concat!("OpenColorHub/", env!("CARGO_PKG_VERSION")))
         .build()
 }
@@ -434,6 +456,8 @@ fn download_agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(120))
+        .redirects(0)
+        .https_only(true)
         .user_agent(concat!("OpenColorHub/", env!("CARGO_PKG_VERSION")))
         .build()
 }
@@ -508,8 +532,12 @@ pub fn download_with_progress(
             entry.url
         )));
     }
+    // The catalogue (and its cache) is remote data: re-derive the name from
+    // the URL instead of trusting `entry.file_name`, which could carry a path.
+    let name = file_name(&entry.url)
+        .ok_or_else(|| Error::invalid(format!("no usable file name in {}", entry.url)))?;
     std::fs::create_dir_all(dir)?;
-    let dest = dir.join(&entry.file_name);
+    let dest = dir.join(&name);
     let mut partial_os = dest.clone().into_os_string();
     partial_os.push(".part");
     let partial = PathBuf::from(partial_os);
@@ -552,6 +580,17 @@ pub fn download_with_progress(
     if let Err(e) = result {
         let _ = std::fs::remove_file(&partial);
         return Err(Error::Io(e));
+    }
+    // A server that announced a length but delivered fewer bytes left a
+    // truncated archive; do not promote it as a finished download.
+    if let Some(expected) = total_expected
+        && total != expected
+    {
+        let _ = std::fs::remove_file(&partial);
+        return Err(Error::unavailable(format!(
+            "{} ended after {total} of {expected} bytes",
+            entry.url
+        )));
     }
     file.flush()?;
     drop(file);
@@ -695,6 +734,10 @@ mod tests {
             "https://www.colorfulgroup.com/uploads/x.zip"
         ));
         assert!(!is_allowed_url("https://colorfulgroup.com.evil.io/x.zip"));
+        // `\` is a path separator to URL parsers, so a suffix check alone would
+        // accept a host of `evil.example`.
+        assert!(!is_allowed_url("https://evil.example\\.colorful.cn/x.zip"));
+        assert!(!is_allowed_url("https://evil.example%2F.colorful.cn/x.zip"));
     }
 
     #[test]
@@ -718,6 +761,11 @@ mod tests {
         assert_eq!(file_name("https://a/x/a%00b.zip").unwrap(), "a_b.zip");
         assert!(file_name("https://a/x/").is_none());
         assert!(file_name("https://a/x/..").is_none());
+        // Percent-encoded separators must not turn the name into a path.
+        assert_eq!(
+            file_name("https://a/x/a%2F..%2F..%2Fetc%2Fpasswd").unwrap(),
+            "a_.._.._etc_passwd"
+        );
     }
 
     #[test]

@@ -320,6 +320,7 @@ function ChannelCard(props: {
         <Button
           testID={`channel-apply-${props.channel().id}`}
           class="rounded-[6px] bg-primary px-3 py-1.5 disabled:opacity-40"
+          disabled={!dirty()}
           onPress={() => void apply()}
         >
           <Text class="text-[11px] text-primary-foreground">Apply</Text>
@@ -340,15 +341,15 @@ function ChannelCard(props: {
 }
 
 function gpuSignature(zone: GpuZoneStatus): string {
-  return `${zone.hex}|${zone.mode}|${zone.brightness}|${zone.enabled}`;
+  return `${zone.hex}|${zone.mode}|${zone.speed}|${zone.brightness}|${zone.direction}|${zone.enabled}`;
 }
 
 /** One GPU LED zone: colour, effect, brightness, enable, Apply / Off. */
 function GpuZoneCard(props: {
   device: Accessor<GpuDeviceStatus>;
   zone: Accessor<GpuZoneStatus>;
-  write: (device: string, zone: string, state: GpuZoneState) => Promise<void>;
-  turnOff: (device: string, zone: string) => Promise<void>;
+  write: (device: string, zone: string, state: GpuZoneState) => Promise<boolean>;
+  turnOff: (device: string, zone: string) => Promise<boolean>;
 }) {
   const zoneId = props.zone().id;
   const hex = signal(props.zone().hex);
@@ -371,16 +372,23 @@ function GpuZoneCard(props: {
   });
 
   const write = async (on: boolean): Promise<void> => {
+    const current = props.zone();
     const state: GpuZoneState = {
       color: hexToRgb(hex()),
       mode: Number(mode()) || GPU_DEFAULT_MODE,
-      speed: GPU_DEFAULT_SPEED,
+      // Keep the saved effect speed and direction: only the fields the card
+      // exposes should change when the user presses Apply.
+      speed: current.speed,
       brightness: gpuPercentToBrightness(brightness()),
-      direction: 0,
+      direction: current.direction,
       enabled: on,
     };
-    await props.write(props.device().id, zoneId, state);
-    dirty.set(false);
+    // A cancelled or failed write must leave the "unsaved" state in place.
+    if (await props.write(props.device().id, zoneId, state)) dirty.set(false);
+  };
+
+  const turnOff = async (): Promise<void> => {
+    if (await props.turnOff(props.device().id, zoneId)) dirty.set(false);
   };
 
   const subtitle =
@@ -473,14 +481,15 @@ function GpuZoneCard(props: {
 
       <View class="flex-row items-center gap-2" style={{ flexWrap: "wrap" }}>
         <Button
-          class="rounded-[6px] bg-primary px-3 py-1.5"
+          class="rounded-[6px] bg-primary px-3 py-1.5 disabled:opacity-40"
+          disabled={!dirty()}
           onPress={() => void write(enabled())}
         >
           <Text class="text-[11px] text-primary-foreground">Apply</Text>
         </Button>
         <Button
           class="rounded-[6px] border border-border px-3 py-1.5"
-          onPress={() => void props.turnOff(props.device().id, zoneId)}
+          onPress={() => void turnOff()}
         >
           <Text class="text-[11px] text-foreground">Off</Text>
         </Button>
@@ -691,27 +700,31 @@ export function Lighting(props: {
     device: string,
     zone: string,
     state: GpuZoneState,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     if (
       !(await confirmWrite(
         props.store.settings(),
         `Write ${hexFromRgb(state.color)} to GPU ${zone}?`,
       ))
     ) {
-      return;
+      return false;
     }
     try {
       props.toast(await props.store.gpu.setZone(device, zone, state, true), "ok");
+      return true;
     } catch (error) {
       props.toast(`GPU lighting write failed: ${String(error)}`, "danger");
+      return false;
     }
   };
 
-  const offGpuZone = async (device: string, zone: string): Promise<void> => {
+  const offGpuZone = async (device: string, zone: string): Promise<boolean> => {
     try {
       props.toast(await props.store.gpu.setZone(device, zone, gpuOffState(), true), "ok");
+      return true;
     } catch (error) {
       props.toast(`GPU lighting write failed: ${String(error)}`, "danger");
+      return false;
     }
   };
 
@@ -726,7 +739,8 @@ export function Lighting(props: {
     }
     try {
       props.toast(await props.store.lighting.setAll(globalHex(), globalBright()), "ok");
-      touched.set(true);
+      // The hardware now matches the group controls; let telemetry resync them.
+      touched.set(false);
     } catch (error) {
       props.toast(`Lighting write failed: ${String(error)}`, "danger");
     }
@@ -753,21 +767,36 @@ export function Lighting(props: {
 
   const applyBoardGroup = () => void applyAll();
   const applyGpuGroup = async (): Promise<void> => {
-    let message = "";
-    for (const dev of gpu()?.devices ?? []) {
-      for (const zone of dev.zones) {
-        const state: GpuZoneState = {
-          color: hexToRgb(gpuHex()),
-          mode: zone.mode,
-          speed: zone.speed,
-          brightness: gpuPercentToBrightness(gpuBright()),
-          direction: zone.direction,
-          enabled: true,
-        };
-        message = await props.store.gpu.setZone(dev.id, zone.id, state, true);
-      }
+    if (
+      !(await confirmWrite(
+        props.store.settings(),
+        `Write ${gpuHex().toUpperCase()} at ${gpuBright()}% to every GPU zone?`,
+      ))
+    ) {
+      return;
     }
-    if (message) props.toast(message, "ok");
+    try {
+      let message = "";
+      for (const dev of gpu()?.devices ?? []) {
+        for (const zone of dev.zones) {
+          const state: GpuZoneState = {
+            color: hexToRgb(gpuHex()),
+            mode: zone.mode,
+            speed: zone.speed,
+            brightness: gpuPercentToBrightness(gpuBright()),
+            direction: zone.direction,
+            // Group Apply changes colour and brightness, not which zones are on.
+            enabled: zone.enabled,
+          };
+          message = await props.store.gpu.setZone(dev.id, zone.id, state, true);
+        }
+      }
+      if (message) props.toast(message, "ok");
+      // Let the group swatch follow the hardware again.
+      gpuTouched.set(false);
+    } catch (error) {
+      props.toast(`GPU write failed: ${String(error)}`, "danger");
+    }
   };
 
   const boardSubtitle =

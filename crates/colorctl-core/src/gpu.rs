@@ -807,7 +807,7 @@ mod nvidia {
         if unsafe { (api.enum_gpus)(handles.as_mut_ptr(), &mut count) } != 0 || count == 0 {
             return None;
         }
-        let limit = (count as usize).min(pcis.len().max(1));
+        let limit = (count as usize).min(pcis.len().max(1)).min(handles.len());
         Some(
             handles[..limit]
                 .iter()
@@ -961,6 +961,13 @@ mod intel {
                 rad: 0,
                 data: [0; 128],
             };
+            if data.len() > args.data.len() {
+                return Err(Error::backend(format!(
+                    "I2C payload of {} bytes exceeds the {}-byte buffer",
+                    data.len(),
+                    args.data.len()
+                )));
+            }
             args.data[..data.len()].copy_from_slice(data);
             let rc = unsafe { (self.api.i2c)(self.output, &mut args) };
             if rc != 0 {

@@ -14,6 +14,7 @@ import type {
 } from "../app/domain/model";
 import {
   DEFAULT_CURVE,
+  MAX_TEMP_C,
   PROFILES,
   PUMP_FLOOR_PERCENT,
   curveSignature,
@@ -126,7 +127,7 @@ function FanCard(props: {
 
       <Slider
         value={dutyDraft()}
-        min={0}
+        min={props.fan().pump ? PUMP_FLOOR_PERCENT : 0}
         max={100}
         step={1}
         accessibilityLabel={`${props.fan().label} duty`}
@@ -135,7 +136,8 @@ function FanCard(props: {
         rangeClass="h-1 rounded-full bg-primary"
         thumbClass="w-3.5 h-3.5 rounded-full bg-foreground"
         onChange={(event) => {
-          const value = Array.isArray(event.value) ? event.value[0] : event.value;
+          const raw = Array.isArray(event.value) ? event.value[0] : event.value;
+          const value = props.fan().pump ? Math.max(PUMP_FLOOR_PERCENT, raw) : raw;
           dragging.set(true);
           dutyDraft.set(value);
         }}
@@ -190,7 +192,7 @@ function FanCard(props: {
                 <NumberInput
                   value={point().temp_c}
                   min={0}
-                  max={110}
+                  max={MAX_TEMP_C}
                   step={1}
                   accessibilityLabel={`${props.fan().label} point ${index() + 1} temperature`}
                   inputClass="h-7 rounded-[6px] border border-border bg-muted px-1 text-center text-xs text-foreground"
@@ -280,11 +282,14 @@ export function Fans(props: {
   ) => {
     const fan = props.store.snapshot()?.fans.find((candidate) => candidate.header === header);
     const label = fan?.label ?? header;
-    if (!(await confirmWrite(props.store.settings(), `Set ${label} to ${percent}%?`))) {
+    // The core floors a pump; confirm what will actually be written.
+    const applied = fan?.pump ? Math.max(PUMP_FLOOR_PERCENT, percent) : percent;
+    const floor = fan?.pump && applied !== percent ? ` (pump floor ${PUMP_FLOOR_PERCENT}%)` : "";
+    if (!(await confirmWrite(props.store.settings(), `Set ${label} to ${applied}%${floor}?`))) {
       return false;
     }
     try {
-      const message = await props.store.fans.setDuty(header, percent);
+      const message = await props.store.fans.setDuty(header, applied);
       props.toast(message, "ok");
       return true;
     } catch (error) {

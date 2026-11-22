@@ -5,7 +5,7 @@
 
 import { Text, View, Storage, cleanup, effect, keymap, mount, signal } from "nsh";
 import { Application, Tray, Window, currentWindow } from "nsh/desktop";
-import { AlertDialog } from "nsh/base";
+import { AlertDialog, Button } from "nsh/base";
 
 import { createDeps } from "./app/composition/deps";
 import { applyAccent } from "./app/presentation/theme";
@@ -191,6 +191,20 @@ function App() {
               The hardware probe or the settings file failed. The original message is below.
             </Text>
             <Text class="text-xs font-mono text-muted-foreground">{error()}</Text>
+            <View class="flex-row gap-2" style={{ flexWrap: "wrap" }}>
+              <Button
+                class="rounded-[7px] bg-primary px-3 py-1.5"
+                onPress={() => void deps.store.start()}
+              >
+                <Text class="text-xs text-primary-foreground">Try again</Text>
+              </Button>
+              <Button
+                class="rounded-[7px] border border-border px-3 py-1.5"
+                onPress={() => Application.quit()}
+              >
+                <Text class="text-xs text-foreground">Quit</Text>
+              </Button>
+            </View>
           </View>
         )}
       </If>
@@ -207,7 +221,7 @@ function App() {
           }
         >
           <If when={screen() === "dashboard"}>
-            <Dashboard store={deps.store} />
+            <Dashboard store={deps.store} onNavigate={navigate} />
           </If>
           <If when={screen() === "fans"}>
             <Fans store={deps.store} toast={toast} />

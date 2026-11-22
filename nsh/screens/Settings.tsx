@@ -22,6 +22,7 @@ import type {
   TempUnit,
 } from "../app/domain/model";
 import { FAN_HEADERS } from "../app/domain/fan";
+import { formatTemp } from "../app/presentation/format";
 import { boardDisplayName, deviceLabel } from "../app/domain/telemetry";
 import { SETTINGS_RESET_PATCH } from "../app/domain/settings";
 import { isNarrow } from "../app/presentation/layout";
@@ -145,16 +146,18 @@ export function SettingsScreen(props: {
   };
   void loadSystem();
 
-  const save = async (patch: SettingsPatch): Promise<void> => {
+  const save = async (patch: SettingsPatch): Promise<boolean> => {
     try {
       await props.store.saveSettings(patch);
+      return true;
     } catch (error) {
       props.toast(`Could not save: ${String(error)}`, "danger");
+      return false;
     }
   };
 
   const changeBackend = async (backend: BackendMode): Promise<void> => {
-    await save({ backend });
+    if (!(await save({ backend }))) return;
     try {
       await props.store.refresh();
       props.toast(`Backend set to ${backend}`, "ok");
@@ -179,9 +182,13 @@ export function SettingsScreen(props: {
       ],
     });
     if (answer.action !== "reset") return;
-    await save(SETTINGS_RESET_PATCH);
-    await props.store.refresh();
-    props.toast("Settings reset", "ok");
+    if (!(await save(SETTINGS_RESET_PATCH))) return;
+    try {
+      await props.store.refresh();
+      props.toast("Settings reset", "ok");
+    } catch (error) {
+      props.toast(`Settings reset, reload failed: ${String(error)}`, "warn");
+    }
   };
 
   const reload = async (): Promise<void> => {
@@ -365,19 +372,11 @@ export function SettingsScreen(props: {
               <KeyValue label="lighting backend" value={deviceLabel(snapshot().led_device)} />
               <KeyValue
                 label="board temp"
-                value={
-                  snapshot().board_temp_c === null || snapshot().board_temp_c === undefined
-                    ? "—"
-                    : `${snapshot().board_temp_c!.toFixed(1)} °C`
-                }
+                value={formatTemp(snapshot().board_temp_c, props.store.settings().temp_unit, 1)}
               />
               <KeyValue
                 label="cpu temp"
-                value={
-                  snapshot().cpu_temp_c === null || snapshot().cpu_temp_c === undefined
-                    ? "—"
-                    : `${snapshot().cpu_temp_c!.toFixed(1)} °C`
-                }
+                value={formatTemp(snapshot().cpu_temp_c, props.store.settings().temp_unit, 1)}
               />
             </View>
           )}

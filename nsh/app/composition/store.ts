@@ -254,6 +254,8 @@ export function createStore(port: ColorHubPort): AppStore {
     pawnio,
 
     async start() {
+      // A retry must clear the previous failure before probing again.
+      error.set(null);
       try {
         const [nextSettings, nextSnapshot, about] = await Promise.all([
           port.settings(),
@@ -288,9 +290,15 @@ export function createStore(port: ColorHubPort): AppStore {
     activity: () => port.activity(),
 
     async saveSettings(patch) {
-      settings.set(mergeSettings(settings(), patch));
-      const saved = await port.saveSettings(patch);
-      settings.set(saved);
+      const previous = settings();
+      settings.set(mergeSettings(previous, patch));
+      try {
+        settings.set(await port.saveSettings(patch));
+      } catch (cause) {
+        // Do not leave the UI showing a value the file never received.
+        settings.set(previous);
+        throw cause;
+      }
     },
 
     dispose() {

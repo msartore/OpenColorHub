@@ -2,8 +2,10 @@
 
 import { Text, View, cleanup, computed, effect, signal } from "nsh";
 import type { JSX } from "nsh";
+import { Button } from "nsh/base";
 
 import type { AppStore } from "../app/composition/store";
+import type { ScreenId } from "../components/Shell";
 import type { ActivityEntry, Snapshot } from "../app/domain/model";
 import {
   activityWindow,
@@ -34,7 +36,7 @@ function tileWidth(): `${number}%` {
   return size === "wide" ? "32%" : size === "medium" ? "49%" : "100%";
 }
 
-export function Dashboard(props: { store: AppStore }) {
+export function Dashboard(props: { store: AppStore; onNavigate: (screen: ScreenId) => void }) {
   const samples: number[] = [];
   const stats = signal<TemperatureStats | null>(null);
   const history = signal<number[]>([]);
@@ -152,7 +154,12 @@ export function Dashboard(props: { store: AppStore }) {
                 <Text class="text-xs text-muted-foreground" style={{ flex: 1 }}>
                   {snapshot().capabilities.notes.join(" · ")}
                 </Text>
-                <Text class="text-[11px] text-muted-foreground">details</Text>
+                <Button
+                  class="rounded-[6px] border border-border px-2 py-1"
+                  onPress={() => props.onNavigate("about")}
+                >
+                  <Text class="text-[11px] text-foreground">details</Text>
+                </Button>
               </View>
             </If>
 
@@ -232,7 +239,12 @@ export function Dashboard(props: { store: AppStore }) {
                 <Panel
                   title="Fan headers"
                   actions={
-                    <Text class="text-xs text-muted-foreground">Open fan control</Text>
+                    <Button
+                      class="rounded-[6px] border border-border px-2 py-1"
+                      onPress={() => props.onNavigate("fans")}
+                    >
+                      <Text class="text-[11px] text-foreground">Open fan control</Text>
+                    </Button>
                   }
                 >
                   <View class="gap-2">
@@ -276,7 +288,17 @@ export function Dashboard(props: { store: AppStore }) {
               </View>
 
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Panel title="Lighting" actions={<Text class="text-xs text-muted-foreground">Edit lighting</Text>}>
+                <Panel
+                  title="Lighting"
+                  actions={
+                    <Button
+                      class="rounded-[6px] border border-border px-2 py-1"
+                      onPress={() => props.onNavigate("leds")}
+                    >
+                      <Text class="text-[11px] text-foreground">Edit lighting</Text>
+                    </Button>
+                  }
+                >
                   <View
                     style={{
                       padding: 4,

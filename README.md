@@ -44,9 +44,10 @@ releases, checks a pinned SHA-256 and runs it, so its UI and UAC prompt appear.
 Nothing installs silently. Without it: HWiNFO telemetry, then the simulator, both
 labelled. → [Platform notes](docs/PLATFORM.md)
 
-The desktop installer is per-user and does not request administrator. When PawnIO
-is installed but the process cannot open it, the app asks before restarting
-elevated; declining leaves the app running for lighting, settings and telemetry.
+The Windows installer stays per-user, but the app itself requests administrator at
+launch (its manifest marks it `requireAdministrator`) so fan control can open
+PawnIO's driver immediately. Lighting, settings and telemetry do not need those
+rights, but the elevated process is what makes the fan half work on first start.
 
 ## Install
 
@@ -93,7 +94,7 @@ cargo build --release -p opencolorhub-cli
 Linux hardware needs privileges:
 
 ```bash
-sudo ./target/release/colorctl fan --header cpu --percent 50
+sudo ./target/release/colorctl fan set-speed --fan cpu --percent 50
 ```
 
 ## Documentation
