@@ -10,10 +10,22 @@
 //
 // Usage: node scripts/set-version.mjs v1.2.3
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const tag = process.argv[2] ?? "";
-const version = tag.trim().replace(/^v/, "");
+// On a tag push the workflow passes GITHUB_REF_NAME. Local and manual runs may
+// have no ref name at all, so fall back to the tag at HEAD rather than failing
+// on an empty string.
+let tag = process.argv[2] || process.env.GITHUB_REF_NAME || "";
+if (!tag.trim()) {
+  try {
+    tag = execFileSync("git", ["describe", "--tags", "--abbrev=0"], { encoding: "utf8" });
+  } catch {
+    // Reported below by the validation.
+  }
+}
+tag = tag.trim();
+const version = tag.replace(/^v/, "");
 
 if (!/^\d+\.\d+\.\d+$/.test(version)) {
   console.error(`set-version: expected a tag like v1.2.3, got "${tag}"`);
