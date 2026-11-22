@@ -42,6 +42,7 @@ export const TABLER_PATHS = {
   ],
   bookmark: ["M9 4h6a2 2 0 0 1 2 2v14l-5 -3.5l-5 3.5v-14a2 2 0 0 1 2 -2"],
   "chevron-down": ["M6 9l6 6 6-6"],
+  "chevron-up": ["M6 15l6-6 6 6"],
 } as const;
 
 export type TablerIconName = keyof typeof TABLER_PATHS;

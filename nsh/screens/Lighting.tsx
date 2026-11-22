@@ -183,10 +183,9 @@ function DeviceGroup(props: {
           onPress={() => open.set(!open())}
         >
           <TablerIcon
-            name="chevron-down"
+            name={open() ? "chevron-up" : "chevron-down"}
             size={14}
             color="#9fb0bd"
-            rotate={open() ? 180 : 0}
           />
         </Button>
       </View>
