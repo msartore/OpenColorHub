@@ -1122,6 +1122,16 @@ mod tests {
     }
 
     #[test]
+    fn dimmed_brightness_reaches_the_wire_frame() {
+        let z = &GPU_ZONES[0];
+        let s = GpuZoneState {
+            brightness: 0x40,
+            ..GpuZoneState::default()
+        };
+        assert_eq!(build_frame(z, &s)[8], 0x40, "byte 8 is the brightness");
+    }
+
+    #[test]
     fn zones_have_unique_channels() {
         let mut channels: Vec<u8> = GPU_ZONES.iter().map(|z| z.channel).collect();
         channels.sort_unstable();

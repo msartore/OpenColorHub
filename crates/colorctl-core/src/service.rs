@@ -820,14 +820,21 @@ impl Service {
                 "GPU LED control is disabled in settings",
             ));
         }
-        let source = self
+        // Sync carries brightness too: the GPU wire takes 0-255 where the
+        // board reports a 0-100 percentage, so scale the same way the UI does.
+        let (source, brightness) = self
             .led
             .state()
             .statuses()
             .into_iter()
             .find(|c| c.enabled)
-            .map(|c| c.color)
-            .unwrap_or([255, 255, 255]);
+            .map(|c| {
+                (
+                    c.color,
+                    (u16::from(c.brightness) * 255 / 100).min(255) as u8,
+                )
+            })
+            .unwrap_or(([255, 255, 255], 255));
         let mut count = 0usize;
         for device in self.gpu.status().devices {
             for zone in device.zones {
@@ -839,6 +846,7 @@ impl Service {
                     .copied()
                     .unwrap_or_default();
                 state.color = source;
+                state.brightness = brightness;
                 state.enabled = true;
                 self.gpu
                     .state_mut()
@@ -1523,6 +1531,7 @@ mod tests {
         let gpu = svc.snapshot().gpu_led.unwrap();
         for zone in gpu.devices[0].zones.iter() {
             assert_eq!(zone.color, [12, 34, 56], "zone {}", zone.id);
+            assert_eq!(zone.brightness, (80u16 * 255 / 100) as u8, "zone {}", zone.id);
         }
         std::fs::remove_dir_all(&dir).ok();
     }

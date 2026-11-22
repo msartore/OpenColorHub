@@ -123,6 +123,7 @@ test("lighting groups the motherboard and GPU controllers", async () => {
   expect(texts.some((text) => text.includes("Nuvoton RGB at I²C 0x36"))).toBe(true);
   expect(texts.some((text) => text.includes("ARGB header"))).toBe(true);
   expect(texts.some((text) => text.includes("Top / side"))).toBe(true);
+  expect(app.count("id:gpu-global-brightness")).toBe(1);
 });
 
 test("settings offers the restore, release and GPU switches", async () => {

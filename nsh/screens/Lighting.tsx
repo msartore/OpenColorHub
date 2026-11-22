@@ -564,6 +564,7 @@ export function Lighting(props: {
   const globalBright = signal(80);
   const boardHex = signal("#ff0000");
   const gpuHex = signal("#eeff00");
+  const gpuBright = signal(100);
   const touched = signal(false);
   const presetsOpen = signal(false);
   const syncOpen = signal(false);
@@ -582,7 +583,10 @@ export function Lighting(props: {
     if (gpuTouched() || !status || status.devices.length === 0) return;
     for (const dev of status.devices) {
       const zone = dev.zones.find((candidate) => candidate.enabled) ?? dev.zones[0];
-      if (zone) gpuHex.set(zone.hex);
+      if (zone) {
+        gpuHex.set(zone.hex);
+        gpuBright.set(gpuBrightnessToPercent(zone.brightness));
+      }
     }
   });
 
@@ -751,7 +755,7 @@ export function Lighting(props: {
           color: hexToRgb(gpuHex()),
           mode: zone.mode,
           speed: zone.speed,
-          brightness: zone.brightness,
+          brightness: gpuPercentToBrightness(gpuBright()),
           direction: zone.direction,
           enabled: true,
         };
@@ -955,6 +959,34 @@ export function Lighting(props: {
               <Text class="text-[11px] text-muted-foreground">
                 {gpu()?.device.error ?? "AMD ADL / NVIDIA NVAPI / Intel IGCL"}
               </Text>
+            </If>
+            <If when={gpuDevices.length > 0}>
+              <View style={{ width: 240 }} class="gap-1">
+                <Slider
+                  testID="gpu-global-brightness"
+                  value={gpuBright()}
+                  min={0}
+                  max={100}
+                  step={1}
+                  accessibilityLabel="GPU brightness"
+                  trackClass="h-5 justify-center"
+                  indicatorClass="h-1 rounded-full bg-muted"
+                  rangeClass="h-1 rounded-full bg-primary"
+                  thumbClass="w-3.5 h-3.5 rounded-full bg-foreground"
+                  onChange={(event) => {
+                    const value = Array.isArray(event.value) ? event.value[0] : event.value;
+                    gpuTouched.set(true);
+                    gpuBright.set(value);
+                  }}
+                  onChangeEnd={(event) => {
+                    const value = Array.isArray(event.value) ? event.value[0] : event.value;
+                    gpuTouched.set(true);
+                    gpuBright.set(value);
+                  }}
+                >
+                  <Text class="text-[11px] text-muted-foreground">{`Brightness · ${gpuBright()}%`}</Text>
+                </Slider>
+              </View>
             </If>
             <View class="flex-row gap-3" style={{ flexWrap: "wrap" }}>
               <Each of={gpuDevices} key={(dev) => dev.id}>
