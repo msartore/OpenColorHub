@@ -178,10 +178,16 @@ function DeviceGroup(props: {
         </Button>
         <Button
           testID={`${props.title.toLowerCase()}-details`}
-          class="rounded-[6px] border border-border px-2 py-1"
+          class="rounded-[6px] border border-border px-2 py-1.5"
+          accessibilityLabel={open() ? "Hide details" : "Show details"}
           onPress={() => open.set(!open())}
         >
-          <Text class="text-[11px] text-muted-foreground">{open() ? "Hide" : "Details"}</Text>
+          <TablerIcon
+            name="chevron-down"
+            size={14}
+            color="#9fb0bd"
+            rotate={open() ? 180 : 0}
+          />
         </Button>
       </View>
     </Collapsible>
