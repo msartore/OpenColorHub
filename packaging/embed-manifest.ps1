@@ -11,6 +11,7 @@ $mt = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\mt.exe" 
   Select-Object -First 1 -ExpandProperty FullName
 if (-not $mt) { throw "mt.exe not found in the Windows SDK" }
 
+$OutDir = (Resolve-Path $OutDir).Path
 $manifest = Join-Path $PSScriptRoot "app.manifest"
 $appDir = Join-Path $OutDir "OpenColorHub"
 $exe = Join-Path $appDir "OpenColorHub.exe"
@@ -40,12 +41,9 @@ if ($SkipInstaller) {
     "C:\Program Files\Inno Setup 6\ISCC.exe"
   ) | Where-Object { Test-Path $_ } | Select-Object -First 1
   if (-not $iscc) { throw "ISCC.exe not found" }
-  Push-Location $OutDir
-  try {
-    & $iscc (Join-Path $OutDir "OpenColorHub.iss") /O"$OutDir" /Q
-  } finally {
-    Pop-Location
-  }
+  $iss = Join-Path $OutDir "OpenColorHub.iss"
+  New-Item -ItemType Directory -Force $OutDir | Out-Null
+  & $iscc $iss /O"$OutDir" /Q
   if ($LASTEXITCODE -ne 0) { throw "ISCC.exe failed with exit code $LASTEXITCODE" }
 }
 
