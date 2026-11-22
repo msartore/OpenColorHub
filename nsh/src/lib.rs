@@ -340,6 +340,14 @@ impl Controller {
                 {
                     debug_log(format!("could not re-apply lighting: {error}"));
                 }
+                // GPU LEDs are a separate backend with their own state file.
+                // `detect()` loads it, but the saved zones are not pushed to the
+                // card until apply_gpu(), so replay them here at launch too.
+                if settings.gpu_led_enabled
+                    && let Err(error) = service.apply_gpu()
+                {
+                    debug_log(format!("could not re-apply GPU lighting: {error}"));
+                }
                 (Some(service), None)
             }
             Err(_) => (
