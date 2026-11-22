@@ -1,5 +1,15 @@
 import { expect, open, test } from "nsh/test";
 
+/**
+ * The elevation prompt can appear in headless runs when PawnIO is installed but
+ * this process is not elevated. Dismiss it; every other dialog is the app's
+ * "Write?" confirmation the tests intend to accept.
+ */
+const answerDialog = (dialog: { title?: string | null }): string =>
+  dialog.title === "Fan control needs administrator rights"
+    ? "Continue without fan control"
+    : "Write";
+
 /** Lighting groups start collapsed; open them when a test needs their content. */
 async function expandLighting(app: Awaited<ReturnType<typeof open>>) {
   await app.waitFor("Motherboard");
@@ -24,7 +34,7 @@ test("the dashboard renders the live machine", async () => {
 
 test("fan control writes through the controller", async () => {
   const app = await open("./App.tsx");
-  app.onDialog(() => "Write");
+  app.onDialog(answerDialog);
   await app.press("Fan control");
   await app.waitFor("Profiles");
   await app.press("Standard");
@@ -51,7 +61,7 @@ test("the single colour swatch opens the picker and keeps the chosen colour", as
 
 test("the curve editor drags a point and writes the curve", async () => {
   const app = await open("./App.tsx");
-  app.onDialog(() => "Write");
+  app.onDialog(answerDialog);
   await app.press("Fan control");
   await app.waitFor("Profiles");
   await app.drag("id:curve-sys", { x: 24, y: -18 });
@@ -63,7 +73,7 @@ test("the curve editor drags a point and writes the curve", async () => {
 
 test("lighting renders the frame and turns everything off", async () => {
   const app = await lightingApp();
-  app.onDialog(() => "Write");
+  app.onDialog(answerDialog);
   await app.press("Lighting");
   await expandLighting(app);
   await app.waitFor("Frame preview");
@@ -76,7 +86,7 @@ test("lighting renders the frame and turns everything off", async () => {
 
 test("a channel applies its colour and brightness", async () => {
   const app = await lightingApp();
-  app.onDialog(() => "Write");
+  app.onDialog(answerDialog);
   await app.press("Lighting");
   await expandLighting(app);
   await app.waitFor("Frame preview");

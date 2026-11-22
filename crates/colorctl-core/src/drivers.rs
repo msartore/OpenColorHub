@@ -425,6 +425,19 @@ fn agent() -> ureq::Agent {
         .build()
 }
 
+/// Catalogue JSON is small and should fail fast, but a driver archive is tens
+/// or hundreds of megabytes from a CDN that is slow to start. The catalogue
+/// agent's 30 s overall deadline would abort a real download mid-body, so file
+/// transfers use their own, longer deadline (the same budget the verified
+/// PawnIO installer uses).
+fn download_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout(Duration::from_secs(120))
+        .user_agent(concat!("OpenColorHub/", env!("CARGO_PKG_VERSION")))
+        .build()
+}
+
 /// Resolves a board name to the site's product id.
 ///
 /// The site groups boards into series; a product only appears under its own
@@ -501,8 +514,7 @@ pub fn download_with_progress(
     partial_os.push(".part");
     let partial = PathBuf::from(partial_os);
 
-    let agent = agent();
-    let response = agent
+    let response = download_agent()
         .get(&entry.url)
         // The download CDN rejects requests without a vendor referer (403).
         .set("Referer", SITE)
@@ -516,6 +528,10 @@ pub fn download_with_progress(
     let mut hasher = Sha256::new();
     let mut total: u64 = 0;
     let mut buf = vec![0u8; 64 * 1024];
+    // A 64 KiB chunk on a fast link can arrive in a few ms. Reporting every one
+    // floods the UI bridge; cap ticks to one per ~100 ms (plus always the last
+    // one) so progress stays smooth without burying the engine thread.
+    let mut last_report = std::time::Instant::now();
 
     let result = (|| -> std::io::Result<()> {
         loop {
@@ -526,7 +542,10 @@ pub fn download_with_progress(
             hasher.update(&buf[..n]);
             file.write_all(&buf[..n])?;
             total += n as u64;
-            on_progress(total, total_expected);
+            if last_report.elapsed() >= Duration::from_millis(100) {
+                on_progress(total, total_expected);
+                last_report = std::time::Instant::now();
+            }
         }
     })();
 
@@ -536,7 +555,14 @@ pub fn download_with_progress(
     }
     file.flush()?;
     drop(file);
+    // On Windows rename fails if the destination already exists (e.g. a stale
+    // file the UI did not know about). The verified bytes replace it.
+    if dest.exists() {
+        std::fs::remove_file(&dest)?;
+    }
     std::fs::rename(&partial, &dest)?;
+    // Always report the final count, even when the last chunk was throttled.
+    on_progress(total, total_expected);
 
     Ok(DownloadedFile {
         path: dest,

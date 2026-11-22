@@ -766,6 +766,7 @@ impl Controller {
         };
 
         let (sender, receiver) = std::sync::mpsc::channel::<String>();
+        let receiver = Arc::new(std::sync::Mutex::new(receiver));
         let name = file.file_name.clone();
         let job = blocking(move || {
             drivers::download_with_progress(&file, &dir, |received, total| {
@@ -780,19 +781,31 @@ impl Controller {
 
         let done = Arc::new(AtomicBool::new(false));
         let flag = done.clone();
+        let pump_receiver = receiver.clone();
+        let pump_listener = listener.clone();
         spawn(async move {
             while !flag.load(Ordering::SeqCst) {
                 timer(Duration::from_millis(120)).await;
-                while let Ok(message) = receiver.try_recv() {
-                    listener.post(message);
+                // Share the receiver with the final drain below: a tick that
+                // lands after this task's last poll still reaches the UI.
+                if let Ok(rx) = pump_receiver.lock() {
+                    while let Ok(message) = rx.try_recv() {
+                        pump_listener.post(message);
+                    }
                 }
             }
         });
 
-        let result = job
-            .await
-            .map_err(|error| format!("download panicked: {error}"))?;
+        let result = job.await;
+        // Stop the pump before any `?`: a panicked job must not leave it
+        // spinning every 120 ms for the lifetime of the app.
         done.store(true, Ordering::SeqCst);
+        if let Ok(rx) = receiver.lock() {
+            while let Ok(message) = rx.try_recv() {
+                listener.post(message);
+            }
+        }
+        let result = result.map_err(|error| format!("download panicked: {error}"))?;
         match result {
             Ok(saved) => to_json(&saved),
             Err(error) => Err(error.to_string()),
@@ -857,6 +870,7 @@ impl Controller {
         };
 
         let (sender, receiver) = std::sync::mpsc::channel::<String>();
+        let receiver = Arc::new(std::sync::Mutex::new(receiver));
         let job = blocking(move || {
             pawnio_install::download(&dir, |received, total| {
                 let payload = serde_json::json!({ "received": received, "total": total });
@@ -866,20 +880,29 @@ impl Controller {
 
         let done = Arc::new(AtomicBool::new(false));
         let flag = done.clone();
+        let pump_receiver = receiver.clone();
+        let pump_listener = listener.clone();
         spawn(async move {
             while !flag.load(Ordering::SeqCst) {
                 timer(Duration::from_millis(120)).await;
-                while let Ok(message) = receiver.try_recv() {
-                    listener.post(message);
+                if let Ok(rx) = pump_receiver.lock() {
+                    while let Ok(message) = rx.try_recv() {
+                        pump_listener.post(message);
+                    }
                 }
             }
         });
 
-        let installer = job
-            .await
+        let downloaded = job.await;
+        done.store(true, Ordering::SeqCst);
+        if let Ok(rx) = receiver.lock() {
+            while let Ok(message) = rx.try_recv() {
+                listener.post(message);
+            }
+        }
+        let installer = downloaded
             .map_err(|error| format!("download panicked: {error}"))?
             .map_err(|error| error.to_string())?;
-        done.store(true, Ordering::SeqCst);
 
         blocking(move || pawnio_install::run_installer(&installer))
             .await

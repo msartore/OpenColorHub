@@ -58,6 +58,7 @@ export function Drivers(props: {
   const error = signal<string | null>(null);
   const progress = signal<Record<string, DriverProgress>>({});
   const active = signal<string[]>([]);
+  const errors = signal<Record<string, string>>({});
   const downloaded = signal<Record<string, DownloadedFile>>({});
   const stored = signal<StoredFile[]>([]);
   const expanded = signal<DriverKind[]>([]);
@@ -124,6 +125,9 @@ export function Drivers(props: {
 
   const startDownload = async (row: DriverRow): Promise<void> => {
     active.set([...active(), row.url]);
+    const failure = { ...errors() };
+    delete failure[row.file_name];
+    errors.set(failure);
     progress.set({
       ...progress(),
       [row.file_name]: { file: row.file_name, received: 0, total: null },
@@ -135,7 +139,11 @@ export function Drivers(props: {
       downloaded.set({ ...downloaded(), [row.file_name]: saved });
       props.toast(`${row.file_name} saved`, "ok");
     } catch (cause) {
-      props.toast(`Download failed: ${String(cause)}`, "danger");
+      // Keep the reason on the row: a toast disappears, but the user needs to
+      // know why this file did not download and that they can retry.
+      const message = String(cause);
+      errors.set({ ...errors(), [row.file_name]: message });
+      props.toast(`Download failed: ${message}`, "danger");
     } finally {
       active.set(active().filter((url) => url !== row.url));
       const next = { ...progress() };
@@ -182,7 +190,9 @@ export function Drivers(props: {
             {(frame) => (
               <View class="gap-1" style={{ width: 220 }}>
                 <Progress
+                  testID={`driver-progress-${file.file_name}`}
                   value={progressPercent(frame().received, frame().total) ?? 0}
+                  indeterminate={!frame().total}
                   class="h-1"
                   trackClass="h-1 rounded-full bg-muted"
                   indicatorClass="h-1 rounded-full bg-primary"
@@ -193,6 +203,11 @@ export function Drivers(props: {
                     : `${formatBytes(frame().received)} received`}
                 </Text>
               </View>
+            )}
+          </If>
+          <If when={errors()[file.file_name]}>
+            {(message) => (
+              <Text class="text-[10px] text-[#f87171]">{message()}</Text>
             )}
           </If>
         </View>
@@ -206,7 +221,7 @@ export function Drivers(props: {
               onPress={() => void startDownload(file)}
             >
               <Text class="text-[11px] text-primary-foreground">
-                {downloading ? "Downloading…" : "Download"}
+                {downloading ? "Downloading…" : errors()[file.file_name] ? "Retry" : "Download"}
               </Text>
             </Button>
           }
