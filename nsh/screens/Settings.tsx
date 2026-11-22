@@ -613,6 +613,12 @@ export function SettingsScreen(props: {
           >
             <Text class="text-xs text-[#f87171]">Reset to defaults</Text>
           </Button>
+          <Button
+            class="rounded-[7px] border border-border px-3 py-1.5"
+            onPress={() => Application.quit()}
+          >
+            <Text class="text-xs text-foreground">Quit OpenColorHub</Text>
+          </Button>
         </View>
         <Text class="text-[11px] text-muted-foreground">
           Resetting only touches preferences — fan curves and colours are left alone.

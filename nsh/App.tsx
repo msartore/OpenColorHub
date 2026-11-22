@@ -125,7 +125,14 @@ function App() {
       win.focus();
     }, 100);
   }
-  win.on("closePress", () => win.hide());
+  // Close hides to the tray (polling and lighting keep running). Listen on the
+  // explicit main window as well: on some runtimes `currentWindow()` is a proxy
+  // that never receives the close press.
+  const hideOnClose = (): void => {
+    main.hide();
+  };
+  main.on("closePress", hideOnClose);
+  if (win !== main) win.on("closePress", hideOnClose);
 
   // Restore where the user left the window, and keep that placement current.
   void Storage.getItem("window").then((saved) => {
