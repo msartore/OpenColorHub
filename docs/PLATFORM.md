@@ -55,17 +55,10 @@ unwired. The Dashboard names the source ("board thermistor", "HWiNFO shared
 memory", "synthetic") and keeps `bank 1 · 0x50` in the gauge tooltip. Values
 outside 5–110 °C are rejected.
 
-**Two temperatures.** The Dashboard shows both the **motherboard** (board
-thermistor, bank 1 `0x50`) and the **CPU**. The CPU reading comes directly from
-the Nuvoton's `CPUTIN` sensor (bank 0 `0x75`, half-degree bit in `0x76`) over
-the same PawnIO connection as fan control — **no HWiNFO required**. Boards that
-leave CPUTIN unwired fall back to HWiNFO shared memory (CPU Package, Tctl/Tdie,
-Core 0, or a custom `cpu@` label) when it is running. The **CPU_FAN curve follows
-the CPU sensor**; every other header follows the board thermistor (the value
-Colorful's own client drives them from). Each header falls back to the other
-sensor if its own is unavailable, so a missing CPU reading never stops the CPU
-fan. The Dashboard's curve marker shows the same source per header. The simulator
-shows a synthetic CPU value for the demo.
+**Two temperatures.** The Dashboard shows the board thermistor (bank 1 `0x50`)
+and the CPU from the Nuvoton `CPUTIN` sensor (bank 0 `0x75`) over PawnIO; HWiNFO
+shared memory is the fallback. `CPU_FAN` follows the CPU sensor, other headers
+follow the board thermistor, with a fallback in both directions.
 
 **Empty headers are hidden.** A header that never reports a tach is an empty
 socket, not a fan at 0 rpm: its card is dropped and the screen says *"No more
