@@ -94,6 +94,14 @@ jobs:
       - name: Package
         run: nsh package nsh --target ${{ matrix.target }}
 
+      # nsh does not embed an application manifest, so the runner would start
+      # without the elevation request. Do it here and rebuild the archives and
+      # installer from the manifested executable.
+      - name: Embed elevation manifest (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./packaging/embed-manifest.ps1 -OutDir ".nsh/out" -Version ($env:GITHUB_REF_NAME -replace '^v','')
+
       - name: Stage artifacts (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

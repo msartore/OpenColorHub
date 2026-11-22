@@ -116,7 +116,15 @@ function App() {
 
   const win = currentWindow();
   const main = Window.get("main") ?? win;
-  if (!deps.controller.minimized) win.show();
+  // The window is created hidden (`defaultVisible: false`). Calling show/focus
+  // during the first render can be too early on some Windows runtimes, so do
+  // it once the engine has laid the window out.
+  if (!deps.controller.minimized) {
+    setTimeout(() => {
+      win.show();
+      win.focus();
+    }, 100);
+  }
   win.on("closePress", () => win.hide());
 
   // Restore where the user left the window, and keep that placement current.
