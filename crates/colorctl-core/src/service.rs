@@ -1531,7 +1531,12 @@ mod tests {
         let gpu = svc.snapshot().gpu_led.unwrap();
         for zone in gpu.devices[0].zones.iter() {
             assert_eq!(zone.color, [12, 34, 56], "zone {}", zone.id);
-            assert_eq!(zone.brightness, (80u16 * 255 / 100) as u8, "zone {}", zone.id);
+            assert_eq!(
+                zone.brightness,
+                (80u16 * 255 / 100) as u8,
+                "zone {}",
+                zone.id
+            );
         }
         std::fs::remove_dir_all(&dir).ok();
     }
