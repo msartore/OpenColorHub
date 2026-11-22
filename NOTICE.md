@@ -69,13 +69,44 @@ binary or the bundle:
 | `serde`, `serde_json` | MIT OR Apache-2.0 |
 | `ureq`, `sha2` | MIT OR Apache-2.0 |
 | `LpcIO.bin` (PawnIO module, © namazso) | LGPL-2.1-or-later |
+| Tabler Icons (navigation glyph path data) | MIT |
+
+### Icon set (MIT)
+
+The navigation glyphs are [Tabler Icons](https://github.com/tabler/tabler-icons),
+inlined as path data in `nsh/components/icons.tsx` rather than pulled from the
+npm package.
+
+Copyright © 2020-2026 Paweł Kuna
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.
+
+MIT is compatible with GPLv3; the notice is retained for the inlined paths.
 
 ### PawnIO module
 
 `crates/colorctl-core/resources/LpcIO.bin` is an unmodified signed module from
-the PawnIO project (0.2.11), © namazso, distributed under the GNU Lesser General
-Public License 2.1 or later. The full text is in
-`crates/colorctl-core/resources/COPYING.LGPL-2.1`.
+the PawnIO project (0.2.11), Copyright © 2023 namazso <admin@namazso.eu>,
+distributed under the GNU Lesser General Public License 2.1 or later. The full
+text is in `crates/colorctl-core/resources/COPYING.LGPL-2.1`. Its SHA-256 is
+`b3896a1cab0d808fca31fe2ebcae045d59dac690da87b17c858bb8da357eb45e`, so the
+unmodified claim can be checked against the upstream module.
 
 It is not linked into this binary: it is passed to the PawnIO kernel driver at
 runtime as data, which the driver verifies and executes inside its sandbox. That
@@ -84,6 +115,22 @@ blob — replacing it is a file swap, no recompilation.
 
 Corresponding source: <https://github.com/namazso/PawnIO.Modules> (`LpcIO.p`).
 
+### GPU RGB protocol sources
+
+The GPU LED wire protocol and effect-ID map in `crates/colorctl-core/src/gpu.rs`
+were recovered from the controller hardware and independently confirmed against
+the OpenRGB `ASRockRX9070XTGPUController`, part of the OpenRGB project by Adam
+Honse and the OpenRGB Team, <https://gitlab.com/CalcProgrammer1/OpenRGB>,
+licensed GPL-2.0-or-later. The hardware-effect ID table follows OpenRGB's mode
+map. OpenRGB is GPL-2.0-or-later, compatible with this project's GPL-3.0-only:
+the combined work is distributed under GPLv3 and the source is recorded here.
+
+The PCI subsystem-ID catalogue in `gpu_catalogue.rs` was transcribed from the
+factual hardware-ID table published by PolychromeSYNC v1.0.50's `UpdateFW.ini`
+(ASRock). Hardware IDs are factual data, not copyrightable expression; no
+PolychromeSYNC code is included. The Windows GPU transports use FFI signatures
+from the vendors' own user-mode APIs (ADL, NVAPI, IGCL); no vendor headers or
+libraries are bundled.
 
 Apache-2.0 is compatible with GPLv3 (it is not compatible with GPLv2). No
 component is GPL-incompatible, and none is linked statically in a way that would

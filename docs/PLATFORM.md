@@ -40,7 +40,7 @@ error.
 
 `IN`/`OUT` are ring-0. Windows has no user-mode port broker like `/dev/port`.
 Options: your own kernel driver, [WinRing0](https://nvd.nist.gov/vuln/detail/CVE-2020-14979)
-— not shipped, see `NOTICE.md` — or **PawnIO**: a signed driver running a
+- deliberately not shipped - or **PawnIO**: a signed driver running a
 bytecode module whose port access is allow-listed to the selected index pair and
 discovered BARs, never exposing physical memory.
 
