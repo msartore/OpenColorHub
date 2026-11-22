@@ -131,7 +131,12 @@ impl PawnIoFan {
     }
 
     fn select_bank(&self, bank: u8) -> Result<()> {
-        self.write_hwm(BANK_REGISTER, bank)
+        // Match colorctl's set_bank: register 0x4E keeps its high nibble and
+        // only the low four bits select the bank. Writing the raw bank clobbers
+        // those upper bits, which can select the wrong bank — and with it the
+        // wrong temperature register — producing a plausible but wrong reading.
+        let current = self.read_hwm(BANK_REGISTER)?;
+        self.write_hwm(BANK_REGISTER, (current & 0xF0) | (bank & 0x0F))
     }
 
     fn read_hwm(&self, register: u8) -> Result<u8> {
@@ -174,10 +179,12 @@ impl PawnIoFan {
     fn temperature(&self) -> Result<Option<(f32, u8, u8)>> {
         for (bank, register) in TEMP_SOURCES {
             let raw = self.read_byte(bank, register)?;
-            let signed = raw as i8;
-            // Reject the 0x80-ish rail that unwired sensors report.
-            if (5..110).contains(&signed) {
-                return Ok(Some((f32::from(signed), bank, register)));
+            // colorctl reads this register as an unsigned byte in degrees C
+            // and treats >= 150 as an unwired/rail reading. Casting to i8 here
+            // would turn any value >= 128 negative and reject it, so a real
+            // high temperature would never be shown.
+            if (5..110).contains(&raw) {
+                return Ok(Some((f32::from(raw), bank, register)));
             }
         }
         Ok(None)
