@@ -628,6 +628,9 @@ pub fn quick_snapshot(fan: &mut dyn FanBackend) -> Snapshot {
     let mut snap = Snapshot::empty();
     if let Ok(t) = fan.read() {
         snap.temperature_c = t.temperature_c;
+        snap.board_temp_c = t.board_temp_c.or(t.temperature_c);
+        snap.cpu_temp_c = t.cpu_temp_c;
+        snap.cpu_temp_source = t.cpu_temp_source;
     }
     snap
 }

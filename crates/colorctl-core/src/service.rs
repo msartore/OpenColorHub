@@ -381,6 +381,11 @@ impl Service {
             (None, b) => b,
             (a, None) => a,
         };
+        let cpu_temp_c = match (prev.cpu_temp_c, fresh.cpu_temp_c) {
+            (Some(a), Some(b)) => Some(a + (b - a) * EMA_ALPHA),
+            (None, b) => b,
+            (a, None) => a,
+        };
 
         let fans = fresh
             .fans
@@ -401,7 +406,10 @@ impl Service {
         Telemetry {
             temperature_source: fresh.temperature_source.clone(),
             temperature_register: fresh.temperature_register.clone(),
+            board_temp_c: temperature_c,
             temperature_c,
+            cpu_temp_c,
+            cpu_temp_source: fresh.cpu_temp_source.clone(),
             fans,
         }
     }
@@ -468,6 +476,11 @@ impl Service {
         let temp_register = telemetry
             .as_ref()
             .and_then(|t| t.temperature_register.clone());
+        let board_temp = telemetry.as_ref().and_then(|t| t.board_temp_c).or(temp);
+        let cpu_temp = telemetry.as_ref().and_then(|t| t.cpu_temp_c);
+        let cpu_temp_source = telemetry
+            .as_ref()
+            .and_then(|t| t.cpu_temp_source.clone());
         let samples = telemetry.map(|t| t.fans).unwrap_or_default();
 
         let mut fans: Vec<FanStatus> = samples
@@ -539,6 +552,9 @@ impl Service {
             temperature_c: temp,
             temperature_source: temp_source,
             temperature_register: temp_register,
+            board_temp_c: board_temp,
+            cpu_temp_c: cpu_temp,
+            cpu_temp_source: cpu_temp_source,
             fans,
             channels: self.led.state().statuses(),
             fan_device: self.fan_info(),

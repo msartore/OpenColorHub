@@ -364,11 +364,19 @@ export function SettingsScreen(props: {
               <KeyValue label="fan backend" value={deviceLabel(snapshot().fan_device)} />
               <KeyValue label="lighting backend" value={deviceLabel(snapshot().led_device)} />
               <KeyValue
-                label="temperature"
+                label="board temp"
                 value={
-                  snapshot().temperature_c === null
+                  snapshot().board_temp_c === null || snapshot().board_temp_c === undefined
                     ? "—"
-                    : `${snapshot().temperature_c!.toFixed(1)} °C`
+                    : `${snapshot().board_temp_c!.toFixed(1)} °C`
+                }
+              />
+              <KeyValue
+                label="cpu temp"
+                value={
+                  snapshot().cpu_temp_c === null || snapshot().cpu_temp_c === undefined
+                    ? "—"
+                    : `${snapshot().cpu_temp_c!.toFixed(1)} °C`
                 }
               />
             </View>

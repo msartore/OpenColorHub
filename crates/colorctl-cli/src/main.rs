@@ -330,8 +330,16 @@ fn handle_fan(action: FanAction, service: &mut Service, json: bool) -> Result<Ex
                 snapshot.board.display_name(),
                 snapshot.board.confidence.label()
             );
-            if let Some(temp) = snapshot.temperature_c {
+            if let Some(temp) = snapshot.board_temp_c.or(snapshot.temperature_c) {
                 println!("  Motherboard Temp: {temp:.0} °C");
+            }
+            if let Some(temp) = snapshot.cpu_temp_c {
+                let source = snapshot
+                    .cpu_temp_source
+                    .as_deref()
+                    .map(|s| format!(" [{s}]"))
+                    .unwrap_or_default();
+                println!("  CPU Temp: {temp:.0} °C{source}");
             }
             if snapshot.fan_device.simulated {
                 println!("  Mode:   simulated");

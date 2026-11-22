@@ -376,6 +376,17 @@ pub struct Telemetry {
     /// the human label.
     #[serde(default)]
     pub temperature_register: Option<String>,
+    /// Board temperature under an explicit name (`temperature_c` stays the
+    /// value that drives fan curves, for wire compatibility).
+    #[serde(default)]
+    pub board_temp_c: Option<f32>,
+    /// CPU temperature: HWiNFO package/die/tctl sensor, or a custom label such
+    /// as `cpu@`. None when no CPU sensor is available.
+    #[serde(default)]
+    pub cpu_temp_c: Option<f32>,
+    /// e.g. `HWiNFO shared memory · CPU (Tctl/Tdie)`.
+    #[serde(default)]
+    pub cpu_temp_source: Option<String>,
     pub fans: Vec<FanSample>,
 }
 
@@ -385,6 +396,9 @@ impl Telemetry {
             temperature_c: None,
             temperature_source: None,
             temperature_register: None,
+            board_temp_c: None,
+            cpu_temp_c: None,
+            cpu_temp_source: None,
             fans: Vec::new(),
         }
     }
@@ -527,6 +541,15 @@ pub struct Snapshot {
     /// standing row on screen.
     #[serde(default)]
     pub temperature_register: Option<String>,
+    /// Board temperature under an explicit name; mirrors `temperature_c`.
+    #[serde(default)]
+    pub board_temp_c: Option<f32>,
+    /// CPU temperature from HWiNFO (package/die/tctl or a custom `cpu@` label).
+    #[serde(default)]
+    pub cpu_temp_c: Option<f32>,
+    /// Source label for the CPU temperature, when present.
+    #[serde(default)]
+    pub cpu_temp_source: Option<String>,
     pub fans: Vec<FanStatus>,
     pub channels: Vec<ChannelStatus>,
     pub fan_device: DeviceInfo,
@@ -548,6 +571,9 @@ impl Snapshot {
             temperature_c: None,
             temperature_source: None,
             temperature_register: None,
+            board_temp_c: None,
+            cpu_temp_c: None,
+            cpu_temp_source: None,
             fans: Vec::new(),
             channels: Vec::new(),
             fan_device: DeviceInfo::unavailable("No fan backend", "none", "not initialised"),

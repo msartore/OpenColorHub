@@ -381,6 +381,9 @@ impl FanBackend for HwinfoFan {
         let readings = parse_readings(bytes, &header);
 
         let temperature_c = pick_temperature(&readings).map(|v| v as f32);
+        let cpu = pick_cpu_reading(&readings);
+        let cpu_temp_c = cpu.map(|r| r.value as f32);
+        let cpu_temp_source = cpu.map(|r| format!("HWiNFO shared memory · {}", r.label));
 
         let mut fans = Vec::new();
         for header in FanHeader::all() {
@@ -401,7 +404,10 @@ impl FanBackend for HwinfoFan {
         Ok(Telemetry {
             temperature_source: Some("HWiNFO shared memory".to_string()),
             temperature_register: None,
+            board_temp_c: temperature_c,
             temperature_c,
+            cpu_temp_c,
+            cpu_temp_source,
             fans,
         })
     }
@@ -438,6 +444,28 @@ pub fn pick_temperature(readings: &[Reading]) -> Option<f64> {
         }
     }
     temps.first().map(|r| r.value)
+}
+
+/// Chooses the CPU temperature sensor specifically: package / die / tctl first,
+/// then a custom label such as `cpu@`, then Core 0, then any CPU-labelled temp.
+/// `is_temp()` filters out `CPU Fan` (kind 3), so a fan can never be picked.
+pub fn pick_cpu_reading(readings: &[Reading]) -> Option<&Reading> {
+    let temps: Vec<&Reading> = readings.iter().filter(|r| r.is_temp()).collect();
+    for needle in [
+        "cpu (tctl/tdie)",
+        "tctl/tdie",
+        "cpu package",
+        "cpu die",
+        "tctl",
+        "cpu@",
+        "core 0",
+        "cpu",
+    ] {
+        if let Some(found) = temps.iter().find(|r| label_matches(&r.label, needle)) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 /// Maps one of our five headers onto an HWiNFO fan label.
@@ -605,6 +633,49 @@ mod tests {
         let header = parse_header(&buf).unwrap();
         let readings = parse_readings(&buf, &header);
         assert_eq!(pick_temperature(&readings), Some(34.0));
+    }
+
+    fn temp(label: &str, value: f64) -> Reading {
+        Reading {
+            kind: READING_TEMP,
+            sensor_index: 0,
+            label: label.to_string(),
+            unit: "°C".to_string(),
+            value,
+        }
+    }
+
+    #[test]
+    fn cpu_reading_picks_package_and_custom_labels() {
+        let readings = vec![
+            temp("System", 34.0),
+            temp("CPU (Tctl/Tdie)", 62.5),
+            temp("cpu@", 61.0),
+        ];
+        // The specific package label wins over the custom one.
+        let picked = pick_cpu_reading(&readings).expect("a CPU sensor");
+        assert_eq!(picked.value, 62.5);
+        assert!(picked.label.contains("Tctl"));
+    }
+
+    #[test]
+    fn cpu_reading_matches_a_custom_cpu_at_label() {
+        let readings = vec![temp("System", 34.0), temp("cpu@", 58.0)];
+        let picked = pick_cpu_reading(&readings).expect("a CPU sensor");
+        assert_eq!(picked.value, 58.0);
+    }
+
+    #[test]
+    fn cpu_reading_never_picks_a_fan_or_a_board_only_block() {
+        let fan = Reading {
+            kind: READING_FAN,
+            sensor_index: 0,
+            label: "CPU Fan".to_string(),
+            unit: "RPM".to_string(),
+            value: 1200.0,
+        };
+        assert!(pick_cpu_reading(&[fan]).is_none());
+        assert!(pick_cpu_reading(&[temp("System", 34.0)]).is_none());
     }
 
     #[test]

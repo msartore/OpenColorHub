@@ -24,6 +24,9 @@
 //! measured here; `dump_registers()` also prints the vendor's bank 4 layout so
 //! the two can be compared on hardware.
 
+use std::time::Instant;
+
+use crate::backend::windows::hwinfo::{self, SharedMemory};
 use crate::backend::windows::pawnio::LpcIo;
 use crate::backend::{FanBackend, FanHeader};
 use crate::error::{Error, Result};
@@ -82,6 +85,45 @@ pub struct PawnIoFan {
     /// Last duty written per slot, so an unchanged curve does not rewrite the
     /// register every second.
     last_duty: [Option<u8>; TACH_SLOTS],
+    /// Read-only HWiNFO shared memory, used only for the CPU temperature (the
+    /// Nuvoton exposes only the board thermistor). Optional: HWiNFO may not be
+    /// running, or may start after us.
+    hwinfo: Option<SharedMemory>,
+    /// When we last tried to open HWiNFO if it was missing, so we retry
+    /// occasionally instead of every poll.
+    hwinfo_retry: Option<Instant>,
+}
+
+impl PawnIoFan {
+    /// Reads the CPU temperature from HWiNFO if available. Never an error:
+    /// the CPU sensor is display-only and absent when HWiNFO is not running.
+    fn cpu_temperature(&mut self) -> (Option<f32>, Option<String>) {
+        if self.hwinfo.is_none() {
+            let due = self
+                .hwinfo_retry
+                .map(|t| t.elapsed() >= std::time::Duration::from_secs(30))
+                .unwrap_or(true);
+            if due {
+                self.hwinfo = SharedMemory::open().ok();
+                self.hwinfo_retry = Some(Instant::now());
+            }
+        }
+        let Some(shm) = self.hwinfo.as_ref() else {
+            return (None, None);
+        };
+        let bytes = shm.bytes();
+        let Some(header) = hwinfo::parse_header(bytes) else {
+            return (None, None);
+        };
+        let readings = hwinfo::parse_readings(bytes, &header);
+        match hwinfo::pick_cpu_reading(&readings) {
+            Some(r) => (
+                Some(r.value as f32),
+                Some(format!("HWiNFO shared memory · {}", r.label)),
+            ),
+            None => (None, None),
+        }
+    }
 }
 
 impl PawnIoFan {
@@ -127,6 +169,8 @@ impl PawnIoFan {
             curves: [None; TACH_SLOTS],
             manual: [None; TACH_SLOTS],
             last_duty: [None; TACH_SLOTS],
+            hwinfo: SharedMemory::open().ok(),
+            hwinfo_retry: None,
         })
     }
 
@@ -402,11 +446,17 @@ impl FanBackend for PawnIoFan {
             });
         }
 
+        let (cpu_temp_c, cpu_temp_source) = self.cpu_temperature();
+        let board = temperature.map(|(value, _, _)| value);
+
         Ok(Telemetry {
-            temperature_c: temperature.map(|(value, _, _)| value),
+            temperature_c: board,
             temperature_source: temperature.map(|_| "board thermistor".to_string()),
             temperature_register: temperature
                 .map(|(_, bank, register)| format!("bank {bank} · 0x{register:02X}")),
+            board_temp_c: board,
+            cpu_temp_c,
+            cpu_temp_source,
             fans,
         })
     }

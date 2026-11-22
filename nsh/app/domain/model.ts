@@ -128,6 +128,11 @@ export interface Snapshot {
   temperature_c: number | null;
   temperature_source: string | null;
   temperature_register: string | null;
+  /** Board temperature under an explicit name (mirrors `temperature_c`). */
+  board_temp_c: number | null;
+  /** CPU temperature from HWiNFO (package/die/tctl or a custom `cpu@` label). */
+  cpu_temp_c: number | null;
+  cpu_temp_source: string | null;
   fans: FanStatus[];
   channels: ChannelStatus[];
   fan_device: DeviceInfo;

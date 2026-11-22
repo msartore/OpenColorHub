@@ -109,6 +109,15 @@ impl SimFan {
         37.0 + drift + load
     }
 
+    /// Synthetic CPU temperature: a little hotter than the board, with its
+    /// own faster movement so the two readouts are distinct in the demo.
+    fn cpu_temperature(&self) -> f32 {
+        let elapsed = (now_ms().saturating_sub(self.started_ms)) as f32 / 1000.0;
+        let drift = (elapsed / 11.0 + self.seed_fraction() * 3.0).sin() * 7.0;
+        let load = ((elapsed / 23.0).sin().max(0.0)) * 14.0;
+        48.0 + drift + load
+    }
+
     fn seed_fraction(&self) -> f32 {
         (self.file.seed % 1000) as f32 / 1000.0
     }
@@ -176,6 +185,9 @@ impl FanBackend for SimFan {
             temperature_c: Some(temp),
             temperature_source: Some("synthetic".to_string()),
             temperature_register: None,
+            board_temp_c: Some(temp),
+            cpu_temp_c: Some(self.cpu_temperature()),
+            cpu_temp_source: Some("synthetic (CPU)".to_string()),
             fans,
         })
     }

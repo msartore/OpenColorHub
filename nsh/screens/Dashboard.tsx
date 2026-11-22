@@ -164,7 +164,7 @@ export function Dashboard(props: { store: AppStore }) {
               }}
             >
               <View style={{ flex: 1.35 }}>
-                <Panel title="Motherboard temperature">
+                <Panel title="Temperatures">
                   <If when={snapshot().fan_device.simulated}>
                     <View style={{ alignSelf: "flex-start" }}>
                       <Chip label="simulated" tone="warn" />
@@ -172,28 +172,42 @@ export function Dashboard(props: { store: AppStore }) {
                   </If>
                   <View class="flex-row items-center gap-4" style={{ flexWrap: "wrap" }}>
                     <TemperatureGauge
-                      temperature={() => snapshot().temperature_c}
+                      temperature={() => snapshot().board_temp_c ?? snapshot().temperature_c}
                       unit={() => props.store.settings().temp_unit}
                     />
-                    <View class="gap-1" style={{ flex: 1, minWidth: 180 }}>
-                      <Text class="text-xs text-muted-foreground">
-                        {snapshot().temperature_source ?? "unknown sensor"}
-                        {snapshot().temperature_register
-                          ? ` (${snapshot().temperature_register})`
-                          : ""}
-                      </Text>
-                      <If when={stats()}>
-                        {(current) => (
-                          <Text class="text-[11px] font-mono text-muted-foreground">
-                            {`session min ${tempText(current().min)} · mean ${tempText(current().mean)} · max ${tempText(current().max)}`}
-                          </Text>
-                        )}
-                      </If>
+                    <View class="gap-2" style={{ flex: 1, minWidth: 180 }}>
+                      <View class="gap-0.5">
+                        <Text class="text-[11px] uppercase tracking-wide text-muted-foreground">
+                          Motherboard
+                        </Text>
+                        <Text class="text-xl font-semibold text-foreground">
+                          {tempText(snapshot().board_temp_c ?? snapshot().temperature_c ?? 0)}
+                        </Text>
+                        <Text class="text-[11px] text-muted-foreground">
+                          {snapshot().temperature_source ?? "unknown sensor"}
+                          {snapshot().temperature_register
+                            ? ` (${snapshot().temperature_register})`
+                            : ""}
+                        </Text>
+                      </View>
+                      <View class="gap-0.5 border-t border-border pt-2">
+                        <Text class="text-[11px] uppercase tracking-wide text-muted-foreground">
+                          CPU
+                        </Text>
+                        <Text class="text-xl font-semibold text-foreground">
+                          {snapshot().cpu_temp_c === null || snapshot().cpu_temp_c === undefined
+                            ? "—"
+                            : tempText(snapshot().cpu_temp_c!)}
+                        </Text>
+                        <Text class="text-[11px] text-muted-foreground">
+                          {snapshot().cpu_temp_source ?? "no CPU sensor (HWiNFO not running)"}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   <Sparkline samples={history} />
                   <View class="flex-row items-baseline justify-between">
-                    <Text class="text-xs text-primary">{`now ${tempText(snapshot().temperature_c ?? 0)}`}</Text>
+                    <Text class="text-xs text-primary">{`board now ${tempText(snapshot().board_temp_c ?? snapshot().temperature_c ?? 0)}`}</Text>
                     <Text class="text-[11px] text-muted-foreground">
                       {`${stats()?.count ?? 0} samples`}
                     </Text>

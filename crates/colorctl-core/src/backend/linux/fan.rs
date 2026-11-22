@@ -83,7 +83,11 @@ impl FanBackend for LinuxFan {
         Ok(Telemetry {
             temperature_source: Some("hwmon sysfs".to_string()),
             temperature_register: None,
+            board_temp_c: temperature_c,
             temperature_c,
+            // Linux /dev/port path exposes only the board thermistor.
+            cpu_temp_c: None,
+            cpu_temp_source: None,
             fans,
         })
     }

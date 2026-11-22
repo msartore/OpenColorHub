@@ -13,7 +13,11 @@ const lightingApp = () => open("./App.tsx", { width: 1240 });
 test("the dashboard renders the live machine", async () => {
   const app = await open("./App.tsx");
   await app.waitFor("Dashboard");
-  expect(app.texts()).toContain("Motherboard temperature");
+  expect(app.texts()).toContain("Temperatures");
+  expect(
+    app.texts().some((text) => text.toLowerCase().includes("motherboard")),
+  ).toBe(true);
+  expect(app.texts().some((text) => text.toLowerCase().includes("cpu"))).toBe(true);
   expect(app.texts()).toContain("Fan headers");
   expect(app.texts()).toContain("SYS_FAN");
 });
