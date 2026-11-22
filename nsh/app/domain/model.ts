@@ -130,7 +130,7 @@ export interface Snapshot {
   temperature_register: string | null;
   /** Board temperature under an explicit name (mirrors `temperature_c`). */
   board_temp_c: number | null;
-  /** CPU temperature from HWiNFO (package/die/tctl or a custom `cpu@` label). */
+  /** CPU temperature from the Nuvoton CPUTIN sensor, or HWiNFO as a fallback. */
   cpu_temp_c: number | null;
   cpu_temp_source: string | null;
   fans: FanStatus[];

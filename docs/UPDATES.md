@@ -47,6 +47,26 @@ tarballs, writes `latest.json`, and publishes one release. A partial platform
 failure fails the release: there is no Windows-only NSH release followed by a
 Linux one.
 
+## Components are pinned, never updated in place
+
+The app never updates PawnIO — or any other dependency — at runtime. There is no
+component updater, no remote component manifest, and no "update available" button
+for a dependency. The only thing that updates itself is the app, through the
+signed `latest.json` above.
+
+PawnIO is installed on demand only: when the driver is missing, the Fan screen
+offers **Install PawnIO**, which downloads the versioned release pinned in
+`crates/colorctl-core/src/pawnio_install.rs`, checks it against the pinned size
+and SHA-256, and runs the vendor's own installer with its own window and UAC
+prompt. Nothing is installed silently, and an already-installed driver is never
+replaced by the app.
+
+When a newer component version is needed, it ships **with a new release of this
+app**: bump `VERSION`, `URL`, `SIZE` and `SHA256` together in `pawnio_install.rs`,
+rebuild, test, tag and release. The app updater then delivers the new pin along
+with the new app. A pinned file is never fetched from a `/latest/` URL, so a
+release's bytes cannot change underneath it.
+
 ## Integrity
 
 Builds are **not Authenticode signed**. Integrity rests on GitHub's TLS, NSH's

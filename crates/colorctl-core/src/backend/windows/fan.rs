@@ -400,16 +400,32 @@ impl PawnIoFan {
         Ok(())
     }
 
-    /// Re-evaluates every software curve against the current temperature.
+    /// Re-evaluates every software curve against its source temperature:
+    /// the CPU header follows the CPU die sensor, all other headers follow the
+    /// board thermistor. A header falls back to the board reading when its own
+    /// sensor is unavailable, so a missing CPU sensor never stops its fan.
     ///
     /// Hysteresis: a duty that moved by less than 3/255 is left alone, so the
     /// register is not rewritten every second for a fraction of a percent.
-    fn apply_curves(&mut self, temperature: Option<f32>) -> Result<()> {
-        let Some(temp) = temperature else {
+    fn apply_curves(
+        &mut self,
+        board_temp: Option<f32>,
+        cpu_temp: Option<f32>,
+    ) -> Result<()> {
+        if board_temp.is_none() && cpu_temp.is_none() {
             return Ok(());
-        };
+        }
         for slot in 0..TACH_SLOTS {
             let Some(curve) = self.curves[slot] else {
+                continue;
+            };
+            let header = FanHeader::all()[slot];
+            let source = if header == FanHeader::Cpu {
+                cpu_temp.or(board_temp)
+            } else {
+                board_temp.or(cpu_temp)
+            };
+            let Some(temp) = source else {
                 continue;
             };
             let duty = crate::units::pct(crate::curve::eval(&curve, temp));
@@ -418,7 +434,6 @@ impl PawnIoFan {
             {
                 continue;
             }
-            let header = FanHeader::all()[slot];
             self.write_duty(header, duty)?;
             self.last_duty[slot] = Some(duty);
         }
@@ -473,10 +488,13 @@ impl FanBackend for PawnIoFan {
 
     fn read(&mut self) -> std::result::Result<Telemetry, Error> {
         let temperature = self.temperature()?;
+        let board_temp = temperature.map(|(value, _, _)| value);
 
         // Software curves are driven from here: the poll is the only clock the
-        // backend has, and it already has the temperature.
-        self.apply_curves(temperature.map(|(value, _, _)| value))?;
+        // backend has. The CPU header follows the CPU die sensor; the rest
+        // follow the board thermistor.
+        let (cpu_temp, cpu_temp_source) = self.cpu_temperature();
+        self.apply_curves(board_temp, cpu_temp)?;
 
         let tachs = self.tachometers()?;
 
@@ -502,16 +520,13 @@ impl FanBackend for PawnIoFan {
             });
         }
 
-        let (cpu_temp_c, cpu_temp_source) = self.cpu_temperature();
-        let board = temperature.map(|(value, _, _)| value);
-
         Ok(Telemetry {
-            temperature_c: board,
+            temperature_c: board_temp,
             temperature_source: temperature.map(|_| "board thermistor".to_string()),
             temperature_register: temperature
                 .map(|(_, bank, register)| format!("bank {bank} · 0x{register:02X}")),
-            board_temp_c: board,
-            cpu_temp_c,
+            board_temp_c: board_temp,
+            cpu_temp_c: cpu_temp,
             cpu_temp_source,
             fans,
         })
@@ -544,7 +559,14 @@ impl FanBackend for PawnIoFan {
         self.manual[slot] = None;
         self.last_duty[slot] = None;
 
-        if let Some((temp, _, _)) = self.temperature()? {
+        let board = self.temperature()?.map(|(value, _, _)| value);
+        let (cpu, _) = self.cpu_temperature();
+        let source = if header == FanHeader::Cpu {
+            cpu.or(board)
+        } else {
+            board.or(cpu)
+        };
+        if let Some(temp) = source {
             let duty = crate::units::pct(crate::curve::eval(curve, temp));
             self.write_duty(header, duty)?;
             self.last_duty[slot] = Some(duty);
@@ -567,14 +589,21 @@ impl FanBackend for PawnIoFan {
     fn reassert(&mut self) -> Result<usize> {
         self.last_duty = [None; TACH_SLOTS];
 
-        let temperature = self.temperature().ok().flatten().map(|(value, _, _)| value);
+        let board = self.temperature().ok().flatten().map(|(value, _, _)| value);
+        let (cpu, _) = self.cpu_temperature();
         let mut written = 0;
         for slot in 0..TACH_SLOTS {
-            let duty = reassert_duty(self.manual[slot], self.curves[slot].as_ref(), temperature);
+            let header = FanHeader::all()[slot];
+            let source = if header == FanHeader::Cpu {
+                cpu.or(board)
+            } else {
+                board.or(cpu)
+            };
+            let duty = reassert_duty(self.manual[slot], self.curves[slot].as_ref(), source);
             let Some(duty) = duty else {
                 continue;
             };
-            self.write_duty(FanHeader::all()[slot], duty)?;
+            self.write_duty(header, duty)?;
             self.last_duty[slot] = Some(duty);
             written += 1;
         }

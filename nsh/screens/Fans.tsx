@@ -264,7 +264,15 @@ export function Fans(props: {
       // The probe must not break the screen.
     });
 
-  const temperature = (): number | null => props.store.snapshot()?.temperature_c ?? null;
+  // The CPU header's curve follows the CPU die sensor; the rest follow the
+  // board thermistor. This matches the core's curve evaluation exactly.
+  const temperatureFor = (header: FanHeaderId): number | null => {
+    const snap = props.store.snapshot();
+    if (!snap) return null;
+    return header === "cpu"
+      ? (snap.cpu_temp_c ?? snap.board_temp_c ?? snap.temperature_c)
+      : (snap.board_temp_c ?? snap.temperature_c);
+  };
 
   const onDuty: (header: FanHeaderId, percent: number) => Promise<boolean> = async (
     header,
@@ -438,7 +446,12 @@ export function Fans(props: {
           <Each of={summary()} key={(fan) => fan.header}>
             {(fan) => (
               <View style={{ width: fanCardWidth() }}>
-                <FanCard fan={fan} temperature={temperature} onDuty={onDuty} onCurve={onCurve} />
+                <FanCard
+                  fan={fan}
+                  temperature={() => temperatureFor(fan().header)}
+                  onDuty={onDuty}
+                  onCurve={onCurve}
+                />
               </View>
             )}
           </Each>

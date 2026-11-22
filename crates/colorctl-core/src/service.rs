@@ -486,10 +486,18 @@ impl Service {
         let mut fans: Vec<FanStatus> = samples
             .iter()
             .map(|s| {
+                // The CPU header's curve follows the CPU die sensor; the other
+                // headers follow the board thermistor. Fall back to the other
+                // reading when one sensor is unavailable.
+                let source = if s.header == crate::model::FanHeader::Cpu {
+                    cpu_temp.or(board_temp)
+                } else {
+                    board_temp.or(cpu_temp)
+                };
                 let curve_percent = s
                     .curve
                     .as_ref()
-                    .map(|c| curve::eval(c, temp.unwrap_or(0.0)));
+                    .map(|c| curve::eval(c, source.or(temp).unwrap_or(0.0)));
                 FanStatus {
                     header: s.header,
                     label: s.header.label().to_string(),
@@ -1276,6 +1284,37 @@ mod tests {
         assert_eq!(cpu.mode, FanMode::SmartFan);
         assert_eq!(cpu.curve, Some(good));
         assert!(cpu.curve_percent.is_some());
+
+        // The CPU header's curve is driven by the CPU sensor, not the board
+        // thermistor. The simulated backend keeps the two distinct, so a wrong
+        // source shows up as a different duty.
+        let steep = [
+            curve::CurvePoint::new(30, 20),
+            curve::CurvePoint::new(40, 40),
+            curve::CurvePoint::new(50, 80),
+            curve::CurvePoint::new(60, 100),
+        ];
+        let outcome = svc.set_fan_curve(FanHeader::Cpu, &steep).unwrap();
+        let snap = outcome.snapshot;
+        let cpu = snap
+            .fans
+            .iter()
+            .find(|f| f.header == FanHeader::Cpu)
+            .unwrap();
+        let board_t = snap.board_temp_c.unwrap();
+        let cpu_t = snap.cpu_temp_c.unwrap();
+        let from_cpu = curve::eval(&steep, cpu_t);
+        let from_board = curve::eval(&steep, board_t);
+        assert!(
+            (from_cpu as i32 - from_board as i32).abs() > 5,
+            "this test needs the simulated CPU and board temperatures to differ"
+        );
+        assert_eq!(
+            cpu.curve_percent,
+            Some(from_cpu),
+            "the CPU fan must follow the CPU sensor ({cpu_t}C -> {from_cpu}%), not the board ({board_t}C -> {from_board}%)"
+        );
+        std::fs::remove_dir_all(&dir).ok();
         std::fs::remove_dir_all(&dir).ok();
     }
 

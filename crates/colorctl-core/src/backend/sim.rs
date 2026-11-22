@@ -167,10 +167,16 @@ impl FanBackend for SimFan {
 
     fn read(&mut self) -> Result<Telemetry> {
         let temp = self.temperature();
+        let cpu_temp = self.cpu_temperature();
         let fans = FAN_HEADERS
             .iter()
             .map(|header| {
-                let pwm = self.effective_pwm(*header, temp);
+                let source = if *header == crate::model::FanHeader::Cpu {
+                    cpu_temp
+                } else {
+                    temp
+                };
+                let pwm = self.effective_pwm(*header, source);
                 FanSample {
                     header: *header,
                     bank: crate::chipmap::bank(*header),
@@ -186,7 +192,7 @@ impl FanBackend for SimFan {
             temperature_source: Some("synthetic".to_string()),
             temperature_register: None,
             board_temp_c: Some(temp),
-            cpu_temp_c: Some(self.cpu_temperature()),
+            cpu_temp_c: Some(cpu_temp),
             cpu_temp_source: Some("synthetic (CPU)".to_string()),
             fans,
         })
