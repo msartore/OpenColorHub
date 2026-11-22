@@ -117,7 +117,9 @@ impl PawnIoFan {
                 let value = f32::from(signed) + if half & 0x80 != 0 { 0.5 } else { 0.0 };
                 return (
                     Some(value),
-                    Some(format!("Nuvoton CPUTIN · bank {CPUTIN_BANK} · 0x{CPUTIN_REGISTER:02X}")),
+                    Some(format!(
+                        "Nuvoton CPUTIN · bank {CPUTIN_BANK} · 0x{CPUTIN_REGISTER:02X}"
+                    )),
                 );
             }
         }
@@ -407,11 +409,7 @@ impl PawnIoFan {
     ///
     /// Hysteresis: a duty that moved by less than 3/255 is left alone, so the
     /// register is not rewritten every second for a fraction of a percent.
-    fn apply_curves(
-        &mut self,
-        board_temp: Option<f32>,
-        cpu_temp: Option<f32>,
-    ) -> Result<()> {
+    fn apply_curves(&mut self, board_temp: Option<f32>, cpu_temp: Option<f32>) -> Result<()> {
         if board_temp.is_none() && cpu_temp.is_none() {
             return Ok(());
         }
