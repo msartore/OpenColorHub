@@ -143,7 +143,9 @@ test("about reports the detected board and build", async () => {
   await app.waitFor("Detected motherboard");
   expect(app.texts()).toContain("Build");
   expect(app.texts()).toContain("Upstream");
-  expect(app.texts().some((text) => text.includes("CVN"))).toBe(true);
+  // The board itself is host hardware: CI runs in a VM, so assert the
+  // detection section rendered rather than a specific board name.
+  expect(app.texts()).toContain("detected via");
 });
 
 test("a fan preset saves from the dialog", async () => {
