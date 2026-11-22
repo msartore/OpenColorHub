@@ -378,6 +378,9 @@ export function Fans(props: {
 
       <If
         when={
+          // Simulation needs neither the driver nor elevation; the same policy
+          // the startup elevation prompt follows.
+          props.store.settings().backend !== "simulated" &&
           pawnio() !== null &&
           (pawnio()!.state === "not_installed" || pawnio()!.state === "denied")
         }
