@@ -166,7 +166,7 @@ function App() {
 
   return (
     <Shell
-      screen={screen()}
+      screen={screen}
       version={deps.store.version()}
       demo={false}
       toasts={toasts()}

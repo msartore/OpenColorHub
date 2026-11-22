@@ -1,7 +1,7 @@
 /** The app frame: a sidebar, the scrolling screen area, and the toast stack. */
 
-import { Image, Scroll, Text, View } from "nsh";
-import type { JSX } from "nsh";
+import { Image, Scroll, Text, View, effect } from "nsh";
+import type { Accessor, JSX, ScrollRef } from "nsh";
 import { Button } from "nsh/base";
 
 import logo from "../assets/icon.png";
@@ -40,7 +40,7 @@ const TOAST_COLOR: Record<Toast["tone"], string> = {
 };
 
 export function Shell(props: {
-  screen: ScreenId;
+  screen: Accessor<ScreenId>;
   version: string;
   demo: boolean;
   toasts: readonly Toast[];
@@ -49,6 +49,15 @@ export function Shell(props: {
   children?: JSX.Element;
 }) {
   const wide = () => layoutSize() !== "narrow";
+  let scroller: ScrollRef | null = null;
+
+  // One Scroll hosts every screen, so its offset survives navigation. Return
+  // to the top whenever the screen changes; reading the accessor makes this
+  // effect reactive without depending on how props are compiled.
+  effect(() => {
+    props.screen();
+    scroller?.scrollTo({ x: 0, y: 0, animated: false });
+  });
 
   return (
     <View class="flex-1 flex-row bg-background">
@@ -86,7 +95,7 @@ export function Shell(props: {
             {(item) => (
               <Button
                 class={
-                  props.screen === item().id
+                  props.screen() === item().id
                     ? "rounded-[7px] bg-sidebar-accent text-foreground"
                     : "rounded-[7px] text-muted-foreground"
                 }
@@ -106,7 +115,7 @@ export function Shell(props: {
                 <TablerIcon
                   name={item().icon}
                   size={18}
-                  color={props.screen === item().id ? "#4ade80" : "#6f8090"}
+                  color={props.screen() === item().id ? "#4ade80" : "#6f8090"}
                 />
                 <If when={wide()}>
                   <View class="gap-0">
@@ -154,7 +163,12 @@ export function Shell(props: {
       </View>
 
       <View style={{ flex: 1 }}>
-        <Scroll class="flex-1">
+        <Scroll
+          class="flex-1"
+          ref={(node) => {
+            scroller = node;
+          }}
+        >
           <View
             style={{
               width: "100%",
