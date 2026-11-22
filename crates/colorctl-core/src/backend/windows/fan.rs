@@ -37,6 +37,11 @@ const INDEX_OFFSET: u16 = 0x05;
 const DATA_OFFSET: u16 = 0x06;
 /// Bank-select register, written through the index/data pair.
 const BANK_REGISTER: u8 = 0x4E;
+/// NCT6793D CPU temperature: CPUTIN integer in bank 0 at 0x75, with the
+/// half-degree bit in bit 7 of 0x76. Verified on this board (0xD121).
+const CPUTIN_BANK: u8 = 0;
+const CPUTIN_REGISTER: u8 = 0x75;
+const CPUTIN_HALF_REGISTER: u8 = 0x76;
 
 /// PWM duty readback, bank 0 (NCT677x family layout), one per channel.
 const PWM_OUT_REGISTERS: [u8; TACH_SLOTS] = [0x01, 0x03, 0x11, 0x13, 0x15, 0x17];
@@ -85,8 +90,8 @@ pub struct PawnIoFan {
     /// Last duty written per slot, so an unchanged curve does not rewrite the
     /// register every second.
     last_duty: [Option<u8>; TACH_SLOTS],
-    /// Read-only HWiNFO shared memory, used only for the CPU temperature (the
-    /// Nuvoton exposes only the board thermistor). Optional: HWiNFO may not be
+    /// Read-only HWiNFO shared memory, a fallback for CPU temperature on boards
+    /// whose Super I/O has no wired CPUTIN sensor. Optional: HWiNFO may not be
     /// running, or may start after us.
     hwinfo: Option<SharedMemory>,
     /// When we last tried to open HWiNFO if it was missing, so we retry
@@ -95,9 +100,29 @@ pub struct PawnIoFan {
 }
 
 impl PawnIoFan {
-    /// Reads the CPU temperature from HWiNFO if available. Never an error:
-    /// the CPU sensor is display-only and absent when HWiNFO is not running.
+    /// Reads the CPU temperature. Primary source is the Nuvoton's CPUTIN
+    /// sensor (bank 0 / 0x75), which needs no HWiNFO. HWiNFO shared memory is
+    /// a fallback for boards that leave CPUTIN unwired. Never an error: the
+    /// CPU reading is display-only and fan curves still use the board sensor.
     fn cpu_temperature(&mut self) -> (Option<f32>, Option<String>) {
+        // Primary: Nuvoton CPUTIN. Value = integer byte + 0.5 * bit 7 of the
+        // half register. Reject implausible readings (unwired sensors report
+        // 0x80-ish rails or 0xFF).
+        if let Ok(raw) = self.read_byte(CPUTIN_BANK, CPUTIN_REGISTER) {
+            let half = self
+                .read_byte(CPUTIN_BANK, CPUTIN_HALF_REGISTER)
+                .unwrap_or(0);
+            let signed = raw as i8;
+            if (0..=125).contains(&signed) {
+                let value = f32::from(signed) + if half & 0x80 != 0 { 0.5 } else { 0.0 };
+                return (
+                    Some(value),
+                    Some(format!("Nuvoton CPUTIN · bank {CPUTIN_BANK} · 0x{CPUTIN_REGISTER:02X}")),
+                );
+            }
+        }
+
+        // Fallback: HWiNFO shared memory, if it is running.
         if self.hwinfo.is_none() {
             let due = self
                 .hwinfo_retry
@@ -243,17 +268,48 @@ impl PawnIoFan {
     /// service disagree about which bank drives which header, and a wrong bank
     /// means commanding the wrong fan — so the disagreement gets measured
     /// before any write is trusted.
+    /// Probe the NCT6793D temperature-source registers to identify which one
+    /// tracks the CPU. Diagnostic only; values are raw bytes.
+    pub fn probe_temperature_sources(&self) -> Result<Vec<RegisterRead>> {
+        let mut out = Vec::new();
+        // (bank, register, label) — NCT6793D CPUTIN/SYSTIN and their sources,
+        // per LibreHardwareMonitor's register map, plus vendor 0x50.
+        for (bank, register, label) in [
+            (1u8, 0x50u8, "vendor 0x50 (current board)"),
+            (0, 0x75, "CPUTIN int (bank0 0x75)"),
+            (0, 0x76, "CPUTIN half (bank0 0x76)"),
+            (0, 0x77, "SYSTIN int (bank0 0x77)"),
+            (0, 0x78, "SYSTIN half (bank0 0x78)"),
+            (0, 0x73, "PECI_0 (bank0 0x73)"),
+            (1, 0x91, "CPUTIN alt (bank1 0x491)"),
+            (1, 0x90, "SYSTIN alt (bank1 0x490)"),
+            (2, 0x00, "source sel (bank2 0x200)"),
+        ] {
+            let value = self.read_byte(bank, register).unwrap_or(0xFF);
+            out.push(RegisterRead {
+                label: label.to_string(),
+                bank,
+                register,
+                value: u16::from(value),
+            });
+        }
+        Ok(out)
+    }
+
     pub fn dump_registers(&self) -> Result<Vec<RegisterRead>> {
         let mut out = Vec::new();
 
-        // Temperature candidates: the vendor's register first, then the
-        // generic bank-0 sensors.
+        // Temperature candidates: the vendor's register, the generic bank-0
+        // sensors, and the NCT6793D CPUTIN/SYSTIN sources (raw bytes) so the
+        // CPU sensor can be identified on real hardware.
         for (bank, register, label) in [
             (1u8, 0x50u8, "temp (vendor NCT5567D_B)"),
             (0, 0x27, "temp bank0 0x27"),
-            (0, 0x73, "temp bank0 0x73"),
-            (0, 0x75, "temp bank0 0x75"),
-            (0, 0x77, "temp bank0 0x77"),
+            (0, 0x73, "temp bank0 0x73 PECI_0"),
+            (0, 0x75, "temp bank0 0x75 CPUTIN int"),
+            (0, 0x76, "temp bank0 0x76 CPUTIN half"),
+            (0, 0x77, "temp bank0 0x77 SYSTIN int"),
+            (0, 0x78, "temp bank0 0x78 SYSTIN half"),
         ] {
             let value = self.read_byte(bank, register).unwrap_or(0xFF);
             out.push(RegisterRead {
