@@ -56,7 +56,10 @@ jobs:
           workspaces: "nsh -> target"
 
       - name: Install NSH
-        run: irm https://nsh.dev/install.ps1 | iex
+        shell: pwsh
+        run: |
+          $env:NSH_VERSION = 'v0.5.0'
+          irm https://nsh.dev/install.ps1 | iex
 
       - name: Put nsh and cargo on PATH
         run: |

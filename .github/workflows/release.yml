@@ -74,6 +74,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # The app targets NSH 0.5: a newer CLI packages its own runner, and
+          # 0.6.x changed the packaged tray/close behaviour.
+          $env:NSH_VERSION = 'v0.5.0'
           irm https://nsh.dev/install.ps1 | iex
           "$env:LOCALAPPDATA\nsh\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
@@ -84,6 +87,8 @@ jobs:
 
       - name: Install NSH (Linux)
         if: runner.os == 'Linux'
+        env:
+          NSH_VERSION: v0.5.0
         run: |
           curl -fsSL https://nsh.dev/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
@@ -151,6 +156,8 @@ jobs:
           node-version: 20
 
       - name: Install NSH
+        env:
+          NSH_VERSION: v0.5.0
         run: |
           curl -fsSL https://nsh.dev/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
@@ -262,6 +269,8 @@ jobs:
           node-version: 20
 
       - name: Install NSH
+        env:
+          NSH_VERSION: v0.5.0
         run: |
           curl -fsSL https://nsh.dev/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
