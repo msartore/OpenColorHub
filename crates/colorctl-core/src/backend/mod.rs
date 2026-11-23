@@ -692,16 +692,18 @@ mod tests {
         // race for a moment. Retry before calling the fallback broken.
         let mut set = build(BackendMode::Auto, None, &dir, &crate::board::demo_board());
         for _ in 0..20 {
-            if set.capabilities.fan_control && set.capabilities.led_control {
+            if set.fan.info().available && set.led.info().available {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
             set = build(BackendMode::Auto, None, &dir, &crate::board::demo_board());
         }
-        // A device that another process holds open legitimately reports
-        // unavailable, and that is a state the UI draws properly.
+        // Auto must leave a reading on both halves — real hardware or the
+        // labelled simulator — never an unavailable placeholder. (The capability
+        // flags say whether writes reach hardware, which may be false even when
+        // the simulator is showing values.)
         assert!(
-            set.capabilities.fan_control || set.capabilities.led_control,
+            set.fan.info().available || set.led.info().available,
             "auto mode left the UI with nothing to show"
         );
         assert!(!set.capabilities.notes.is_empty());
