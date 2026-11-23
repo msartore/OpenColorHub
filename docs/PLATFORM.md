@@ -193,11 +193,14 @@ fresh start; a wake is always re-applied.
 
 ## Tray
 
-Closing the window hides it — polling continues and the lighting stays as set —
-and the window returns from the tray icon (left click) or **Open OpenColorHub**.
-**Quit** is the only real exit.
+The main window opens visible (NSH only applies `Tray.set` and the other desktop
+commands in a shown window, so a hidden start left packaged builds without an
+icon). **Close** hides the window into the tray; polling and the lighting keep
+running, and the tray icon (left click, or **Open OpenColorHub**) brings it
+back. **Quit** in the tray menu is the real exit.
 
-An autostart launch passes `--minimized`: no window at sign-in.
+An autostart launch passes `--minimized`: the first frame creates the tray icon
+and the window is hidden immediately after, so sign-in shows no window.
 
 A second launch hands its command line to the running instance and exits; that
 instance brings its window forward. A `--minimized` hand-over asks for nothing.

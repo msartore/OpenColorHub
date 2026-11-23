@@ -315,9 +315,9 @@ jobs:
             | `latest.json` | update manifest for the app's built-in updater |
 
             This release is built with **Native Shell**: native windows, no WebView
-            runtime, no Tauri. The installer is per-user, and the app requests
-            administrator at launch so fan control can open PawnIO's driver.
-            Lighting and telemetry work either way.
+            runtime, no Tauri. The installer is per-user, and the packaged app
+            requests administrator at launch so fan control can open PawnIO's
+            driver. Lighting and telemetry work either way.
 
             **Existing Tauri installs do not update into this app.** Install this
             release by hand once; the old updater only replaces its own shell.

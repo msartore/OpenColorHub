@@ -1,8 +1,8 @@
 //! Rust side of the NSH port.
 //!
 //! The screens are TSX; this crate is the only code that touches hardware,
-//! settings files and the `colorctl-core` service. TSX sees one class —
-//! `Controller` — through `opencolorhub/native`. Everything it returns crosses
+//! settings files and the `colorctl-core` service. TSX sees one class â€”
+//! `Controller` â€” through `opencolorhub/native`. Everything it returns crosses
 //! as JSON, parsed once in `app/infrastructure/native.ts`; the Rust types stay
 //! the authority and no screen can reach a register.
 
@@ -136,7 +136,7 @@ fn parse_color(json: &str) -> Result<[u8; 3], String> {
 }
 
 fn parse_level(percent: u32, label: &str) -> Result<u8, String> {
-    u8::try_from(percent).map_err(|_| format!("{label} {percent}% is outside 0–100%"))
+    u8::try_from(percent).map_err(|_| format!("{label} {percent}% is outside 0â€“100%"))
 }
 
 fn parse_setup_kind(id: &str) -> Result<SetupKind, String> {
@@ -188,7 +188,7 @@ fn reassert_after_wake(inner: &Arc<Mutex<Inner>>) -> Option<String> {
 
     let message = if !report.errors.is_empty() {
         format!(
-            "Could not re-apply after wake — {}",
+            "Could not re-apply after wake â€” {}",
             report.errors.join("; ")
         )
     } else if report.restored_something() {
@@ -324,16 +324,14 @@ impl Controller {
                 };
                 if report.found {
                     debug_log(format!(
-                        "restored saved setup — {} fans, lighting: {}",
+                        "restored saved setup â€” {} fans, lighting: {}",
                         report.fans, report.lighting
                     ));
                 }
                 // Upgrades from the old shell have `rgb.state` but no active
                 // setup yet. Push that blob too so lighting comes back on the
                 // first launch after the update.
-                let has_saved_lighting = service
-                    .state_path()
-                    .is_some_and(|path| path.is_file());
+                let has_saved_lighting = service.state_path().is_some_and(|path| path.is_file());
                 if !report.lighting
                     && (settings.reapply_led_on_launch || has_saved_lighting)
                     && let Err(error) = service.apply_led()
@@ -352,7 +350,9 @@ impl Controller {
             }
             Err(_) => (
                 None,
-                Some("the hardware probe failed — check that the driver is installed".to_string()),
+                Some(
+                    "the hardware probe failed â€” check that the driver is installed".to_string(),
+                ),
             ),
         };
 
@@ -451,7 +451,7 @@ impl Controller {
             .service_mut()?
             .state_path()
             .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "—".to_string());
+            .unwrap_or_else(|| "â€”".to_string());
         let config_override = inner
             .settings
             .state_file
@@ -490,7 +490,7 @@ impl Controller {
     pub fn set_fan_percent(&self, header: String, percent: u32) -> Result<String, String> {
         let header = parse_header(&header)?;
         let percent =
-            u8::try_from(percent).map_err(|_| format!("duty {percent}% is outside 0–100%"))?;
+            u8::try_from(percent).map_err(|_| format!("duty {percent}% is outside 0â€“100%"))?;
         let mut inner = self.lock()?;
         let result = inner
             .service_mut()?
@@ -647,7 +647,7 @@ impl Controller {
         to_json(&result)
     }
 
-    /// Presets of one half — `"fans"` or `"lighting"` — newest first.
+    /// Presets of one half â€” `"fans"` or `"lighting"` â€” newest first.
     pub fn list_setups(&self, kind: String) -> Result<String, String> {
         let kind = parse_setup_kind(&kind)?;
         let store = SetupStore::load(self.setups_path()?);
@@ -762,7 +762,7 @@ impl Controller {
                 .ok()
                 .map(|inner| inner.data_dir.join("drivers"))
         }) else {
-            return Err("the state lock is poisoned — restart OpenColorHub".to_string());
+            return Err("the state lock is poisoned â€” restart OpenColorHub".to_string());
         };
 
         let (sender, receiver) = std::sync::mpsc::channel::<String>();
@@ -866,7 +866,7 @@ impl Controller {
                 .ok()
                 .map(|inner| inner.data_dir.join("tools"))
         }) else {
-            return Err("the state lock is poisoned — restart OpenColorHub".to_string());
+            return Err("the state lock is poisoned â€” restart OpenColorHub".to_string());
         };
 
         let (sender, receiver) = std::sync::mpsc::channel::<String>();
@@ -1006,7 +1006,7 @@ impl Controller {
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Inner>, String> {
         self.inner
             .lock()
-            .map_err(|_| "internal state lock poisoned — restart OpenColorHub".to_string())
+            .map_err(|_| "internal state lock poisoned â€” restart OpenColorHub".to_string())
     }
 
     fn setups_path(&self) -> Result<PathBuf, String> {

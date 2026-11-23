@@ -46,11 +46,27 @@ if ($SkipInstaller) {
 } else {
   $iscc = @(
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-    "C:\Program Files\Inno Setup 6\ISCC.exe"
+    "C:\Program Files\Inno Setup 6\ISCC.exe",
+    "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe"
   ) | Where-Object { Test-Path $_ } | Select-Object -First 1
   if (-not $iscc) { throw "ISCC.exe not found" }
   $iss = Join-Path $OutDir "OpenColorHub.iss"
   New-Item -ItemType Directory -Force $OutDir | Out-Null
+
+  # The generated run entry launches the app with CreateProcess, which cannot
+  # start a requireAdministrator executable: Setup reports error 740 ("The
+  # requested operation requires elevation") on the finish page. `shellexec`
+  # makes Inno use ShellExecuteEx, so Windows shows its normal consent prompt.
+  $lines = Get-Content -LiteralPath $iss
+  $patched = foreach ($line in $lines) {
+    if ($line -match '^Filename:\s*"\{app\}\\+OpenColorHub\.exe"' -and $line -notmatch '\bshellexec\b') {
+      "$line shellexec"
+    } else {
+      $line
+    }
+  }
+  Set-Content -LiteralPath $iss -Value $patched -Encoding UTF8
+
   & $iscc $iss /O"$OutDir" /Q
   if ($LASTEXITCODE -ne 0) { throw "ISCC.exe failed with exit code $LASTEXITCODE" }
 }

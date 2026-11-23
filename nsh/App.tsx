@@ -104,6 +104,9 @@ function App() {
   effect(() => {
     if (!deps.store.loaded() || elevationAsked) return;
     elevationAsked = true;
+    // A sign-in launch stays quiet: no UAC prompt over the desktop. Fan
+    // control is enabled later from Settings → Privileges.
+    if (deps.controller.minimized) return;
     void offerElevation();
   });
 
@@ -116,18 +119,16 @@ function App() {
 
   const win = currentWindow();
   const main = Window.get("main") ?? win;
-  // The window is created hidden (`defaultVisible: false`). Calling show/focus
-  // during the first render can be too early on some Windows runtimes, so do
-  // it once the engine has laid the window out.
-  if (!deps.controller.minimized) {
-    setTimeout(() => {
-      win.show();
-      win.focus();
-    }, 100);
+  // The window opens visible (`nsh.json` `defaultVisible`): NSH only applies
+  // the tray icon and the other desktop commands in a shown window, and a
+  // hidden start left the packaged app with neither. A sign-in launch hides
+  // it again once that first visible frame has landed.
+  if (deps.controller.minimized) {
+    setTimeout(() => main.hide(), 400);
   }
-  // Close hides to the tray (polling and lighting keep running). Listen on the
-  // explicit main window as well: on some runtimes `currentWindow()` is a proxy
-  // that never receives the close press.
+  // The close button hides the window into the tray; polling and the lighting
+  // keep running. Quit lives in the tray menu. `closeOnPress: false` lets the
+  // app decide instead of the platform destroying the window.
   const hideOnClose = (): void => {
     main.hide();
   };
@@ -151,9 +152,9 @@ function App() {
   Tray.set({
     icon: trayIcon,
     tooltip: "OpenColorHub",
-    onClick: () => win.focus(),
+    onClick: () => main.focus(),
     menu: [
-      { label: "Open", onSelect: () => win.focus() },
+      { label: "Open", onSelect: () => main.focus() },
       { type: "separator" },
       { role: "quit" },
     ],
@@ -162,7 +163,7 @@ function App() {
   // A second launch brings the running app forward unless it came from the
   // autostart entry, which carries `--minimized`.
   Application.on("secondInstance", ({ args }) => {
-    if (!args.includes("--minimized")) win.focus();
+    if (!args.includes("--minimized")) main.focus();
   });
   Application.on("quit", () => deps.store.dispose());
 

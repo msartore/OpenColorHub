@@ -247,7 +247,7 @@ dependencies = [
 
 [[package]]
 name = "colorctl-core"
-version = "0.3.0"
+version = "0.6.5"
 dependencies = [
  "libc",
  "serde",
@@ -1314,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "opencolorhub-nsh"
-version = "0.3.0"
+version = "0.6.5"
 dependencies = [
  "colorctl-core",
  "nsh-base",

@@ -1,7 +1,7 @@
 {
   "name": "OpenColorHub",
   "id": "dev.msartore.opencolorhub",
-  "version": "0.3.0",
+  "version": "0.6.5",
   "build": 1,
   "rust": ".",
   "icon": "assets/icon.png",
@@ -12,7 +12,7 @@
     "title": "OpenColorHub",
     "defaultSize": { "width": 1240, "height": 830 },
     "minSize": { "width": 900, "height": 600 },
-    "defaultVisible": false,
+    "defaultVisible": true,
     "closeOnPress": false
   },
   "capabilities": {

@@ -189,10 +189,13 @@ the release notes call for one manual install.
 ## Tray and window lifecycle
 
 `Tray.set` gives an icon with **Open** and **Quit**; a left click focuses the
-window. The main window starts hidden (`"defaultVisible": false`), is shown
-unless `--minimized`, and its close button hides it to the tray
-(`"closeOnPress": false` + `closePress` → `hide`). The window placement is saved
-in `Storage` and restored on launch.
+window. The main window starts visible (`"defaultVisible": true`): NSH only
+applies the tray icon and the other desktop commands in a shown window, so a
+hidden start left packaged builds with no icon. A `--minimized` sign-in launch
+hides it after the first frame. The close button hides the window to the tray
+(`"closeOnPress": false` + `closePress` → `hide`); **Quit** in the tray menu is
+the real exit. The window placement is saved in `Storage` and restored on
+launch.
 
 ## Threading and the native seam
 
